@@ -1,7 +1,7 @@
-import { config } from "../../package.json";
+import { config, version } from "../../package.json";
 import { getString } from "../utils/locale";
 
-/** Fallback if live ItemFields APIs fail (@see https://api.zotero.org/schema). */
+/** @see https://api.zotero.org/schema */
 const SCHEMA_FIELD_FALLBACK = [
   "DOI",
   "ISBN",
@@ -151,10 +151,6 @@ function sortKeys(names: Iterable<string>): string[] {
   });
 }
 
-/**
- * Fields for the selected items' types (what the item pane shows), plus
- * creators/tags. Falls back to the full schema list if the API yields nothing.
- */
 function getCleanableKeysForItems(items: Zotero.Item[]): string[] {
   const names = new Set<string>(["creators", "tags"]);
   try {
@@ -194,146 +190,173 @@ function getSelectedRegularItems(): Zotero.Item[] {
 }
 
 /**
- * Checkbox dialog. Selection is tracked in a Set via change listeners — we do
- * not rely on DialogHelper data-bind or getElementById at confirm time.
+ * Native DOM modal on the main Zotero window — no DialogHelper.
+ * Checkbox state is tracked in a Set via change/click listeners.
  */
-async function showCleanFieldsDialog(
-  keys: string[],
-): Promise<string[] | null> {
-  const checked = new Set<string>();
-  const dialogData: Record<string, any> = {
-    _lastButtonId: "",
-  };
-
-  const checkboxCell = (key: string) => ({
-    tag: "hbox",
-    attributes: { align: "center" },
-    styles: { margin: "1px 4px" },
-    children: [
-      {
-        tag: "input",
-        namespace: "html" as const,
-        id: `clean-field-${key}`,
-        attributes: { type: "checkbox" },
-        listeners: [
-          {
-            type: "change",
-            listener: (ev: Event) => {
-              const el = ev.target as HTMLInputElement | null;
-              if (!el) return;
-              if (el.checked) checked.add(key);
-              else checked.delete(key);
-            },
-          },
-        ],
-      },
-      {
-        tag: "label",
-        namespace: "html" as const,
-        attributes: { for: `clean-field-${key}` },
-        properties: { innerText: fieldLabel(key) },
-        styles: { marginLeft: "6px", fontSize: "12px" },
-      },
-    ],
-  });
-
-  // Intro + toolbar + scrollable grid of checkboxes (3 columns).
-  const cols = 3;
-  const fieldRows = Math.ceil(keys.length / cols);
-  // row 0: intro, row 1: select all/none, rows 2..: fields
-  const dialog = new ztoolkit.Dialog(fieldRows + 2, cols);
-
-  dialog.addCell(
-    0,
-    0,
-    {
-      tag: "p",
-      namespace: "html",
-      properties: { innerText: getString("clean-metadata-dialog-intro") },
-      styles: { margin: "0 0 4px 0", fontSize: "12px", maxWidth: "560px" },
-    },
-    false,
-  );
-
-  const setAll = (value: boolean) => {
-    checked.clear();
-    if (value) {
-      for (const key of keys) checked.add(key);
+function showCleanFieldsDialog(keys: string[]): Promise<string[] | null> {
+  return new Promise((resolve) => {
+    const mainWin = Zotero.getMainWindow();
+    if (!mainWin?.document?.documentElement) {
+      resolve(null);
+      return;
     }
-    const win = dialog.window;
-    if (!win) return;
-    for (const key of keys) {
-      const el = win.document.getElementById(
-        `clean-field-${key}`,
-      ) as HTMLInputElement | null;
-      if (el) el.checked = value;
-    }
-  };
+    const doc = mainWin.document;
+    const checked = new Set<string>();
 
-  dialog.addCell(
-    1,
-    0,
-    {
-      tag: "hbox",
-      styles: { gap: "8px", marginBottom: "4px" },
-      children: [
-        {
-          tag: "button",
-          namespace: "html",
-          attributes: { type: "button" },
-          properties: { innerText: getString("clean-metadata-select-all") },
-          listeners: [
-            {
-              type: "click",
-              listener: (ev: Event) => {
-                ev.preventDefault();
-                setAll(true);
-              },
-            },
-          ],
-        },
-        {
-          tag: "button",
-          namespace: "html",
-          attributes: { type: "button" },
-          properties: { innerText: getString("clean-metadata-select-none") },
-          listeners: [
-            {
-              type: "click",
-              listener: (ev: Event) => {
-                ev.preventDefault();
-                setAll(false);
-              },
-            },
-          ],
-        },
-      ],
-    },
-    false,
-  );
-
-  for (let i = 0; i < keys.length; i++) {
-    const row = Math.floor(i / cols) + 2;
-    const col = i % cols;
-    dialog.addCell(row, col, checkboxCell(keys[i]), false);
-  }
-
-  dialog
-    .addButton(getString("clean-metadata-confirm"), "confirm")
-    .addButton(getString("clean-metadata-cancel"), "cancel")
-    .setDialogData(dialogData)
-    .open(getString("clean-metadata-dialog-title"), {
-      centerscreen: true,
-      resizable: true,
-      fitContent: true,
+    const overlay = doc.createElement("div");
+    overlay.id = "zpdfmanager-clean-overlay";
+    Object.assign(overlay.style, {
+      position: "fixed",
+      inset: "0",
+      zIndex: "99999",
+      background: "rgba(0,0,0,0.45)",
+      display: "flex",
+      alignItems: "center",
+      justifyContent: "center",
     });
 
-  addon.data.dialog = dialog;
-  await dialogData.unloadLock.promise;
-  addon.data.dialog = undefined;
+    const panel = doc.createElement("div");
+    Object.assign(panel.style, {
+      background: "var(--material-background, #2a2a2e)",
+      color: "var(--fill-primary, #f0f0f0)",
+      borderRadius: "8px",
+      padding: "16px",
+      width: "min(720px, 92vw)",
+      maxHeight: "85vh",
+      display: "flex",
+      flexDirection: "column",
+      gap: "10px",
+      boxShadow: "0 8px 32px rgba(0,0,0,0.4)",
+    });
 
-  if (dialogData._lastButtonId !== "confirm") return null;
-  return keys.filter((key) => checked.has(key));
+    const title = doc.createElement("div");
+    title.textContent = `${getString("clean-metadata-dialog-title")} (v${version})`;
+    Object.assign(title.style, { fontWeight: "600", fontSize: "15px" });
+
+    const intro = doc.createElement("div");
+    intro.textContent = getString("clean-metadata-dialog-intro");
+    Object.assign(intro.style, { fontSize: "12px", opacity: "0.9" });
+
+    const toolbar = doc.createElement("div");
+    Object.assign(toolbar.style, { display: "flex", gap: "8px" });
+
+    const mkBtn = (label: string, primary = false) => {
+      const btn = doc.createElement("button");
+      btn.type = "button";
+      btn.textContent = label;
+      Object.assign(btn.style, {
+        padding: "6px 12px",
+        cursor: "pointer",
+        borderRadius: "4px",
+        border: primary ? "none" : "1px solid rgba(127,127,127,0.5)",
+        background: primary
+          ? "var(--accent-color, #0a84ff)"
+          : "transparent",
+        color: primary ? "#fff" : "inherit",
+      });
+      return btn;
+    };
+
+    const selectAllBtn = mkBtn(getString("clean-metadata-select-all"));
+    const selectNoneBtn = mkBtn(getString("clean-metadata-select-none"));
+    toolbar.append(selectAllBtn, selectNoneBtn);
+
+    const list = doc.createElement("div");
+    Object.assign(list.style, {
+      overflowY: "auto",
+      flex: "1",
+      minHeight: "200px",
+      maxHeight: "55vh",
+      display: "grid",
+      gridTemplateColumns: "1fr 1fr 1fr",
+      gap: "4px 12px",
+      padding: "8px",
+      border: "1px solid rgba(127,127,127,0.35)",
+      borderRadius: "4px",
+    });
+
+    const inputs: HTMLInputElement[] = [];
+    for (const key of keys) {
+      const row = doc.createElement("label");
+      Object.assign(row.style, {
+        display: "flex",
+        alignItems: "center",
+        gap: "6px",
+        fontSize: "12px",
+        cursor: "pointer",
+        userSelect: "none",
+      });
+      const input = doc.createElement("input");
+      input.type = "checkbox";
+      input.dataset.field = key;
+      const sync = () => {
+        if (input.checked) checked.add(key);
+        else checked.delete(key);
+      };
+      input.addEventListener("change", sync);
+      input.addEventListener("click", sync);
+      inputs.push(input);
+      const span = doc.createElement("span");
+      span.textContent = fieldLabel(key);
+      row.append(input, span);
+      list.append(row);
+    }
+
+    selectAllBtn.addEventListener("click", () => {
+      checked.clear();
+      for (const key of keys) checked.add(key);
+      for (const input of inputs) input.checked = true;
+    });
+    selectNoneBtn.addEventListener("click", () => {
+      checked.clear();
+      for (const input of inputs) input.checked = false;
+    });
+
+    const actions = doc.createElement("div");
+    Object.assign(actions.style, {
+      display: "flex",
+      justifyContent: "flex-end",
+      gap: "8px",
+      marginTop: "4px",
+    });
+    const cancelBtn = mkBtn(getString("clean-metadata-cancel"));
+    const okBtn = mkBtn(getString("clean-metadata-confirm"), true);
+
+    const close = (result: string[] | null) => {
+      overlay.remove();
+      mainWin.removeEventListener("keydown", onKey, true);
+      resolve(result);
+    };
+    const onKey = (ev: KeyboardEvent) => {
+      if (ev.key === "Escape") {
+        ev.preventDefault();
+        close(null);
+      }
+    };
+    mainWin.addEventListener("keydown", onKey, true);
+
+    cancelBtn.addEventListener("click", () => close(null));
+    okBtn.addEventListener("click", () => {
+      // Re-read from DOM as a second source of truth.
+      const fromDom = inputs
+        .filter((el) => el.checked)
+        .map((el) => el.dataset.field!)
+        .filter(Boolean);
+      const merged = new Set([...checked, ...fromDom]);
+      close(keys.filter((k) => merged.has(k)));
+    });
+    overlay.addEventListener("click", (ev) => {
+      if (ev.target === overlay) close(null);
+    });
+
+    actions.append(cancelBtn, okBtn);
+    panel.append(title, intro, toolbar, list, actions);
+    overlay.append(panel);
+
+    // Remove any leftover overlay from a previous run.
+    doc.getElementById("zpdfmanager-clean-overlay")?.remove();
+    doc.documentElement.appendChild(overlay);
+  });
 }
 
 function clearFieldsOnItem(item: Zotero.Item, keys: string[]): string[] {
@@ -359,7 +382,7 @@ function clearFieldsOnItem(item: Zotero.Item, keys: string[]): string[] {
         cleared.push(key);
         continue;
       }
-      // false is Zotero's canonical "clear this field" value.
+      // Zotero treats false / "" / null as "clear field".
       (item as any).setField(key, false);
       cleared.push(key);
     } catch (error) {
@@ -400,29 +423,39 @@ export async function cleanMetadataForSelectedItems() {
 
     let success = 0;
     const failures: string[] = [];
-    for (const item of items) {
-      try {
-        if (typeof (item as any).isEditable === "function" && !item.isEditable()) {
-          failures.push(
-            `${item.getDisplayTitle()}: ${getString("clean-metadata-not-editable")}`,
+    const clearedSummary: string[] = [];
+
+    await Zotero.DB.executeTransaction(async () => {
+      for (const item of items) {
+        try {
+          if (
+            typeof (item as any).isEditable === "function" &&
+            !item.isEditable()
+          ) {
+            failures.push(
+              `${item.getDisplayTitle()}: ${getString("clean-metadata-not-editable")}`,
+            );
+            continue;
+          }
+          const cleared = clearFieldsOnItem(item, selectedKeys);
+          if (!cleared.length) {
+            failures.push(
+              `${item.getDisplayTitle()}: ${getString("clean-metadata-nothing-cleared")}`,
+            );
+            continue;
+          }
+          await item.save();
+          success++;
+          clearedSummary.push(
+            `${item.getDisplayTitle()}: ${cleared.map(fieldLabel).join(", ")}`,
           );
-          continue;
+        } catch (error) {
+          const reason = (error as Error)?.message || String(error);
+          failures.push(`${item.getDisplayTitle()}: ${reason}`);
+          ztoolkit.log("Metadata clean failed", item.id, error);
         }
-        const cleared = clearFieldsOnItem(item, selectedKeys);
-        if (!cleared.length) {
-          failures.push(
-            `${item.getDisplayTitle()}: ${getString("clean-metadata-nothing-cleared")}`,
-          );
-          continue;
-        }
-        await item.saveTx();
-        success++;
-      } catch (error) {
-        const reason = (error as Error)?.message || String(error);
-        failures.push(`${item.getDisplayTitle()}: ${reason}`);
-        ztoolkit.log("Metadata clean failed", item.id, error);
       }
-    }
+    });
 
     new ztoolkit.ProgressWindow(config.addonName, { closeTime: 6000 })
       .createLine({
@@ -433,15 +466,19 @@ export async function cleanMetadataForSelectedItems() {
       })
       .show();
 
-    if (failures.length) {
-      window.alert(
-        `${config.addonName} — ${getString("clean-metadata-dialog-title")}\n\n` +
-          failures.slice(0, 30).join("\n"),
-      );
-    }
+    // Explicit feedback so a silent no-op is impossible to miss.
+    window.alert(
+      `${config.addonName} v${version}\n\n` +
+        (clearedSummary.length
+          ? clearedSummary.slice(0, 20).join("\n")
+          : getString("clean-metadata-nothing-cleared")) +
+        (failures.length
+          ? `\n\n—\n${failures.slice(0, 10).join("\n")}`
+          : ""),
+    );
   } catch (error) {
     const reason = (error as Error)?.message || String(error);
     ztoolkit.log("cleanMetadataForSelectedItems crashed", error);
-    window.alert(`${config.addonName}\n\n${reason}`);
+    window.alert(`${config.addonName} v${version}\n\n${reason}`);
   }
 }
