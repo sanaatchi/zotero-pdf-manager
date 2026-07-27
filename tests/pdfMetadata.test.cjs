@@ -109,3 +109,39 @@ test("parseYear returns null when no year is present", () => {
   assert.equal(parseYear(""), null);
   assert.equal(parseYear("n.d."), null);
 });
+
+test("aggregateItemOutcomes: a single successful attachment marks the item succeeded", () => {
+  const { aggregateItemOutcomes } = loadModule();
+  const item = { id: 1 };
+  const outcomes = aggregateItemOutcomes([{ item, succeeded: true }]);
+  assert.equal(outcomes.get(1).allSucceeded, true);
+});
+
+test("aggregateItemOutcomes: one failing attachment marks the whole item failed, even if another attachment for it succeeded", () => {
+  const { aggregateItemOutcomes } = loadModule();
+  const item = { id: 1 };
+  const outcomesSuccessThenFail = aggregateItemOutcomes([
+    { item, succeeded: true },
+    { item, succeeded: false },
+  ]);
+  assert.equal(outcomesSuccessThenFail.get(1).allSucceeded, false);
+
+  const outcomesFailThenSuccess = aggregateItemOutcomes([
+    { item, succeeded: false },
+    { item, succeeded: true },
+  ]);
+  assert.equal(outcomesFailThenSuccess.get(1).allSucceeded, false);
+});
+
+test("aggregateItemOutcomes: different items are tracked independently", () => {
+  const { aggregateItemOutcomes } = loadModule();
+  const itemA = { id: 1 };
+  const itemB = { id: 2 };
+  const outcomes = aggregateItemOutcomes([
+    { item: itemA, succeeded: true },
+    { item: itemB, succeeded: false },
+  ]);
+  assert.equal(outcomes.get(1).allSucceeded, true);
+  assert.equal(outcomes.get(2).allSucceeded, false);
+  assert.equal(outcomes.size, 2);
+});

@@ -256,6 +256,69 @@ export async function removeDuplicateFileLinks() {
     .show();
 }
 
+export interface DirLister {
+  getChildren(dir: string): Promise<string[]>;
+  statType(path: string): Promise<"directory" | "file" | null>;
+}
+
+/**
+ * Pure, dependency-injected version of the orphan-file walk, extracted so it
+ * can be unit tested without a live Zotero/IOUtils environment. Behavior must
+ * stay identical to what scanOrphanFiles() below wires it up to.
+ *
+ * Returns whether each visited directory contains anything at all
+ * (recursively) — a referenced file, an orphan file, or a non-empty
+ * subdirectory. This must NOT be conflated with "has a referenced file": a
+ * directory holding only orphan PDFs previously got reported as "empty"
+ * (since it had no Zotero-referenced file), which risked the user deleting a
+ * folder the same report had just flagged as containing orphan files to
+ * review.
+ */
+export async function classifyOrphanTree(
+  roots: string[],
+  referenced: Set<string>,
+  lister: DirLister,
+  normalizeKey: (path: string) => string,
+  filename: (path: string) => string,
+): Promise<{ orphanFiles: string[]; emptyDirs: string[] }> {
+  const orphanFiles: string[] = [];
+  const emptyDirs: string[] = [];
+  const isIgnorableFile = (child: string) =>
+    /^(desktop\.ini|thumbs\.db|\.ds_store)$/i.test(filename(child));
+  const walk = async (dir: string): Promise<boolean> => {
+    let hasContent = false;
+    let children: string[] = [];
+    try {
+      children = await lister.getChildren(dir);
+    } catch {
+      return false;
+    }
+    for (const child of children) {
+      const type = await lister.statType(child).catch(() => null);
+      if (!type) continue;
+      if (type === "directory") {
+        if (await walk(child)) {
+          hasContent = true;
+        } else {
+          emptyDirs.push(child);
+        }
+      } else if (isIgnorableFile(child)) {
+        continue;
+      } else if (referenced.has(normalizeKey(child))) {
+        hasContent = true;
+      } else {
+        orphanFiles.push(child);
+        hasContent = true;
+      }
+    }
+    return hasContent;
+  };
+  for (const root of roots) {
+    await walk(root);
+  }
+  return { orphanFiles, emptyDirs };
+}
+
 export async function scanOrphanFiles() {
   // Use the SAME roots as the PDF Manager's own local-folder matching/index
   // (pdf.watchRoots, falling back to the legacy single pdf.localFolder) —
@@ -304,49 +367,19 @@ export async function scanOrphanFiles() {
     if (path) referenced.add(PathUtils.normalize(path).normalize("NFC").toLowerCase());
   }
 
-  const orphanFiles: string[] = [];
-  const emptyDirs: string[] = [];
-  const isIgnorableFile = (child: string) =>
-    /^(desktop\.ini|thumbs\.db|\.ds_store)$/i.test(PathUtils.filename(child));
-  // Returns whether `dir` contains anything at all (recursively) — a
-  // referenced file, an orphan file, or a non-empty subdirectory. This must
-  // NOT be conflated with "has a referenced file": a directory holding only
-  // orphan PDFs previously got reported as "empty" (since it has no
-  // Zotero-referenced file), which risked the user deleting a folder the same
-  // report had just flagged as containing orphan files to review.
-  const walk = async (dir: string): Promise<boolean> => {
-    let hasContent = false;
-    let children: string[] = [];
-    try {
-      children = await IOUtils.getChildren(dir);
-    } catch {
-      return false;
-    }
-    for (const child of children) {
-      const stat = await IOUtils.stat(child).catch(() => null);
-      if (!stat) continue;
-      if (stat.type === "directory") {
-        if (await walk(child)) {
-          hasContent = true;
-        } else {
-          emptyDirs.push(child);
-        }
-      } else if (isIgnorableFile(child)) {
-        continue;
-      } else if (
-        referenced.has(PathUtils.normalize(child).normalize("NFC").toLowerCase())
-      ) {
-        hasContent = true;
-      } else {
-        orphanFiles.push(child);
-        hasContent = true;
-      }
-    }
-    return hasContent;
-  };
-  for (const root of roots) {
-    await walk(root);
-  }
+  const { orphanFiles, emptyDirs } = await classifyOrphanTree(
+    roots,
+    referenced,
+    {
+      getChildren: (dir) => IOUtils.getChildren(dir),
+      statType: async (path) => {
+        const stat = await IOUtils.stat(path).catch(() => null);
+        return stat?.type ?? null;
+      },
+    },
+    (path) => PathUtils.normalize(path).normalize("NFC").toLowerCase(),
+    (path) => PathUtils.filename(path),
+  );
 
   const report =
     `Attachment root(s): ${roots.join("; ")}\n` +

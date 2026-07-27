@@ -196,6 +196,12 @@ function itemMetadata(item: Zotero.Item): CheckMetadata {
   };
 }
 
+/** Pure so the encrypted-PDF branch below is unit-testable without a real encrypted file. */
+export function isEncryptedPdfError(error: unknown): boolean {
+  const message = (error as Error)?.message || String(error);
+  return /encrypt/i.test(message);
+}
+
 async function pdfMetadata(attachment: Zotero.Item): Promise<CheckMetadata> {
   const path = await attachment.getFilePathAsync();
   if (!path || !(await IOUtils.exists(path))) {
@@ -213,8 +219,7 @@ async function pdfMetadata(attachment: Zotero.Item): Promise<CheckMetadata> {
       ignoreEncryption: false,
     });
   } catch (error) {
-    const message = (error as Error)?.message || String(error);
-    if (/encrypt/i.test(message)) {
+    if (isEncryptedPdfError(error)) {
       throw new Error("Şifreli PDF: metadata okunamadı");
     }
     throw error;

@@ -475,6 +475,28 @@ export async function maybeEmbedMetadata(
 const TAG_METADATA_EMBEDDED = "#metadata-embedded";
 const TAG_METADATA_FAILED = "#metadata-failed";
 
+/**
+ * Collapse a list of per-attachment embed results into one outcome per
+ * parent item (keyed by item.id, stable across separate attachment pairs
+ * that share a parent), pure so it's directly unit-testable. An item is
+ * "allSucceeded" only if every attachment processed for it in this run
+ * succeeded — one failure among several attachments must not be masked by an
+ * earlier or later success for the same item.
+ */
+export function aggregateItemOutcomes<T extends { id: number }>(
+  results: Array<{ item: T; succeeded: boolean }>,
+): Map<number, { item: T; allSucceeded: boolean }> {
+  const outcomes = new Map<number, { item: T; allSucceeded: boolean }>();
+  for (const { item, succeeded } of results) {
+    const existing = outcomes.get(item.id);
+    outcomes.set(item.id, {
+      item,
+      allSucceeded: (existing?.allSucceeded ?? true) && succeeded,
+    });
+  }
+  return outcomes;
+}
+
 async function setEmbedStatusTag(item: Zotero.Item, success: boolean) {
   try {
     const tags = ((item.getTags() as { tag: string }[]) || []).map(
@@ -582,12 +604,13 @@ async function runEmbedMetadata(onlyMissingOrFailed: boolean) {
     alreadyEmbedded = checked.length - candidates.length;
   }
 
-  if (onlyMissingOrFailed && !candidates.length) {
+  if (!candidates.length) {
     new ztoolkit.ProgressWindow(config.addonName, { closeTime: 6000 })
       .createLine({
-        text: alreadyEmbedded
-          ? `Tüm seçili kaynaklarda metadata zaten güncel (${alreadyEmbedded})`
-          : "PDF'li kaynak seçilmedi",
+        text:
+          onlyMissingOrFailed && alreadyEmbedded
+            ? `Tüm seçili kaynaklarda metadata zaten güncel (${alreadyEmbedded})`
+            : "PDF'li kaynak seçilmedi",
         type: "default",
       })
       .show();
@@ -596,13 +619,7 @@ async function runEmbedMetadata(onlyMissingOrFailed: boolean) {
 
   let success = 0;
   const failures: string[] = [];
-  // Aggregate per item rather than tagging after each attachment: an item
-  // with 2+ PDF attachments previously got its tag overwritten by whichever
-  // attachment was processed LAST, hiding an earlier failure once a later
-  // attachment succeeded (or vice versa). The item is only tagged
-  // #metadata-embedded if EVERY attachment processed for it this run
-  // succeeded.
-  const itemOutcomes = new Map<number, { item: Zotero.Item; allSucceeded: boolean }>();
+  const results: Array<{ item: Zotero.Item; succeeded: boolean }> = [];
   for (const { item, attachment } of candidates) {
     let succeeded: boolean;
     try {
@@ -618,13 +635,15 @@ async function runEmbedMetadata(onlyMissingOrFailed: boolean) {
       failures.push(`${item.getDisplayTitle()}: ${reason}`);
       ztoolkit.log("PDF metadata embedding failed", attachment.id, error);
     }
-    const existing = itemOutcomes.get(item.id);
-    itemOutcomes.set(item.id, {
-      item,
-      allSucceeded: (existing?.allSucceeded ?? true) && succeeded,
-    });
+    results.push({ item, succeeded });
   }
-  for (const { item, allSucceeded } of itemOutcomes.values()) {
+  // Aggregate per item rather than tagging after each attachment: an item
+  // with 2+ PDF attachments previously got its tag overwritten by whichever
+  // attachment was processed LAST, hiding an earlier failure once a later
+  // attachment succeeded (or vice versa). The item is only tagged
+  // #metadata-embedded if EVERY attachment processed for it this run
+  // succeeded.
+  for (const { item, allSucceeded } of aggregateItemOutcomes(results).values()) {
     await setEmbedStatusTag(item, allSucceeded);
   }
   const skippedNote =

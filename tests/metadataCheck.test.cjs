@@ -97,3 +97,18 @@ test("PDF page text can verify metadata when embedded fields are empty", () => {
     true,
   );
 });
+
+test("isEncryptedPdfError recognizes pdf-lib's encrypted-document message", () => {
+  const { isEncryptedPdfError } = loadModule();
+  const pdfLibError = new Error(
+    "Input document to `PDFDocument.load` is encrypted. You can use " +
+      "`PDFDocument.load(..., { ignoreEncryption: true })` if you wish to load the document anyways.",
+  );
+  assert.equal(isEncryptedPdfError(pdfLibError), true);
+});
+
+test("isEncryptedPdfError does not misfire on unrelated errors", () => {
+  const { isEncryptedPdfError } = loadModule();
+  assert.equal(isEncryptedPdfError(new Error("Unexpected token in PDF stream")), false);
+  assert.equal(isEncryptedPdfError(new Error("File not found")), false);
+});
