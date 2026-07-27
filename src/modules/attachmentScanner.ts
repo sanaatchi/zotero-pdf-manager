@@ -306,8 +306,16 @@ export async function scanOrphanFiles() {
 
   const orphanFiles: string[] = [];
   const emptyDirs: string[] = [];
+  const isIgnorableFile = (child: string) =>
+    /^(desktop\.ini|thumbs\.db|\.ds_store)$/i.test(PathUtils.filename(child));
+  // Returns whether `dir` contains anything at all (recursively) — a
+  // referenced file, an orphan file, or a non-empty subdirectory. This must
+  // NOT be conflated with "has a referenced file": a directory holding only
+  // orphan PDFs previously got reported as "empty" (since it has no
+  // Zotero-referenced file), which risked the user deleting a folder the same
+  // report had just flagged as containing orphan files to review.
   const walk = async (dir: string): Promise<boolean> => {
-    let hasReferenced = false;
+    let hasContent = false;
     let children: string[] = [];
     try {
       children = await IOUtils.getChildren(dir);
@@ -318,17 +326,23 @@ export async function scanOrphanFiles() {
       const stat = await IOUtils.stat(child).catch(() => null);
       if (!stat) continue;
       if (stat.type === "directory") {
-        if (await walk(child)) hasReferenced = true;
-        else emptyDirs.push(child);
+        if (await walk(child)) {
+          hasContent = true;
+        } else {
+          emptyDirs.push(child);
+        }
+      } else if (isIgnorableFile(child)) {
+        continue;
       } else if (
         referenced.has(PathUtils.normalize(child).normalize("NFC").toLowerCase())
       ) {
-        hasReferenced = true;
-      } else if (!/^(desktop\.ini|thumbs\.db|\.ds_store)$/i.test(PathUtils.filename(child))) {
+        hasContent = true;
+      } else {
         orphanFiles.push(child);
+        hasContent = true;
       }
     }
-    return hasReferenced;
+    return hasContent;
   };
   for (const root of roots) {
     await walk(root);

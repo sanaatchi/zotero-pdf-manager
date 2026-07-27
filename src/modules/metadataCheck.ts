@@ -206,10 +206,19 @@ async function pdfMetadata(attachment: Zotero.Item): Promise<CheckMetadata> {
   // extension's realm before parsing.
   const rawBytes = await IOUtils.read(path);
   const bytes = Uint8Array.from(rawBytes as ArrayLike<number>);
-  const pdf = await PDFDocument.load(bytes, {
-    updateMetadata: false,
-    ignoreEncryption: false,
-  });
+  let pdf: PDFDocument;
+  try {
+    pdf = await PDFDocument.load(bytes, {
+      updateMetadata: false,
+      ignoreEncryption: false,
+    });
+  } catch (error) {
+    const message = (error as Error)?.message || String(error);
+    if (/encrypt/i.test(message)) {
+      throw new Error("Şifreli PDF: metadata okunamadı");
+    }
+    throw error;
+  }
   const title = pdf.getTitle() || "";
   const author = pdf.getAuthor() || "";
   const subject = pdf.getSubject() || "";

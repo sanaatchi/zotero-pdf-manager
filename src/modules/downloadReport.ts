@@ -64,7 +64,7 @@ export function reportToText(reports: ItemReport[]): string {
   return `${config.addonName} — İndirme raporu\n\n${lines.join("\n\n")}`;
 }
 
-function generateHtml(reports: ItemReport[]): string {
+export function generateHtml(reports: ItemReport[]): string {
   const added = reports.filter((r) => r.result === "added").length;
   const failed = reports.filter((r) => r.result === "failed").length;
   const skipped = reports.filter((r) => r.result === "skipped").length;

@@ -18,7 +18,7 @@ if (typeof (globalThis as any).console === "undefined") {
   };
 }
 
-function escapeXml(value: string): string {
+export function escapeXml(value: string): string {
   return String(value).replace(
     /[<>&'"]/g,
     (c) =>
@@ -31,14 +31,14 @@ function escapeXml(value: string): string {
 // --- XMP element builders (mixed namespaces, so no shared prefix) ----------
 
 /** A localized text property: dc:title / dc:description. */
-function xmpAlt(tag: string, value: string): string {
+export function xmpAlt(tag: string, value: string): string {
   return value
     ? `   <${tag}><rdf:Alt><rdf:li xml:lang="x-default">${escapeXml(value)}</rdf:li></rdf:Alt></${tag}>\n`
     : "";
 }
 
 /** An unordered array: dc:subject, dc:publisher, dc:language, dc:type. */
-function xmpBag(tag: string, values: string[]): string {
+export function xmpBag(tag: string, values: string[]): string {
   if (!values.length) return "";
   const items = values
     .map((value) => `<rdf:li>${escapeXml(value)}</rdf:li>`)
@@ -47,7 +47,7 @@ function xmpBag(tag: string, values: string[]): string {
 }
 
 /** An ordered array: dc:creator, dc:date. */
-function xmpSeq(tag: string, values: string[]): string {
+export function xmpSeq(tag: string, values: string[]): string {
   if (!values.length) return "";
   const items = values
     .map((value) => `<rdf:li>${escapeXml(value)}</rdf:li>`)
@@ -56,7 +56,7 @@ function xmpSeq(tag: string, values: string[]): string {
 }
 
 /** A single-value property: zotero:*, pdf:*, xmp:*, dc:identifier. */
-function xmpSimple(tag: string, value: string): string {
+export function xmpSimple(tag: string, value: string): string {
   return value ? `   <${tag}>${escapeXml(value)}</${tag}>\n` : "";
 }
 
@@ -241,7 +241,7 @@ function splitCreators(item: Zotero.Item) {
  * not real subject keywords — keep them out of the embedded metadata.
  * Everything hash-prefixed plus the known internal namespaces is dropped.
  */
-function isSystemTag(tag: string): boolean {
+export function isSystemTag(tag: string): boolean {
   return (
     tag.startsWith("#") ||
     /^(MetadataHunter|ZPDF)\b/i.test(tag) ||
@@ -250,7 +250,7 @@ function isSystemTag(tag: string): boolean {
 }
 
 /** First 4-digit year found in a Zotero date string ("1997", "2020-03"…). */
-function parseYear(raw: string): number | null {
+export function parseYear(raw: string): number | null {
   const match = raw.match(/\d{4}/);
   return match ? Number(match[0]) : null;
 }
@@ -596,21 +596,36 @@ async function runEmbedMetadata(onlyMissingOrFailed: boolean) {
 
   let success = 0;
   const failures: string[] = [];
+  // Aggregate per item rather than tagging after each attachment: an item
+  // with 2+ PDF attachments previously got its tag overwritten by whichever
+  // attachment was processed LAST, hiding an earlier failure once a later
+  // attachment succeeded (or vice versa). The item is only tagged
+  // #metadata-embedded if EVERY attachment processed for it this run
+  // succeeded.
+  const itemOutcomes = new Map<number, { item: Zotero.Item; allSucceeded: boolean }>();
   for (const { item, attachment } of candidates) {
+    let succeeded: boolean;
     try {
-      if (await embedMetadataIntoAttachment(item, attachment)) {
+      succeeded = await embedMetadataIntoAttachment(item, attachment);
+      if (succeeded) {
         success++;
-        await setEmbedStatusTag(item, true);
       } else {
         failures.push(`${item.getDisplayTitle()}: atlandı`);
-        await setEmbedStatusTag(item, false);
       }
     } catch (error) {
+      succeeded = false;
       const reason = (error as Error)?.message || String(error);
       failures.push(`${item.getDisplayTitle()}: ${reason}`);
       ztoolkit.log("PDF metadata embedding failed", attachment.id, error);
-      await setEmbedStatusTag(item, false);
     }
+    const existing = itemOutcomes.get(item.id);
+    itemOutcomes.set(item.id, {
+      item,
+      allSucceeded: (existing?.allSucceeded ?? true) && succeeded,
+    });
+  }
+  for (const { item, allSucceeded } of itemOutcomes.values()) {
+    await setEmbedStatusTag(item, allSucceeded);
   }
   const skippedNote =
     onlyMissingOrFailed && alreadyEmbedded
