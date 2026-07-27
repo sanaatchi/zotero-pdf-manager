@@ -14,6 +14,7 @@ import {
   embedMetadataForSelectedItems,
   maybeEmbedMetadata,
 } from "./pdfMetadata";
+import { cleanMetadataForSelectedItems } from "./metadataClean";
 import { checkMetadataForSelectedItems } from "./metadataCheck";
 import { fillMetadataFromSelectedPDFFilenames } from "./filenameMetadata";
 import { mergeDuplicatePDFAttachments } from "./duplicateAttachmentMerger";
@@ -669,6 +670,20 @@ export default class Menu {
             ),
           commandListener: async () => {
             await embedMetadataForSelectedItems();
+          },
+        },
+        {
+          tag: "menuitem",
+          label: getString("clean-metadata-menu"),
+          icon: addon.data.icons.downloadPdf,
+          getVisibility: () =>
+            ZoteroPane.getSelectedItems().some(
+              (item) =>
+                item.isRegularItem() ||
+                (item.isAttachment() && Boolean(item.parentItemID)),
+            ),
+          commandListener: async () => {
+            await cleanMetadataForSelectedItems();
           },
         },
         {
