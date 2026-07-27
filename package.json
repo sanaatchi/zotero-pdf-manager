@@ -1,6 +1,6 @@
 {
   "name": "zotero-pdf-manager",
-  "version": "1.0.16",
+  "version": "1.0.17",
   "description": "Attachment manager + multi-source PDF downloader for Zotero",
   "config": {
     "addonName": "Zotero PDF Manager",

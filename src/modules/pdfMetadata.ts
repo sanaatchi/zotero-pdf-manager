@@ -497,6 +497,40 @@ async function setEmbedStatusTag(item: Zotero.Item, success: boolean) {
   }
 }
 
+/**
+ * Ground truth for "already embedded", read from the PDF itself rather than
+ * a Zotero tag. Every version of embedXmpMetadata (since XMP support was
+ * added) unconditionally writes xmp:CreatorTool = config.addonName — so its
+ * presence in the XMP packet reliably marks a prior embed regardless of which
+ * plugin version wrote it. Tags alone can't tell this: they were only
+ * introduced in 1.0.16, so PDFs embedded by earlier versions have no tag yet
+ * even though they already carry current metadata.
+ */
+async function hasEmbeddedMetadataMarker(
+  attachment: Zotero.Item,
+): Promise<boolean> {
+  try {
+    const path = await attachment.getFilePathAsync();
+    if (!path) return false;
+    const bytes = Uint8Array.from(
+      (await IOUtils.read(path)) as ArrayLike<number>,
+    );
+    const pdf = await PDFDocument.load(bytes, { updateMetadata: false });
+    const metaRef = pdf.catalog.get(PDFName.of("Metadata"));
+    if (!metaRef) return false;
+    const stream: any = pdf.context.lookup(metaRef);
+    const xmpBytes = stream?.contents ?? stream?.getContents?.();
+    if (!xmpBytes) return false;
+    const xmpText = new TextDecoder("utf-8").decode(xmpBytes);
+    return xmpText.includes(`<xmp:CreatorTool>${escapeXml(config.addonName)}</xmp:CreatorTool>`);
+  } catch {
+    // Can't read it (encrypted, corrupt, missing) — treat as "not embedded"
+    // so it surfaces in the failed/missing run rather than being silently
+    // skipped by the marker check itself.
+    return false;
+  }
+}
+
 function collectSelectedPdfPairs() {
   const pairs = new Map<number, { item: Zotero.Item; attachment: Zotero.Item }>();
   for (const selected of ZoteroPane.getSelectedItems()) {
@@ -526,8 +560,11 @@ function collectSelectedPdfPairs() {
  * Shared runner behind both menu commands.
  * - onlyMissingOrFailed=false: force-refresh every selected PDF, regardless
  *   of prior state (already embedded, previously failed, or untouched).
- * - onlyMissingOrFailed=true: skip PDFs already tagged #metadata-embedded —
- *   only (re)tries items that were never embedded or previously failed.
+ * - onlyMissingOrFailed=true: skip PDFs that already carry our metadata
+ *   marker (checked in the PDF itself, not a tag — see
+ *   hasEmbeddedMetadataMarker) — only (re)tries items that were never
+ *   embedded or previously failed, no matter which plugin version embedded
+ *   the ones that already succeeded.
  */
 async function runEmbedMetadata(onlyMissingOrFailed: boolean) {
   const pairs = collectSelectedPdfPairs();
@@ -535,14 +572,14 @@ async function runEmbedMetadata(onlyMissingOrFailed: boolean) {
   let candidates = [...pairs.values()];
   let alreadyEmbedded = 0;
   if (onlyMissingOrFailed) {
-    candidates = candidates.filter(({ item }) => {
-      const tags = ((item.getTags() as { tag: string }[]) || []).map(
-        (t) => t.tag,
-      );
-      const done = tags.includes(TAG_METADATA_EMBEDDED);
-      if (done) alreadyEmbedded++;
-      return !done;
-    });
+    const checked = await Promise.all(
+      candidates.map(async (pair) => ({
+        pair,
+        done: await hasEmbeddedMetadataMarker(pair.attachment),
+      })),
+    );
+    candidates = checked.filter(({ done }) => !done).map(({ pair }) => pair);
+    alreadyEmbedded = checked.length - candidates.length;
   }
 
   if (onlyMissingOrFailed && !candidates.length) {
