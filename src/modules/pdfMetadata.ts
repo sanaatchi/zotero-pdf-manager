@@ -41,10 +41,13 @@ function xmpSeq(tag: string, values: string[]): string {
   return `   <${tag}><rdf:Seq>${items}</rdf:Seq></${tag}>\n`;
 }
 
-/** A single-value property: prism:*, pdf:*, xmp:*, dc:identifier. */
+/** A single-value property: zotero:*, pdf:*, xmp:*, dc:identifier. */
 function xmpSimple(tag: string, value: string): string {
   return value ? `   <${tag}>${escapeXml(value)}</${tag}>\n` : "";
 }
+
+/** Custom namespace that mirrors Zotero fields 1:1 (type-specific names). */
+const ZOTERO_XMP_NS = "http://zotero-pdf-manager/zotero-fields/1.0/";
 
 /**
  * Write the metadata into the PDF's XMP stream as well as the Info dictionary.
@@ -52,8 +55,13 @@ function xmpSimple(tag: string, value: string): string {
  * metadata editors (Adobe, exiftool, Explorer) read the XMP packet, so without
  * this the embedded metadata looks "missing" in those tools.
  *
- * Only fields that actually carry data are emitted ("metadata verisi olan yer
- * oluşturulsun") across the Dublin Core, PRISM, PDF and XMP schemas.
+ * Two layers:
+ *   1. Dublin Core / PDF / XMP — only fields with a genuine 1:1 standard
+ *      equivalent (title, creator, publisher, date, language, …). No loose
+ *      mappings like bookTitle→dc:source.
+ *   2. zotero: namespace — every non-empty type-specific field and every
+ *      creator type exactly as in the Zotero schema (bookTitle, place,
+ *      zotero:editor, zotero:translator, …).
  */
 function embedXmpMetadata(
   pdf: PDFDocument,
@@ -71,8 +79,18 @@ function embedXmpMetadata(
       ? `urn:isbn:${metadata.isbn}`
       : "";
 
+  const zoteroBlock =
+    xmpSimple("zotero:itemType", metadata.itemTypeKey) +
+    metadata.zoteroFields
+      .map(({ name, value }) => xmpSimple(`zotero:${name}`, value))
+      .join("") +
+    metadata.creatorGroups
+      .map(({ type, names }) => xmpSeq(`zotero:${type}`, names))
+      .join("") +
+    xmpBag("zotero:tags", metadata.keywords);
+
   const body =
-    // Dublin Core — the schema every editor understands.
+    // Dublin Core — exact-equivalent fields only (broad tool compatibility).
     xmpAlt("dc:title", metadata.title) +
     xmpSeq("dc:creator", metadata.authors) +
     xmpBag("dc:contributor", metadata.contributors) +
@@ -83,16 +101,9 @@ function embedXmpMetadata(
     xmpBag("dc:language", metadata.language ? [metadata.language] : []) +
     xmpSimple("dc:identifier", identifier) +
     xmpBag("dc:type", metadata.itemType ? [metadata.itemType] : []) +
-    // The larger work this item is part of (journal / book / proceedings…).
-    xmpSimple("dc:source", metadata.publicationTitle) +
-    // PRISM — journal/serial specifics.
-    xmpSimple("prism:publicationName", metadata.publicationTitle) +
-    xmpSimple("prism:doi", metadata.doi) +
-    xmpSimple("prism:isbn", metadata.isbn) +
-    xmpSimple("prism:volume", metadata.volume) +
-    xmpSimple("prism:number", metadata.issue) +
-    xmpSimple("prism:pageRange", metadata.pages) +
-    xmpSimple("prism:publicationDate", metadata.date) +
+    xmpSimple("dc:rights", metadata.rights) +
+    // Full 1:1 Zotero mirror (bookTitle, editor, translator, place, …).
+    zoteroBlock +
     // PDF schema — mirrors the Info dictionary for XMP-only readers.
     xmpSimple(
       "pdf:Keywords",
@@ -110,7 +121,7 @@ function embedXmpMetadata(
  <rdf:RDF xmlns:rdf="http://www.w3.org/1999/02/22-rdf-syntax-ns#">
   <rdf:Description rdf:about=""
     xmlns:dc="http://purl.org/dc/elements/1.1/"
-    xmlns:prism="http://prismstandard.org/namespaces/basic/2.0/"
+    xmlns:zotero="${ZOTERO_XMP_NS}"
     xmlns:pdf="http://ns.adobe.com/pdf/1.3/"
     xmlns:xmp="http://ns.adobe.com/xap/1.0/">
 ${body}  </rdf:Description>
@@ -134,14 +145,17 @@ function creatorName(creator: any) {
 }
 
 /**
- * Split an item's creators into primary and secondary, following the Zotero
- * schema's per-type "primary" creator — author for most types, but artist for
- * artwork, director for film, cartographer for map, inventor for patent,
- * performer for audioRecording, etc. Primary creators become dc:creator / the
- * PDF Author; everyone else (editors, translators, series editors, …) becomes
- * a dc:contributor — labelled with its role, e.g. "Lale Özgenel (Editör)", so
- * the role survives in the flat dc:contributor list. `editors` is tracked
- * separately only for the Creator fallback ("ilk yazar ya da editör").
+ * Split an item's creators for both DC and the 1:1 zotero: namespace.
+ *
+ * Primary creator type (author for most types; artist/director/… for others)
+ * → dc:creator / PDF Author. Non-primary:
+ *   - "editor"      → kept out of dc:contributor (lives in zotero:editor)
+ *   - "contributor" → dc:contributor (plain name; Zotero "Katkıda bulunan")
+ *   - anything else → dc:contributor with a localized role label so the role
+ *     isn't lost in the flat DC list
+ *
+ * `groups` holds every creator under their exact Zotero type name for
+ * zotero:author / zotero:editor / zotero:translator / …
  */
 function splitCreators(item: Zotero.Item) {
   const creators = ((item as any).getCreators?.() || []) as any[];
@@ -160,7 +174,7 @@ function splitCreators(item: Zotero.Item) {
       return "";
     }
   };
-  // Localized role label ("Editör", "Çevirmen", …) in the user's Zotero locale.
+  // Localized role label ("Çevirmen", "Dizi Editörü", …) in the Zotero locale.
   const roleLabel = (id: number) => {
     try {
       return (Zotero as any).CreatorTypes?.getLocalizedString?.(id) || "";
@@ -169,24 +183,43 @@ function splitCreators(item: Zotero.Item) {
     }
   };
   const primary: string[] = [];
-  const secondary: string[] = [];
-  const secondaryLabeled: string[] = [];
   const editors: string[] = [];
+  const contributors: string[] = [];
   const all: string[] = [];
+  // Creators grouped by their EXACT Zotero creator-type name, for the 1:1
+  // zotero: namespace (zotero:author, zotero:editor, zotero:translator, …).
+  const groups = new Map<string, string[]>();
   for (const creator of creators) {
     const name = creatorName(creator);
     if (!name) continue;
     all.push(name);
+
+    const type = typeName(creator.creatorTypeID) || "contributor";
+    if (!groups.has(type)) groups.set(type, []);
+    groups.get(type)!.push(name);
+
     if (primaryTypeID != null && creator.creatorTypeID === primaryTypeID) {
       primary.push(name);
+      continue;
+    }
+    if (type === "editor") {
+      editors.push(name);
+    } else if (type === "contributor") {
+      // Zotero's own "contributor" (Katkıda bulunan) → plain name; the field is
+      // already called Contributors, so no role suffix needed.
+      contributors.push(name);
     } else {
-      secondary.push(name);
       const role = roleLabel(creator.creatorTypeID);
-      secondaryLabeled.push(role ? `${name} (${role})` : name);
-      if (typeName(creator.creatorTypeID) === "editor") editors.push(name);
+      contributors.push(role ? `${name} (${role})` : name);
     }
   }
-  return { primary, secondary, secondaryLabeled, editors, all };
+  return {
+    primary,
+    editors,
+    contributors,
+    all,
+    groups: [...groups.entries()].map(([type, names]) => ({ type, names })),
+  };
 }
 
 /**
@@ -208,24 +241,63 @@ function parseYear(raw: string): number | null {
   return match ? Number(match[0]) : null;
 }
 
+/**
+ * Every non-empty field valid for this item's type, under the exact
+ * type-specific name from the Zotero schema (bookTitle, university,
+ * proceedingsTitle, … — never the base-field alias).
+ * @see https://api.zotero.org/schema
+ */
+function collectTypeFields(
+  item: Zotero.Item,
+): Array<{ name: string; value: string }> {
+  const out: Array<{ name: string; value: string }> = [];
+  let names: string[] = [];
+  try {
+    const ids =
+      (Zotero as any).ItemFields?.getItemTypeFields?.(
+        (item as any).itemTypeID,
+      ) || [];
+    names = ids
+      .map((id: number) => (Zotero as any).ItemFields?.getName?.(id) || "")
+      .filter(Boolean);
+  } catch {
+    names = [];
+  }
+  for (const name of names) {
+    try {
+      // includeBaseMapped=false: read by the exact type-specific name only.
+      const value = String(
+        (item as any).getField(name, false, false) || "",
+      ).trim();
+      if (value) out.push({ name, value });
+    } catch {
+      // Field not readable for this item; skip.
+    }
+  }
+  return out;
+}
+
 function metadataFromItem(item: Zotero.Item) {
   // includeBaseMapped=true resolves a base field to the type-specific field
-  // that maps to it — the crucial part, since Zotero field names change by item
-  // type: "publicationTitle" → bookTitle (bookSection) / proceedingsTitle
-  // (conferencePaper) / encyclopediaTitle …; "publisher" → university (thesis)
-  // / institution (report) / distributor (film) …. Reading the base name gives
-  // the right value for every type instead of silently returning empty.
+  // that maps to it — used only for the few DC/Info slots that have a real
+  // 1:1 equivalent (publisher→university for thesis, etc.). Container titles
+  // (bookTitle / publicationTitle / …) are NOT base-mapped into a shared
+  // standard field; they live only under their exact name in zotero:*.
   const field = (name: string) => {
     try {
       return String((item as any).getField(name, false, true) || "").trim();
     } catch {
-      // Not every field is valid for every item type; treat as absent.
       return "";
     }
   };
 
-  const { primary, secondaryLabeled, editors, all: allCreators } =
-    splitCreators(item);
+  const {
+    primary,
+    editors,
+    contributors: nonPrimaryContributors,
+    all: allCreators,
+    groups,
+  } = splitCreators(item);
 
   const tags = (((item as any).getTags?.() || []) as any[])
     .map((tag) => (typeof tag === "string" ? tag : tag.tag))
@@ -240,27 +312,32 @@ function metadataFromItem(item: Zotero.Item) {
   // Info "Creator" = first primary creator, or first editor when there is no
   // primary one (user mapping: "Creator: ilk yazar ya da editör").
   const primaryCreator = primary[0] || editors[0] || allCreators[0] || "";
-  // dc:contributor = the non-primary creators, each labelled with its role
-  // ("Lale Özgenel (Editör)"). When there is no primary creator they already
-  // fill dc:creator above, so don't list them twice.
-  const contributors = primary.length ? secondaryLabeled : [];
+  // dc:contributor = Zotero "contributor" (+ other non-editor roles, labelled).
+  // Editors are intentionally excluded — they live in zotero:editor. When there
+  // is no primary creator the same people already fill dc:creator, so skip.
+  const contributors = primary.length ? nonPrimaryContributors : [];
 
   let itemTypeName = "";
+  let itemTypeKey = "";
   try {
+    itemTypeKey =
+      (Zotero as any).ItemTypes?.getName?.((item as any).itemTypeID) || "";
     itemTypeName =
       (Zotero as any).ItemTypes?.getLocalizedString?.(
         (item as any).itemTypeID,
-      ) || "";
+      ) || itemTypeKey;
   } catch {
     itemTypeName = "";
+    itemTypeKey = "";
   }
 
   return {
     title: field("title") || item.getDisplayTitle() || "",
     authors: authorsForField,
     contributors,
-    // Info "Producer" = publisher (user mapping: "producer: yayınevi ya da
-    // yayıncı"). Base-mapped, so thesis→university, report→institution, etc.
+    editors,
+    // Info "Producer" = publisher (user mapping). Base-mapped so
+    // thesis→university, report→institution, film→distributor, etc.
     publisher: field("publisher"),
     primaryCreator,
     date,
@@ -268,14 +345,13 @@ function metadataFromItem(item: Zotero.Item) {
     language: field("language"),
     doi: field("DOI"),
     isbn: field("ISBN"),
-    // Container work: journal name, or the book title for a book chapter, etc.
-    // (base-mapped, so it follows the item type).
-    publicationTitle: field("publicationTitle"),
-    volume: field("volume"),
-    issue: field("issue"),
-    pages: field("pages"),
+    rights: field("rights"),
     abstract: field("abstractNote"),
     itemType: itemTypeName,
+    itemTypeKey,
+    // Exact schema dump for the zotero: XMP namespace.
+    zoteroFields: collectTypeFields(item),
+    creatorGroups: groups,
     keywords: tags,
   };
 }
@@ -308,8 +384,8 @@ export async function embedMetadataIntoAttachment(
   // Subject or a system-tag Keyword) instead of leaving them behind.
   pdf.setTitle(metadata.title);
   pdf.setAuthor(metadata.authors.join("; "));
-  // Subject holds the abstract only — publication/date/DOI have their own
-  // dedicated XMP fields now, so Subject is no longer an overloaded dump.
+  // Subject holds the abstract only — type-specific fields (bookTitle, DOI,
+  // place, …) live in the zotero: XMP namespace, not overloaded into Subject.
   pdf.setSubject(metadata.abstract);
   // Copy into THIS realm's Array of strings (empty array clears old keywords).
   // Zotero's getTags() returns a cross-compartment array, which pdf-lib's
