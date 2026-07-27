@@ -3,7 +3,7 @@
     "zotero-pdf-manager@ibrahimyildiz.art": {
       "updates": [
         {
-          "version": "1.0.7",
+          "version": "1.0.8",
           "update_link": "https://github.com/sanaatchi/zotero-pdf-manager-releases/releases/latest/download/zotero-pdf-manager.xpi",
           "applications": {
             "zotero": {

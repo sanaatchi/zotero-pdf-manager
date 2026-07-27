@@ -83,6 +83,8 @@ function embedXmpMetadata(
     xmpBag("dc:language", metadata.language ? [metadata.language] : []) +
     xmpSimple("dc:identifier", identifier) +
     xmpBag("dc:type", metadata.itemType ? [metadata.itemType] : []) +
+    // The larger work this item is part of (journal / book / proceedings…).
+    xmpSimple("dc:source", metadata.publicationTitle) +
     // PRISM — journal/serial specifics.
     xmpSimple("prism:publicationName", metadata.publicationTitle) +
     xmpSimple("prism:doi", metadata.doi) +
@@ -169,9 +171,15 @@ function parseYear(raw: string): number | null {
 }
 
 function metadataFromItem(item: Zotero.Item) {
+  // includeBaseMapped=true resolves a base field to the type-specific field
+  // that maps to it — the crucial part, since Zotero field names change by item
+  // type: "publicationTitle" → bookTitle (bookSection) / proceedingsTitle
+  // (conferencePaper) / encyclopediaTitle …; "publisher" → university (thesis)
+  // / institution (report) / distributor (film) …. Reading the base name gives
+  // the right value for every type instead of silently returning empty.
   const field = (name: string) => {
     try {
-      return String((item as any).getField(name) || "").trim();
+      return String((item as any).getField(name, false, true) || "").trim();
     } catch {
       // Not every field is valid for every item type; treat as absent.
       return "";
@@ -211,19 +219,20 @@ function metadataFromItem(item: Zotero.Item) {
   }
 
   return {
-    title: String(item.getField("title") || item.getDisplayTitle() || "").trim(),
+    title: field("title") || item.getDisplayTitle() || "",
     authors: authorsForField,
     contributors,
     // Info "Producer" = publisher (user mapping: "producer: yayınevi ya da
-    // yayıncı"). Fall back to distributor/institution when there is no
-    // publisher field for the item type.
-    publisher: field("publisher") || field("distributor") || field("institution"),
+    // yayıncı"). Base-mapped, so thesis→university, report→institution, etc.
+    publisher: field("publisher"),
     primaryCreator,
     date,
     year: parseYear(date),
     language: field("language"),
     doi: field("DOI"),
     isbn: field("ISBN"),
+    // Container work: journal name, or the book title for a book chapter, etc.
+    // (base-mapped, so it follows the item type).
     publicationTitle: field("publicationTitle"),
     volume: field("volume"),
     issue: field("issue"),
