@@ -1,0 +1,324 @@
+import { config } from "../../package.json";
+import { getPref } from "../utils/prefs";
+
+declare const IOUtils: any;
+
+type ScanResult = {
+  scanned: number;
+  noSource: number;
+  broken: number;
+  duplicate: number;
+  nonfile: number;
+};
+
+const emptyResult = (): ScanResult => ({
+  scanned: 0,
+  noSource: 0,
+  broken: 0,
+  duplicate: 0,
+  nonfile: 0,
+});
+
+function scannerPref<T>(name: string, fallback: T): T {
+  const value = getPref(`scanner.${name}`);
+  return (value === undefined || value === null ? fallback : value) as T;
+}
+
+async function regularParent(item: Zotero.Item) {
+  if (item?.isRegularItem()) return item;
+  const parentID = item?.parentItemID || (item as any)?.parentID;
+  return parentID ? await Zotero.Items.getAsync(parentID) : undefined;
+}
+
+async function setTag(item: Zotero.Item, tag: string, enabled: boolean) {
+  if (!tag) return false;
+  if (enabled && !item.hasTag(tag)) {
+    item.addTag(tag);
+    return true;
+  }
+  if (!enabled && item.hasTag(tag)) {
+    item.removeTag(tag);
+    return true;
+  }
+  return false;
+}
+
+export async function scanAttachmentState(
+  sourceItem: Zotero.Item,
+  allowCleanup = false,
+) {
+  const item = await regularParent(sourceItem);
+  if (!item?.isRegularItem()) return undefined;
+  await (item as any).loadAllData?.();
+
+  let hasFile = false;
+  let hasBroken = false;
+  let hasNonfile = false;
+  let hasPDF = false;
+  let snapshot: Zotero.Item | undefined;
+  const contentTypes = new Set<string>();
+  let duplicate = false;
+  const ignoredMasks = String(scannerPref("ignoredFileMasks", ""))
+    .split(",")
+    .map((mask) => mask.trim())
+    .filter(Boolean)
+    .flatMap((mask) => {
+      try {
+        return [new RegExp(mask, "i")];
+      } catch {
+        ztoolkit.log("Invalid Attachment Scanner ignore mask", mask);
+        return [];
+      }
+    });
+
+  for (const attachmentID of item.getAttachments()) {
+    const attachment = await Zotero.Items.getAsync(attachmentID);
+    if (!attachment || attachment.isEmbeddedImageAttachment?.()) continue;
+    if (attachment.isSnapshotAttachment?.()) {
+      snapshot = attachment;
+      continue;
+    }
+    if (attachment.isFileAttachment()) {
+      hasFile = true;
+      let exists = false;
+      try {
+        exists = await attachment.fileExists();
+      } catch {
+        exists = false;
+      }
+      if (!exists) {
+        hasBroken = true;
+        if (allowCleanup && scannerPref("removeBroken", false)) {
+          await Zotero.Items.trashTx(attachmentID);
+        }
+      } else {
+        hasPDF ||= Boolean(
+          attachment.isPDFAttachment?.() ||
+            (attachment as any).isEPUBAttachment?.(),
+        );
+        // Only files that actually exist count toward duplicate-type
+        // detection; a broken link is a #broken problem, not a duplicate.
+        const type = attachment.attachmentContentType || "unknown";
+        const filename = attachment.attachmentFilename || "";
+        if (!ignoredMasks.some((regex) => regex.test(filename))) {
+          if (contentTypes.has(type)) duplicate = true;
+          contentTypes.add(type);
+        }
+      }
+    } else {
+      const title = attachment.getDisplayTitle();
+      if (
+        allowCleanup &&
+        scannerPref("removePubmedEntry", false) &&
+        title === "PubMed entry"
+      ) {
+        await Zotero.Items.trashTx(attachmentID);
+      } else {
+        hasNonfile = true;
+      }
+    }
+  }
+
+  if (
+    allowCleanup &&
+    scannerPref("removeSnapshot", false) &&
+    snapshot &&
+    hasPDF
+  ) {
+    await Zotero.Items.trashTx(snapshot.id);
+  }
+
+  // Evaluate every setTag (do NOT use `||=`, which short-circuits and would
+  // skip the remaining tag updates once one tag has already changed).
+  let changed = false;
+  if (await setTag(item, scannerPref("tagBroken", "#broken"), hasBroken)) {
+    changed = true;
+  }
+  if (
+    scannerPref("scanNoSource", true) &&
+    (await setTag(item, scannerPref("tagNoSource", "#nosource"), !hasFile))
+  ) {
+    changed = true;
+  }
+  if (
+    scannerPref("scanDuplicates", true) &&
+    (await setTag(item, scannerPref("tagDuplicate", "#duplicate"), duplicate))
+  ) {
+    changed = true;
+  }
+  if (
+    scannerPref("scanNonfiles", false) &&
+    (await setTag(item, scannerPref("tagNonfile", "#nonfile"), hasNonfile))
+  ) {
+    changed = true;
+  }
+  if (changed) await item.saveTx();
+  return { noSource: !hasFile, broken: hasBroken, duplicate, nonfile: hasNonfile };
+}
+
+async function scanItems(items: Zotero.Item[], allowCleanup = true) {
+  const result = emptyResult();
+  const seen = new Set<number>();
+  for (const source of items) {
+    const item = await regularParent(source);
+    if (!item?.isRegularItem() || seen.has(item.id)) continue;
+    seen.add(item.id);
+    const state = await scanAttachmentState(item, allowCleanup);
+    if (!state) continue;
+    result.scanned++;
+    if (state.noSource) result.noSource++;
+    if (state.broken) result.broken++;
+    if (state.duplicate) result.duplicate++;
+    if (state.nonfile) result.nonfile++;
+  }
+  showScanResult(result);
+  return result;
+}
+
+function showScanResult(result: ScanResult) {
+  new ztoolkit.ProgressWindow(config.addonName, { closeTime: 8000 })
+    .createLine({
+      text:
+        `Scanned ${result.scanned}: ` +
+        `${result.noSource} without files, ${result.broken} broken, ` +
+        `${result.duplicate} duplicate types, ${result.nonfile} URL-only`,
+      type: "default",
+    })
+    .show();
+}
+
+export async function scanSelectedAttachments() {
+  return scanItems(ZoteroPane.getSelectedItems());
+}
+
+export async function monitorChangedAttachmentItems(
+  ids: string[] | number[],
+) {
+  if (!scannerPref("monitorAttachments", false)) return;
+  const parents = new Map<number, Zotero.Item>();
+  for (const id of ids) {
+    const changed = await Zotero.Items.getAsync(Number(id));
+    const parent = changed ? await regularParent(changed) : undefined;
+    if (parent?.isRegularItem()) parents.set(parent.id, parent);
+  }
+  for (const parent of parents.values()) {
+    await scanAttachmentState(parent, false);
+  }
+}
+
+export async function scanAllAttachments() {
+  const hidden = ["webpage", "attachment", "note", "annotation"]
+    .map((name) => Zotero.ItemTypes.getID(name))
+    .join(",");
+  const rows =
+    (await Zotero.DB.queryAsync(
+      `SELECT itemID FROM items WHERE itemTypeID NOT IN (${hidden}) ` +
+        `AND itemID NOT IN (SELECT itemID FROM deletedItems)`,
+    )) || [];
+  const items: Zotero.Item[] = [];
+  for (const row of rows) {
+    const item = await Zotero.Items.getAsync(row.itemID);
+    if (item) items.push(item);
+  }
+  return scanItems(items);
+}
+
+export async function removeDuplicateFileLinks() {
+  if (
+    !window.confirm(
+      "Remove duplicate attachments that point to the exact same file?",
+    )
+  ) {
+    return;
+  }
+  let removed = 0;
+  for (const source of ZoteroPane.getSelectedItems()) {
+    const item = await regularParent(source);
+    if (!item?.isRegularItem()) continue;
+    const paths = new Set<string>();
+    for (const attachmentID of item.getAttachments()) {
+      const attachment = await Zotero.Items.getAsync(attachmentID);
+      if (!attachment?.isFileAttachment()) continue;
+      const path = await attachment.getFilePathAsync().catch(() => "");
+      if (!path) continue;
+      const normalized = PathUtils.normalize(path).toLocaleLowerCase();
+      if (paths.has(normalized)) {
+        await Zotero.Items.trashTx(attachmentID);
+        removed++;
+      } else {
+        paths.add(normalized);
+      }
+    }
+  }
+  new ztoolkit.ProgressWindow(config.addonName, { closeTime: 5000 })
+    .createLine({ text: `${removed} duplicate attachment(s) moved to trash` })
+    .show();
+}
+
+export async function scanOrphanFiles() {
+  const root = String(
+    getPref("sourceDir") ||
+      Zotero.Prefs.get("extensions.zotero.baseAttachmentPath", true) ||
+      "",
+  );
+  if (!root || !(await IOUtils.exists(root))) {
+    new ztoolkit.ProgressWindow(config.addonName, { closeTime: 5000 })
+      .createLine({ text: "Attachment root directory is not configured" })
+      .show();
+    return;
+  }
+
+  const referenced = new Set<string>();
+  const rows =
+    (await Zotero.DB.queryAsync(
+      `SELECT itemID FROM items WHERE itemTypeID=${Zotero.ItemTypes.getID("attachment")} ` +
+        `AND itemID NOT IN (SELECT itemID FROM deletedItems)`,
+    )) || [];
+  for (const row of rows) {
+    const attachment = await Zotero.Items.getAsync(row.itemID);
+    if (!attachment?.isFileAttachment()) continue;
+    const path = await attachment.getFilePathAsync().catch(() => "");
+    if (path) referenced.add(PathUtils.normalize(path).normalize("NFC").toLowerCase());
+  }
+
+  const orphanFiles: string[] = [];
+  const emptyDirs: string[] = [];
+  const walk = async (dir: string): Promise<boolean> => {
+    let hasReferenced = false;
+    let children: string[] = [];
+    try {
+      children = await IOUtils.getChildren(dir);
+    } catch {
+      return false;
+    }
+    for (const child of children) {
+      const stat = await IOUtils.stat(child).catch(() => null);
+      if (!stat) continue;
+      if (stat.type === "directory") {
+        if (await walk(child)) hasReferenced = true;
+        else emptyDirs.push(child);
+      } else if (
+        referenced.has(PathUtils.normalize(child).normalize("NFC").toLowerCase())
+      ) {
+        hasReferenced = true;
+      } else if (!/^(desktop\.ini|thumbs\.db|\.ds_store)$/i.test(PathUtils.filename(child))) {
+        orphanFiles.push(child);
+      }
+    }
+    return hasReferenced;
+  };
+  await walk(root);
+
+  const report =
+    `Attachment root: ${root}\n` +
+    `Orphan files (${orphanFiles.length}):\n${orphanFiles.join("\n")}\n\n` +
+    `Empty directories (${emptyDirs.length}):\n${emptyDirs.join("\n")}`;
+  Components.classes["@mozilla.org/widget/clipboardhelper;1"]
+    .getService(Components.interfaces.nsIClipboardHelper)
+    .copyString(report);
+  new ztoolkit.ProgressWindow(config.addonName, { closeTime: 8000 })
+    .createLine({
+      text: `${orphanFiles.length} orphan files, ${emptyDirs.length} empty directories — report copied`,
+    })
+    .show();
+}

@@ -1,0 +1,75 @@
+import { config } from "../package.json";
+import { getString, initLocale } from "./utils/locale";
+import { registerPrefsScripts } from "./modules/preferenceScript";
+import { createZToolkit } from "./utils/ztoolkit";
+import Menu from "./modules/menu";
+import { PDFReconciler } from "./modules/pdfReconciler";
+// import { getPref } from "./utils/prefs";
+
+async function onStartup() {
+  await Promise.all([
+    Zotero.initializationPromise,
+    Zotero.unlockPromise,
+    Zotero.uiReadyPromise,
+  ]);
+  initLocale();
+  Zotero.PreferencePanes.register(
+    {
+      pluginID: config.addonID,
+      src: rootURI + "chrome/content/preferences.xhtml",
+      label: config.addonName,
+      image: `chrome://${config.addonRef}/content/icons/favicon.png`,
+      // defaultXUL: true,
+    }
+  );
+  await onMainWindowLoad(window);
+}
+
+async function onMainWindowLoad(win: Window): Promise<void> {
+  addon.data.ztoolkit = createZToolkit();
+  addon.data.menu = new Menu();
+  addon.data.pdfReconciler?.dispose();
+  addon.data.pdfReconciler = new PDFReconciler();
+  addon.data.pdfReconciler.start();
+}
+
+async function onMainWindowUnload(win: Window): Promise<void> {
+  addon.data.pdfReconciler?.dispose();
+  addon.data.menu?.dispose();
+  ztoolkit.unregisterAll();
+  addon.data.dialog?.window?.close();
+}
+
+function onShutdown(): void {
+  addon.data.pdfReconciler?.dispose();
+  addon.data.menu?.dispose();
+  ztoolkit.unregisterAll();
+  addon.data.dialog?.window?.close();
+  // Remove addon object
+  addon.data.alive = false;
+  delete Zotero[config.addonInstance];
+}
+
+/**
+ * This function is just an example of dispatcher for Preference UI events.
+ * Any operations should be placed in a function to keep this funcion clear.
+ * @param type event type
+ * @param data event data
+ */
+async function onPrefsEvent(type: string, data: { [key: string]: any }) {
+  switch (type) {
+    case "load":
+      registerPrefsScripts(data.window);
+      break;
+    default:
+      return;
+  }
+}
+
+export default {
+  onStartup,
+  onShutdown,
+  onMainWindowLoad,
+  onMainWindowUnload,
+  onPrefsEvent,
+};

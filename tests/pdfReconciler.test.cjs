@@ -1,0 +1,97 @@
+const assert = require("node:assert/strict");
+const { test } = require("node:test");
+const path = require("node:path");
+const esbuild = require("esbuild");
+
+function loadModule(entry) {
+  const result = esbuild.buildSync({
+    entryPoints: [path.join(process.cwd(), entry)],
+    bundle: true,
+    platform: "node",
+    format: "cjs",
+    write: false,
+    logLevel: "silent",
+  });
+  const module = { exports: {} };
+  new Function("module", "exports", "require", result.outputFiles[0].text)(
+    module,
+    module.exports,
+    require,
+  );
+  return module.exports;
+}
+
+test("periodic reconcile minutes are normalized and bounded", () => {
+  const { normalizePeriodicMinutes } = loadModule(
+    "src/modules/pdfReconciler.ts",
+  );
+
+  assert.equal(normalizePeriodicMinutes("0"), 0);
+  assert.equal(normalizePeriodicMinutes("45"), 45);
+  assert.equal(normalizePeriodicMinutes("-1"), 30);
+  assert.equal(normalizePeriodicMinutes("not-a-number"), 30);
+  assert.equal(normalizePeriodicMinutes(99999), 10080);
+});
+
+test("reconcile considers only regular items without a PDF", () => {
+  global.Zotero = {
+    Items: {
+      get: (id) =>
+        id === 1
+          ? { attachmentContentType: "application/pdf" }
+          : { attachmentContentType: "text/html" },
+    },
+  };
+  const { canReconcileItem } = loadModule("src/modules/pdfReconciler.ts");
+  const item = (attachments, overrides = {}) => ({
+    isRegularItem: () => true,
+    isFeedItem: false,
+    deleted: false,
+    getAttachments: () => attachments,
+    ...overrides,
+  });
+
+  assert.equal(canReconcileItem(item([])), true);
+  assert.equal(canReconcileItem(item([2])), true);
+  assert.equal(canReconcileItem(item([1])), false);
+  assert.equal(canReconcileItem(item([], { deleted: true })), false);
+  assert.equal(
+    canReconcileItem(item([], { isRegularItem: () => false })),
+    false,
+  );
+  delete global.Zotero;
+});
+
+test("duplicate DOI filename matches are treated as ambiguous", () => {
+  const { LocalFolderSource } = loadModule("src/modules/pdfSources.ts");
+  const source = new LocalFolderSource();
+  const item = {
+    getField: (field) => (field === "DOI" ? "10.1000/example" : ""),
+  };
+  const files = ["D:\\one.pdf", "E:\\two.pdf"].map((file) => ({
+    path: file,
+    mtime: 1,
+    name: file,
+    norm: file.toLowerCase(),
+    alnum: "101000example",
+  }));
+
+  assert.deepEqual(source.matchItem(item, files), { status: "ambiguous" });
+});
+
+test("automatic online fallback contains only approved OA sources", () => {
+  const { AUTOMATIC_ONLINE_SOURCE_IDS } = loadModule(
+    "src/modules/pdfDownload.ts",
+  );
+
+  assert.deepEqual([...AUTOMATIC_ONLINE_SOURCE_IDS], [
+    "doi",
+    "arxiv",
+    "pmc",
+    "s2",
+    "dergipark",
+  ]);
+  for (const unsafe of ["scihub", "libgen", "proxy", "proquest"]) {
+    assert.equal(AUTOMATIC_ONLINE_SOURCE_IDS.includes(unsafe), false);
+  }
+});

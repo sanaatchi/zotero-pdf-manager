@@ -1,0 +1,423 @@
+<linkset>
+  <html:link rel="localization" href="__addonRef__-preferences.ftl" />
+</linkset>
+<vbox id="zotero-prefpane-__addonRef__" onload="Zotero.__addonInstance__.hooks.onPrefsEvent('load', {window})">
+  <groupbox>
+    <label>
+      <html:h2 data-l10n-id="source-title"></html:h2>
+    </label>
+    <vbox align="start">
+      <label data-l10n-id="source-intro"></label>
+      <separator class="thin" />
+      <hbox align="center">
+        <label data-l10n-id="directory"></label>
+        <html:input id="source-dir" type="text" readonly="true" flex="1"
+          preference="extensions.zotero.__addonRef__.sourceDir" style="background: none; border: none">
+        </html:input>
+        <button id="choose-source-dir" data-l10n-id="choose-dir"></button>
+      </hbox>
+      <hbox align="center">
+        <label data-l10n-id="read-pdf-title"></label>
+        <menulist native="true" preference="extensions.zotero.__addonRef__.readPDFtitle">
+          <menupopup>
+            <menuitem value="never" data-l10n-id="readPDFtitle-never">
+            </menuitem>
+            <menuitem value="nonCJK" data-l10n-id="readPDFtitle-nonCJK">
+            </menuitem>
+            <menuitem value="always" data-l10n-id="readPDFtitle-always">
+            </menuitem>
+          </menupopup>
+        </menulist>
+
+        <!-- <radiogroup preference="extensions.zotero.__addonRef__.readPDFtitle">
+          <hbox>
+            <radio id="readPDFtitle-never" data-l10n-id="readPDFtitle-never" value="never" />
+            <radio id="readPDFtitle-nonCJK" data-l10n-id="readPDFtitle-nonCJK" value="nonCJK" />
+            <radio id="readPDFtitle-always" data-l10n-id="readPDFtitle-always" value="always" />
+          </hbox>
+        </radiogroup> -->
+      </hbox>
+    </vbox>
+  </groupbox>
+  <groupbox>
+    <label>
+      <html:h2 data-l10n-id="attach-title"></html:h2>
+    </label>
+    <vbox align="start">
+      <label data-l10n-id="attach-intro"></label>
+      <separator class="thin" />
+      <hbox align="center">
+        <label data-l10n-id="attach-type-start"></label>
+        <menulist native="true" id="attach-type" preference="extensions.zotero.__addonRef__.attachType">
+          <menupopup>
+            <menuitem data-l10n-id="importing" value="importing" />
+            <menuitem data-l10n-id="linking" value="linking" />
+          </menupopup>
+        </menulist>
+        <label data-l10n-id="attach-type-end"></label>
+      </hbox>
+    </vbox>
+  </groupbox>
+  <groupbox id="dest-setting">
+    <label>
+      <html:h2 data-l10n-id="dest-title"></html:h2>
+    </label>
+    <vbox align="start">
+      <label data-l10n-id="dest-intro"></label>
+      <separator class="thin" />
+      <hbox align="center">
+        <label data-l10n-id="directory"></label>
+        <html:input id="dest-dir" type="text" readonly="true" flex="1"
+          preference="extensions.zotero.__addonRef__.destDir" style="background: none; border: none">
+        </html:input>
+        <button id="choose-dest-dir" data-l10n-id="choose-dir"></button>
+      </hbox>
+
+      <separator class="thin" />
+
+      <hbox align="center">
+        <label data-l10n-id="subfolder"></label>
+        <html:input id="subfolder-format" type="text" flex="1"
+          preference="extensions.zotero.__addonRef__.subfolderFormat">
+        </html:input>
+      </hbox>
+      <checkbox native="false" data-l10n-id="slash-as-subfolder-delimiter"
+        preference="extensions.zotero.__addonRef__.slashAsSubfolderDelimiter" />
+
+      <separator class="thin" />
+
+      <hbox align="center">
+        <label data-l10n-id="filename"></label>
+        <button id="file-renaming-button" data-l10n-id="preferences-file-renaming-customize-button"
+          data-search-strings="preferences-file-renaming-format-title, preferences-file-renaming-format-template"
+          oncommand="Zotero_Preferences.General.openFileRenamingDialog()"
+          ></button>
+      </hbox>
+
+      <separator class="thin" />
+
+      <label data-l10n-id="preferences-file-renaming-format-instructions-more">
+        <label is="zotero-text-link" href="https://www.zotero.org/support/file_renaming"
+          data-l10n-name="file-renaming-format-help-link"></label>
+      </label>
+    </vbox>
+  </groupbox>
+  <groupbox>
+    <label>
+      <html:h2 data-l10n-id="other-title"></html:h2>
+    </label>
+    <vbox align="start">
+      <hbox align="center">
+        <checkbox native="true" class="shortcut-enable" data-l10n-id="attach-new-file-shortcut"
+          preference="extensions.zotero.__addonRef__.attachNewFile.shortcut.enable" />
+        <html:input type="text" class="shortcut" style="width: 8em; display: inline-block;"
+          preference="extensions.zotero.__addonRef__.attachNewFile.shortcut">
+        </html:input>
+      </hbox>
+      <hbox align="center">
+        <checkbox native="true" class="shortcut-enable" data-l10n-id="match-attachment-shortcut"
+          preference="extensions.zotero.__addonRef__.matchAttachment.shortcut.enable" />
+        <html:input type="text" class="shortcut" style="width: 8em; display: inline-block;"
+          preference="extensions.zotero.__addonRef__.matchAttachment.shortcut">
+        </html:input>
+      </hbox>
+      <hbox align="center">
+        <checkbox native="true" class="shortcut-enable" data-l10n-id="rename-attachment-shortcut"
+          preference="extensions.zotero.__addonRef__.renameAttachment.shortcut.enable" />
+        <html:input type="text" class="shortcut" style="width: 8em; display: inline-block;"
+          preference="extensions.zotero.__addonRef__.renameAttachment.shortcut">
+        </html:input>
+      </hbox>
+      <hbox align="center">
+        <checkbox native="true" class="shortcut-enable"
+          data-l10n-id="rename-move-attachment-shortcut"
+          preference="extensions.zotero.__addonRef__.renameMoveAttachment.shortcut.enable" />
+        <html:input type="text" class="shortcut" style="width: 8em; display: inline-block;"
+          preference="extensions.zotero.__addonRef__.renameMoveAttachment.shortcut">
+        </html:input>
+      </hbox>
+      <hbox align="center">
+        <checkbox native="true" class="shortcut-enable"
+          data-l10n-id="move-attachment-shortcut"
+          preference="extensions.zotero.__addonRef__.moveAttachment.shortcut.enable" />
+        <html:input type="text" class="shortcut" style="width: 8em; display: inline-block;"
+          preference="extensions.zotero.__addonRef__.moveAttachment.shortcut">
+        </html:input>
+      </hbox>
+      <checkbox native="true" data-l10n-id="auto-rename" preference="extensions.zotero.autoRenameFiles" />
+      <hbox align="center">
+        <checkbox id="auto-rename-on-modify" native="true" data-l10n-id="auto-rename-on-modify" preference="extensions.zotero.__addonRef__.autoRenameOnModify" />
+        <hbox data-l10n-id="auto-rename-on-modify-help" role="img" align="center"
+          style="width: 16px; height: 16px; margin-inline-start: 8px; opacity: .65; cursor: pointer;">
+          <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24"
+            fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"
+            stroke-linejoin="round" class="lucide lucide-circle-question-mark-icon lucide-circle-question-mark"
+            style="pointer-events: none;" aria-hidden="true">
+            <circle cx="12" cy="12" r="10" />
+            <path d="M9.09 9a3 3 0 0 1 5.83 1c0 2-3 3-3 3" />
+            <path d="M12 17h.01" />
+          </svg>
+        </hbox>
+      </hbox>
+      <vbox id="auto-rename-on-modify-options" hidden="true" style="margin-inline-start: 2em;">
+      <hbox align="center" class="auto-rename-on-modify-setting">
+        <checkbox id="auto-rename-on-modify-debounce" native="true" data-l10n-id="auto-rename-on-modify-debounce" preference="extensions.zotero.__addonRef__.autoRenameOnModifyDebounceEnabled" />
+        <html:input
+          id="auto-rename-on-modify-debounce-ms"
+          type="number"
+          min="0"
+          step="100"
+          style="width: 8em; display: inline-block"
+          preference="extensions.zotero.__addonRef__.autoRenameOnModifyDebounceMs"
+        >
+        </html:input>
+        <hbox data-l10n-id="auto-rename-on-modify-debounce-help" role="img" align="center"
+          style="width: 16px; height: 16px; margin-inline-start: 8px; opacity: .65; cursor: pointer;">
+          <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24"
+            fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"
+            stroke-linejoin="round" class="lucide lucide-circle-question-mark-icon lucide-circle-question-mark"
+            style="pointer-events: none;" aria-hidden="true">
+            <circle cx="12" cy="12" r="10" />
+            <path d="M9.09 9a3 3 0 0 1 5.83 1c0 2-3 3-3 3" />
+            <path d="M12 17h.01" />
+          </svg>
+        </hbox>
+      </hbox>
+      <hbox align="center" class="auto-rename-on-modify-setting">
+        <checkbox id="auto-rename-on-modify-delay" native="true" data-l10n-id="auto-rename-on-modify-delay" preference="extensions.zotero.__addonRef__.autoRenameOnModifyDelayEnabled" />
+        <html:input
+          id="auto-rename-on-modify-delay-ms"
+          type="number"
+          min="0"
+          step="100"
+          style="width: 8em; display: inline-block"
+          preference="extensions.zotero.__addonRef__.autoRenameOnModifyDelayMs"
+        >
+        </html:input>
+        <hbox data-l10n-id="auto-rename-on-modify-delay-help" role="img" align="center"
+          style="width: 16px; height: 16px; margin-inline-start: 8px; opacity: .65; cursor: pointer;">
+          <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24"
+            fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"
+            stroke-linejoin="round" class="lucide lucide-circle-question-mark-icon lucide-circle-question-mark"
+            style="pointer-events: none;" aria-hidden="true">
+            <circle cx="12" cy="12" r="10" />
+            <path d="M9.09 9a3 3 0 0 1 5.83 1c0 2-3 3-3 3" />
+            <path d="M12 17h.01" />
+          </svg>
+        </hbox>
+      </hbox>
+      </vbox>
+      <checkbox native="true" data-l10n-id="auto-move" preference="extensions.zotero.__addonRef__.autoMove" />
+      <checkbox native="true" data-l10n-id="auto-remove-empty-folder"
+        preference="extensions.zotero.__addonRef__.autoRemoveEmptyFolder" />
+      <checkbox native="true" data-l10n-id="move-without-deleting"
+        preference="extensions.zotero.__addonRef__.moveWithoutDeleting" />
+      <checkbox native="true" data-l10n-id="sync-attachment-title"
+        preference="extensions.zotero.__addonRef__.syncAttachmentTitle" />
+      <hbox align="center">
+        <label data-l10n-id="file-types"></label>
+        <html:input type="text" flex="1" preference="extensions.zotero.__addonRef__.fileTypes">
+        </html:input>
+      </hbox>
+      <vbox style="margin-top: 1em;">
+
+        <label data-l10n-id="filename-as-prefix-rules"></label>
+        <label style="opacity: .6;" data-l10n-id="filename-rules-instructions"></label>
+        <hbox align="center">
+          <html:input type="text" flex="1" style="width: 100%;" placeholder="SI\d+, .+_si"
+            preference="extensions.zotero.__addonRef__.filenameAsPrefixRules">
+          </html:input>
+
+        </hbox>
+        <label data-l10n-id="filename-skip-rename-rules"></label>
+        <hbox align="center">
+          <html:input type="text" flex="1" style="width: 100%;" placeholder="SI\d+, .+_si"
+            preference="extensions.zotero.__addonRef__.filenameSkipRenameRules">
+          </html:input>
+        </hbox>
+        <label data-l10n-id="filename-skip-auto-move-rename-rules"></label>
+        <hbox align="center">
+          <html:input type="text" flex="1" style="width: 100%;" placeholder="SI\d+, .+_si"
+            preference="extensions.zotero.__addonRef__.filenameSkipAutoMoveRenameRules">
+          </html:input>
+        </hbox>
+      </vbox>
+    </vbox>
+  </groupbox>
+  <groupbox>
+    <label>
+      <html:h2 data-l10n-id="scanner-pref-title"></html:h2>
+    </label>
+    <vbox align="start">
+      <checkbox native="true" data-l10n-id="scanner-scan-nosource"
+        preference="extensions.zotero.__addonRef__.scanner.scanNoSource" />
+      <checkbox native="true" data-l10n-id="scanner-scan-nonfiles"
+        preference="extensions.zotero.__addonRef__.scanner.scanNonfiles" />
+      <checkbox native="true" data-l10n-id="scanner-scan-duplicates"
+        preference="extensions.zotero.__addonRef__.scanner.scanDuplicates" />
+      <checkbox native="true" data-l10n-id="scanner-monitor"
+        preference="extensions.zotero.__addonRef__.scanner.monitorAttachments" />
+      <hbox align="center"><label data-l10n-id="scanner-ignore-masks"></label>
+        <html:input type="text" flex="1" preference="extensions.zotero.__addonRef__.scanner.ignoredFileMasks" /></hbox>
+      <separator class="thin" />
+      <checkbox native="true" data-l10n-id="scanner-remove-pubmed"
+        preference="extensions.zotero.__addonRef__.scanner.removePubmedEntry" />
+      <checkbox native="true" data-l10n-id="scanner-remove-snapshot"
+        preference="extensions.zotero.__addonRef__.scanner.removeSnapshot" />
+      <checkbox native="true" data-l10n-id="scanner-remove-broken"
+        preference="extensions.zotero.__addonRef__.scanner.removeBroken" />
+      <separator class="thin" />
+      <hbox align="center"><label data-l10n-id="scanner-tag-nosource"></label>
+        <html:input type="text" flex="1" preference="extensions.zotero.__addonRef__.scanner.tagNoSource" /></hbox>
+      <hbox align="center"><label data-l10n-id="scanner-tag-broken"></label>
+        <html:input type="text" flex="1" preference="extensions.zotero.__addonRef__.scanner.tagBroken" /></hbox>
+      <hbox align="center"><label data-l10n-id="scanner-tag-duplicate"></label>
+        <html:input type="text" flex="1" preference="extensions.zotero.__addonRef__.scanner.tagDuplicate" /></hbox>
+      <hbox align="center"><label data-l10n-id="scanner-tag-nonfile"></label>
+        <html:input type="text" flex="1" preference="extensions.zotero.__addonRef__.scanner.tagNonfile" /></hbox>
+    </vbox>
+  </groupbox>
+  <groupbox>
+    <label>
+      <html:h2 data-l10n-id="about-title"></html:h2>
+    </label>
+    <vbox align="start">
+      <label data-l10n-id="about-intro"></label>
+      <separator class="thin" />
+      <label style="margin-inline: 6px 5px; text-decoration: none" is="zotero-text-link"
+        href="https://github.com/MuiseDestiny/zotero-attanger" class="zotero-text-link">
+        ⭐ Star it
+      </label>
+      <label style="margin-inline: 6px 5px; text-decoration: none" is="zotero-text-link"
+        href="https://github.com/MuiseDestiny" class="zotero-text-link">
+        🔍 See author's Github
+      </label>
+      <label style="margin-inline: 6px 5px; text-decoration: none" is="zotero-text-link"
+        href="https://space.bilibili.com/13557814" class="zotero-text-link">
+        📺 See author's Bilibili
+      </label>
+      <label style="margin-inline: 6px 5px; text-decoration: none" is="zotero-text-link"
+        href="https://x9l8rgumba.feishu.cn/docx/CbvCdvc27opfDwxvTddcfJvDnDf" class="zotero-text-link">
+        🎊 See Pro plugins
+      </label>
+    </vbox>
+  </groupbox>
+  <groupbox>
+    <label>
+      <html:h2 data-l10n-id="pdf-pref-title"></html:h2>
+    </label>
+    <vbox align="start">
+      <checkbox native="true" data-l10n-id="pdf-skip-existing"
+        preference="extensions.zotero.__addonRef__.pdf.skipExisting" />
+      <checkbox native="true" data-l10n-id="pdf-metadata-check"
+        preference="extensions.zotero.__addonRef__.pdf.metadataCheck" />
+      <checkbox native="true" data-l10n-id="pdf-validate-content"
+        preference="extensions.zotero.__addonRef__.pdf.validateContent" />
+      <checkbox native="true" data-l10n-id="pdf-embed-metadata-auto"
+        preference="extensions.zotero.__addonRef__.pdf.embedMetadataAutomatically" />
+      <checkbox native="true" data-l10n-id="pdf-show-report"
+        preference="extensions.zotero.__addonRef__.pdf.showReport" />
+      <checkbox native="true" data-l10n-id="pdf-auto-on-startup"
+        preference="extensions.zotero.__addonRef__.pdf.autoOnStartup" />
+      <checkbox native="true" data-l10n-id="pdf-auto-on-add"
+        preference="extensions.zotero.__addonRef__.pdf.autoOnAdd" />
+      <hbox align="center">
+        <label data-l10n-id="pdf-periodic-minutes"></label>
+        <html:input type="number" min="0" max="10080" style="width: 7em;"
+          preference="extensions.zotero.__addonRef__.pdf.periodicMinutes" />
+      </hbox>
+      <description data-l10n-id="pdf-periodic-minutes-help"></description>
+      <checkbox native="true" data-l10n-id="pdf-online-auto-download"
+        preference="extensions.zotero.__addonRef__.pdf.onlineAutoDownload" />
+      <checkbox native="true" data-l10n-id="pdf-online-on-reconcile"
+        preference="extensions.zotero.__addonRef__.pdf.onlineOnReconcile" />
+      <hbox align="center">
+        <label data-l10n-id="pdf-online-max-per-run"></label>
+        <html:input type="number" min="0" max="100" style="width: 7em;"
+          preference="extensions.zotero.__addonRef__.pdf.onlineMaxPerRun" />
+      </hbox>
+      <description data-l10n-id="pdf-online-safety-help"></description>
+      <hbox align="center">
+        <label data-l10n-id="pdf-orphan-mode"></label>
+        <menulist native="true"
+          preference="extensions.zotero.__addonRef__.pdf.orphanMode">
+          <menupopup>
+            <menuitem value="report" data-l10n-id="pdf-orphan-report" />
+            <menuitem value="off" data-l10n-id="pdf-orphan-off" />
+          </menupopup>
+        </menulist>
+      </hbox>
+      <hbox align="center">
+        <label data-l10n-id="pdf-orphan-max-per-run"></label>
+        <html:input type="number" min="0" max="100" style="width: 7em;"
+          preference="extensions.zotero.__addonRef__.pdf.orphanMaxPerRun" />
+      </hbox>
+      <description data-l10n-id="pdf-orphan-help"></description>
+      <button id="pdf-create-orphans"
+        data-l10n-id="pdf-create-orphans"></button>
+      <checkbox native="true" data-l10n-id="pdf-dry-run"
+        preference="extensions.zotero.__addonRef__.pdf.dryRun" />
+      <description data-l10n-id="pdf-dry-run-help"></description>
+      <hbox align="center">
+        <button id="pdf-run-reconcile" data-l10n-id="pdf-run-reconcile"></button>
+        <button id="pdf-open-audit" data-l10n-id="pdf-open-audit"></button>
+      </hbox>
+      <separator class="thin" />
+      <hbox align="center">
+        <label data-l10n-id="pdf-source-order"></label>
+        <html:input type="text" flex="1"
+          preference="extensions.zotero.__addonRef__.pdf.sourceOrder" />
+      </hbox>
+      <separator class="thin" />
+      <checkbox native="true" data-l10n-id="pdf-local-enabled"
+        preference="extensions.zotero.__addonRef__.pdf.localEnabled" />
+      <hbox align="center">
+        <label data-l10n-id="pdf-watch-roots"></label>
+        <html:input type="text" flex="1"
+          placeholder="D:\Papers; E:\Archive"
+          preference="extensions.zotero.__addonRef__.pdf.watchRoots" />
+      </hbox>
+      <description data-l10n-id="pdf-watch-roots-help"></description>
+      <checkbox native="true" data-l10n-id="pdf-local-aslink"
+        preference="extensions.zotero.__addonRef__.pdf.localAsLink" />
+      <separator class="thin" />
+      <checkbox native="true" data-l10n-id="pdf-doi-enabled"
+        preference="extensions.zotero.__addonRef__.pdf.doiEnabled" />
+      <checkbox native="true" data-l10n-id="pdf-arxiv-enabled"
+        preference="extensions.zotero.__addonRef__.pdf.arxivEnabled" />
+      <checkbox native="true" data-l10n-id="pdf-pmc-enabled"
+        preference="extensions.zotero.__addonRef__.pdf.pmcEnabled" />
+      <checkbox native="true" data-l10n-id="pdf-s2-enabled"
+        preference="extensions.zotero.__addonRef__.pdf.s2Enabled" />
+      <checkbox native="true" data-l10n-id="pdf-dergipark-enabled"
+        preference="extensions.zotero.__addonRef__.pdf.dergiparkEnabled" />
+      <separator class="thin" />
+      <checkbox native="true" data-l10n-id="pdf-scihub-enabled"
+        preference="extensions.zotero.__addonRef__.pdf.scihubEnabled" />
+      <hbox align="center">
+        <label data-l10n-id="pdf-scihub-url"></label>
+        <html:input type="text" flex="1"
+          preference="extensions.zotero.__addonRef__.pdf.scihubURL" />
+      </hbox>
+      <checkbox native="true" data-l10n-id="pdf-libgen-enabled"
+        preference="extensions.zotero.__addonRef__.pdf.libgenEnabled" />
+      <hbox align="center">
+        <label data-l10n-id="pdf-libgen-url"></label>
+        <html:input type="text" flex="1"
+          preference="extensions.zotero.__addonRef__.pdf.libgenURL" />
+      </hbox>
+      <checkbox native="true" data-l10n-id="pdf-yoktez-enabled"
+        preference="extensions.zotero.__addonRef__.pdf.yoktezEnabled" />
+      <checkbox native="true" data-l10n-id="pdf-proquest-enabled"
+        preference="extensions.zotero.__addonRef__.pdf.proquestEnabled" />
+      <separator class="thin" />
+      <checkbox native="true" data-l10n-id="pdf-proxy-enabled"
+        preference="extensions.zotero.__addonRef__.pdf.proxyEnabled" />
+      <hbox align="center">
+        <label data-l10n-id="pdf-proxy-url"></label>
+        <html:input type="text" flex="1"
+          preference="extensions.zotero.__addonRef__.pdf.proxyURL" />
+      </hbox>
+    </vbox>
+  </groupbox>
+</vbox>
