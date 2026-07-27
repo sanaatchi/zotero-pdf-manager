@@ -1,5 +1,6 @@
 import { config } from "../../package.json";
 import { getPref } from "../utils/prefs";
+import { getWatchRoots } from "./folderIndex";
 
 declare const IOUtils: any;
 
@@ -256,14 +257,36 @@ export async function removeDuplicateFileLinks() {
 }
 
 export async function scanOrphanFiles() {
-  const root = String(
+  // Use the SAME roots as the PDF Manager's own local-folder matching/index
+  // (pdf.watchRoots, falling back to the legacy single pdf.localFolder) —
+  // not the unrelated Attanger "source directory" used by the old move/rename
+  // feature. Scanning a different folder than the one the user actually
+  // configured for PDFs would silently report nothing useful. The old
+  // sourceDir/baseAttachmentPath is kept as a last-resort fallback only for
+  // users who never set up watchRoots at all.
+  const watchRoots = getWatchRoots();
+  const legacyRoot = String(
     getPref("sourceDir") ||
       Zotero.Prefs.get("extensions.zotero.baseAttachmentPath", true) ||
       "",
   );
-  if (!root || !(await IOUtils.exists(root))) {
+  const candidateRoots = watchRoots.length
+    ? watchRoots
+    : legacyRoot
+      ? [legacyRoot]
+      : [];
+
+  const roots: string[] = [];
+  for (const candidate of candidateRoots) {
+    if (await IOUtils.exists(candidate)) roots.push(candidate);
+  }
+  if (!roots.length) {
     new ztoolkit.ProgressWindow(config.addonName, { closeTime: 5000 })
-      .createLine({ text: "Attachment root directory is not configured" })
+      .createLine({
+        text:
+          "No attachment root directory found — check Watched PDF roots " +
+          "(PDF Downloader settings) or the source directory (General settings)",
+      })
       .show();
     return;
   }
@@ -307,10 +330,12 @@ export async function scanOrphanFiles() {
     }
     return hasReferenced;
   };
-  await walk(root);
+  for (const root of roots) {
+    await walk(root);
+  }
 
   const report =
-    `Attachment root: ${root}\n` +
+    `Attachment root(s): ${roots.join("; ")}\n` +
     `Orphan files (${orphanFiles.length}):\n${orphanFiles.join("\n")}\n\n` +
     `Empty directories (${emptyDirs.length}):\n${emptyDirs.join("\n")}`;
   Components.classes["@mozilla.org/widget/clipboardhelper;1"]
