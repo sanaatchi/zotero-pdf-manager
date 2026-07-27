@@ -18,12 +18,3 @@ export function getPref(key: string) {
 export function setPref(key: string, value: string | number | boolean) {
   return Zotero.Prefs.set(`${config.prefsPrefix}.${key}`, value, true);
 }
-
-/**
- * Clear preference value.
- * Wrapper of `Zotero.Prefs.clear`.
- * @param key
- */
-export function clearPref(key: string) {
-  return Zotero.Prefs.clear(`${config.prefsPrefix}.${key}`, true);
-}
