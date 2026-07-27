@@ -31,6 +31,7 @@ clean-metadata-field-tags = Tags
 clean-metadata-none-selected = Select at least one field.
 clean-metadata-no-items = No regular items selected
 clean-metadata-nothing-cleared = no matching fields on this item type
+clean-metadata-not-editable = item is not editable
 clean-metadata-confirm-msg = Clear these fields on { $count } item(s)?
 clean-metadata-done = Cleared metadata on { $success } item(s), { $failed } failed
 pdf-check-metadata-menu = Check PDF metadata against Zotero

@@ -29,6 +29,7 @@ clean-metadata-field-tags = Tags
 clean-metadata-none-selected = Mindestens ein Feld auswählen.
 clean-metadata-no-items = Keine regulären Einträge ausgewählt
 clean-metadata-nothing-cleared = keine passenden Felder für diesen Eintragstyp
+clean-metadata-not-editable = Eintrag ist nicht bearbeitbar
 clean-metadata-confirm-msg = Diese Felder bei { $count } Eintrag/Einträgen leeren?
 clean-metadata-done = Metadaten bei { $success } Eintrag/Einträgen geleert, { $failed } fehlgeschlagen
 pdf-check-metadata-menu = PDF-Metadaten mit Zotero vergleichen

@@ -30,6 +30,7 @@ clean-metadata-field-tags = Tag
 clean-metadata-none-selected = Seleziona almeno un campo.
 clean-metadata-no-items = Nessun elemento regolare selezionato
 clean-metadata-nothing-cleared = nessun campo corrispondente per questo tipo
+clean-metadata-not-editable = elemento non modificabile
 clean-metadata-confirm-msg = Cancellare questi campi su { $count } elemento/i?
 clean-metadata-done = Metadata cancellati su { $success } elemento/i, { $failed } non riusciti
 pdf-check-metadata-menu = Confronta i metadati PDF con Zotero
