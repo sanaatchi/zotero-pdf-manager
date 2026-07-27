@@ -133,22 +133,48 @@ function creatorName(creator: any) {
   ).trim();
 }
 
-/** Names of the item's creators that have the given Zotero creator type. */
-function creatorsByType(item: Zotero.Item, typeName: string): string[] {
+/**
+ * Split an item's creators into primary and secondary, following the Zotero
+ * schema's per-type "primary" creator — author for most types, but artist for
+ * artwork, director for film, cartographer for map, inventor for patent,
+ * performer for audioRecording, etc. Primary creators become dc:creator / the
+ * PDF Author; everyone else (editors, translators, series editors, …) becomes
+ * a dc:contributor. `editors` is tracked separately only for the Creator
+ * fallback ("ilk yazar ya da editör").
+ */
+function splitCreators(item: Zotero.Item) {
   const creators = ((item as any).getCreators?.() || []) as any[];
-  return creators
-    .filter((creator) => {
-      try {
-        return (
-          (Zotero as any).CreatorTypes?.getName?.(creator.creatorTypeID) ===
-          typeName
-        );
-      } catch {
-        return false;
-      }
-    })
-    .map(creatorName)
-    .filter(Boolean);
+  let primaryTypeID: number | null = null;
+  try {
+    primaryTypeID = (Zotero as any).CreatorTypes?.getPrimaryIDForType?.(
+      (item as any).itemTypeID,
+    );
+  } catch {
+    primaryTypeID = null;
+  }
+  const typeName = (id: number) => {
+    try {
+      return (Zotero as any).CreatorTypes?.getName?.(id) || "";
+    } catch {
+      return "";
+    }
+  };
+  const primary: string[] = [];
+  const secondary: string[] = [];
+  const editors: string[] = [];
+  const all: string[] = [];
+  for (const creator of creators) {
+    const name = creatorName(creator);
+    if (!name) continue;
+    all.push(name);
+    if (primaryTypeID != null && creator.creatorTypeID === primaryTypeID) {
+      primary.push(name);
+    } else {
+      secondary.push(name);
+      if (typeName(creator.creatorTypeID) === "editor") editors.push(name);
+    }
+  }
+  return { primary, secondary, editors, all };
 }
 
 /**
@@ -186,11 +212,8 @@ function metadataFromItem(item: Zotero.Item) {
     }
   };
 
-  const allCreators = (((item as any).getCreators?.() || []) as any[])
-    .map(creatorName)
-    .filter(Boolean);
-  const authors = creatorsByType(item, "author");
-  const editors = creatorsByType(item, "editor");
+  const { primary, secondary, editors, all: allCreators } =
+    splitCreators(item);
 
   const tags = (((item as any).getTags?.() || []) as any[])
     .map((tag) => (typeof tag === "string" ? tag : tag.tag))
@@ -198,15 +221,17 @@ function metadataFromItem(item: Zotero.Item) {
 
   const date = field("date");
 
-  // Author field / dc:creator: prefer real authors, but fall back to every
-  // creator so an edited volume that lists only editors still gets an author.
-  const authorsForField = authors.length ? authors : allCreators;
-  // Info "Creator" = first author, or first editor when there is no author
-  // (user mapping: "Creator: ilk yazar ya da editör").
-  const primaryCreator = authors[0] || editors[0] || allCreators[0] || "";
-  // Only expose editors as separate contributors when they are NOT already
-  // standing in as the creator above.
-  const contributors = authors.length ? editors : [];
+  // dc:creator / PDF Author: the primary creators; if the item has none, fall
+  // back to every creator so an edited volume listing only editors still gets
+  // an author.
+  const authorsForField = primary.length ? primary : allCreators;
+  // Info "Creator" = first primary creator, or first editor when there is no
+  // primary one (user mapping: "Creator: ilk yazar ya da editör").
+  const primaryCreator = primary[0] || editors[0] || allCreators[0] || "";
+  // dc:contributor = the non-primary creators (editors, translators, series
+  // editors, …). When there is no primary creator they already fill dc:creator
+  // above, so don't list them twice.
+  const contributors = primary.length ? secondary : [];
 
   let itemTypeName = "";
   try {
