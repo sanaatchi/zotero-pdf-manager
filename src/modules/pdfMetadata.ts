@@ -139,8 +139,9 @@ function creatorName(creator: any) {
  * artwork, director for film, cartographer for map, inventor for patent,
  * performer for audioRecording, etc. Primary creators become dc:creator / the
  * PDF Author; everyone else (editors, translators, series editors, …) becomes
- * a dc:contributor. `editors` is tracked separately only for the Creator
- * fallback ("ilk yazar ya da editör").
+ * a dc:contributor — labelled with its role, e.g. "Lale Özgenel (Editör)", so
+ * the role survives in the flat dc:contributor list. `editors` is tracked
+ * separately only for the Creator fallback ("ilk yazar ya da editör").
  */
 function splitCreators(item: Zotero.Item) {
   const creators = ((item as any).getCreators?.() || []) as any[];
@@ -159,8 +160,17 @@ function splitCreators(item: Zotero.Item) {
       return "";
     }
   };
+  // Localized role label ("Editör", "Çevirmen", …) in the user's Zotero locale.
+  const roleLabel = (id: number) => {
+    try {
+      return (Zotero as any).CreatorTypes?.getLocalizedString?.(id) || "";
+    } catch {
+      return "";
+    }
+  };
   const primary: string[] = [];
   const secondary: string[] = [];
+  const secondaryLabeled: string[] = [];
   const editors: string[] = [];
   const all: string[] = [];
   for (const creator of creators) {
@@ -171,10 +181,12 @@ function splitCreators(item: Zotero.Item) {
       primary.push(name);
     } else {
       secondary.push(name);
+      const role = roleLabel(creator.creatorTypeID);
+      secondaryLabeled.push(role ? `${name} (${role})` : name);
       if (typeName(creator.creatorTypeID) === "editor") editors.push(name);
     }
   }
-  return { primary, secondary, editors, all };
+  return { primary, secondary, secondaryLabeled, editors, all };
 }
 
 /**
@@ -212,7 +224,7 @@ function metadataFromItem(item: Zotero.Item) {
     }
   };
 
-  const { primary, secondary, editors, all: allCreators } =
+  const { primary, secondaryLabeled, editors, all: allCreators } =
     splitCreators(item);
 
   const tags = (((item as any).getTags?.() || []) as any[])
@@ -228,10 +240,10 @@ function metadataFromItem(item: Zotero.Item) {
   // Info "Creator" = first primary creator, or first editor when there is no
   // primary one (user mapping: "Creator: ilk yazar ya da editör").
   const primaryCreator = primary[0] || editors[0] || allCreators[0] || "";
-  // dc:contributor = the non-primary creators (editors, translators, series
-  // editors, …). When there is no primary creator they already fill dc:creator
-  // above, so don't list them twice.
-  const contributors = primary.length ? secondary : [];
+  // dc:contributor = the non-primary creators, each labelled with its role
+  // ("Lale Özgenel (Editör)"). When there is no primary creator they already
+  // fill dc:creator above, so don't list them twice.
+  const contributors = primary.length ? secondaryLabeled : [];
 
   let itemTypeName = "";
   try {
@@ -290,20 +302,23 @@ export async function embedMetadataIntoAttachment(
     ignoreEncryption: false,
   });
   const metadata = metadataFromItem(item);
-  if (metadata.title) pdf.setTitle(metadata.title);
-  if (metadata.authors.length) pdf.setAuthor(metadata.authors.join("; "));
+  // Write EVERY managed Info field unconditionally — Zotero is the source of
+  // truth. Setting empty values when the item has no data is deliberate: it
+  // wipes stale values left by a previous embedding (e.g. an old overloaded
+  // Subject or a system-tag Keyword) instead of leaving them behind.
+  pdf.setTitle(metadata.title);
+  pdf.setAuthor(metadata.authors.join("; "));
   // Subject holds the abstract only — publication/date/DOI have their own
   // dedicated XMP fields now, so Subject is no longer an overloaded dump.
-  if (metadata.abstract) pdf.setSubject(metadata.abstract);
-  if (metadata.keywords.length) {
-    // Copy into THIS realm's Array of strings. Zotero's getTags() returns a
-    // cross-compartment array, which pdf-lib's assertIs rejects (reporting a
-    // bogus "NaN" type) — the same cross-realm issue handled for the bytes above.
-    pdf.setKeywords(Array.from(metadata.keywords, (k) => String(k)));
-  }
+  pdf.setSubject(metadata.abstract);
+  // Copy into THIS realm's Array of strings (empty array clears old keywords).
+  // Zotero's getTags() returns a cross-compartment array, which pdf-lib's
+  // assertIs rejects (reporting a bogus "NaN" type) — same cross-realm issue
+  // handled for the bytes above.
+  pdf.setKeywords(Array.from(metadata.keywords, (k) => String(k)));
   // User field mapping: Creator = first author/editor, Producer = publisher.
-  if (metadata.primaryCreator) pdf.setCreator(metadata.primaryCreator);
-  if (metadata.publisher) pdf.setProducer(metadata.publisher);
+  pdf.setCreator(metadata.primaryCreator);
+  pdf.setProducer(metadata.publisher);
   if (metadata.year) {
     pdf.setCreationDate(new Date(Date.UTC(metadata.year, 0, 1)));
   }
