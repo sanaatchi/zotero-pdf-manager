@@ -16,7 +16,8 @@ rename-linked-attachment-error = Verknüpfter Anhang konnte nicht umbenannt werd
 # --- PDF downloader ---
 pdf-download-menu = Download & attach PDF
 pdf-download-url-menu = Attach PDF from URL…
-pdf-embed-metadata-menu = Zotero-Metadaten in PDF einbetten
+pdf-embed-metadata-menu = Zotero-Metadaten in PDF einbetten (alle aktualisieren)
+pdf-embed-metadata-missing-menu = Metadaten nur für fehlende/fehlgeschlagene PDFs einbetten
 clean-metadata-menu = Metadatenfelder der ausgewählten Einträge leeren…
 clean-metadata-dialog-title = Metadatenfelder leeren
 clean-metadata-dialog-intro = Markieren Sie die zu löschenden Felder. Dies kann nicht rückgängig gemacht werden.

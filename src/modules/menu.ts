@@ -12,6 +12,7 @@ import {
 import { downloadPdfForSelectedItems, attachPdfFromUrl } from "./pdfDownload";
 import {
   embedMetadataForSelectedItems,
+  embedMetadataForFailedOrMissingSelectedItems,
   maybeEmbedMetadata,
 } from "./pdfMetadata";
 import { cleanMetadataForSelectedItems } from "./metadataClean";
@@ -670,6 +671,18 @@ export default class Menu {
             ),
           commandListener: async () => {
             await embedMetadataForSelectedItems();
+          },
+        },
+        {
+          tag: "menuitem",
+          label: getString("pdf-embed-metadata-missing-menu"),
+          icon: addon.data.icons.downloadPdf,
+          getVisibility: () =>
+            getAttachmentItems(false).some(
+              (item) => item.attachmentContentType === "application/pdf",
+            ),
+          commandListener: async () => {
+            await embedMetadataForFailedOrMissingSelectedItems();
           },
         },
         {

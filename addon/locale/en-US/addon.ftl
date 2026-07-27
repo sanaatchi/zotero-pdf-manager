@@ -18,7 +18,8 @@ rename-linked-attachment-error = Failed to rename linked attachment: { $title }
 # --- PDF downloader ---
 pdf-download-menu = Download & attach PDF
 pdf-download-url-menu = Attach PDF from URL…
-pdf-embed-metadata-menu = Embed Zotero metadata into PDF
+pdf-embed-metadata-menu = Embed Zotero metadata into PDF (refresh all)
+pdf-embed-metadata-missing-menu = Embed metadata only for missing/failed PDFs
 clean-metadata-menu = Clear metadata fields on selected items…
 clean-metadata-dialog-title = Clear metadata fields
 clean-metadata-dialog-intro = Check the fields to clear. This cannot be undone.

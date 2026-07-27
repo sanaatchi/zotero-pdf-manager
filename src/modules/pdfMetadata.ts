@@ -4,6 +4,20 @@ import { getPref } from "../utils/prefs";
 
 declare const IOUtils: any;
 
+// pdf-lib's own parser calls console.warn/log for recoverable issues it hits
+// in slightly malformed real-world PDFs (bad object refs, XFA form data, …).
+// Zotero's bootstrapped extension scope has no global `console`, so those
+// calls throw "console is not defined" and abort the whole embed — even
+// though pdf-lib itself was only trying to log a warning, not fail. Route
+// them to the addon's own logger instead of leaving them unhandled.
+if (typeof (globalThis as any).console === "undefined") {
+  (globalThis as any).console = {
+    log: (...args: unknown[]) => ztoolkit.log("[pdf-lib]", ...args),
+    warn: (...args: unknown[]) => ztoolkit.log("[pdf-lib:warn]", ...args),
+    error: (...args: unknown[]) => ztoolkit.log("[pdf-lib:error]", ...args),
+  };
+}
+
 function escapeXml(value: string): string {
   return String(value).replace(
     /[<>&'"]/g,
@@ -373,10 +387,26 @@ export async function embedMetadataIntoAttachment(
   const bytes = Uint8Array.from(
     (await IOUtils.read(path)) as ArrayLike<number>,
   );
-  const pdf = await PDFDocument.load(bytes, {
-    updateMetadata: false,
-    ignoreEncryption: false,
-  });
+  // Do NOT use `ignoreEncryption: true` here. pdf-lib has no real decryption
+  // support — even for the common case of an owner-password-only PDF (no open
+  // password, just print/copy restrictions), loading with ignoreEncryption and
+  // re-saving silently corrupts the file: the trailer/catalog/content streams
+  // come back unreadable (verified empirically — pdftotext could no longer
+  // even find the trailer after such a round-trip). Since no backup is kept,
+  // that would be irreversible. Encrypted PDFs are skipped instead, with a
+  // distinct message, until a safe decrypt path exists.
+  let pdf: PDFDocument;
+  try {
+    pdf = await PDFDocument.load(bytes, { updateMetadata: false });
+  } catch (error) {
+    const message = (error as Error)?.message || String(error);
+    if (/encrypt/i.test(message)) {
+      throw new Error(
+        "Şifreli PDF: içerik bozulma riski nedeniyle metadata gömülmedi (pdf-lib şifre çözmeyi desteklemiyor)",
+      );
+    }
+    throw error;
+  }
   const metadata = metadataFromItem(item);
   // Write EVERY managed Info field unconditionally — Zotero is the source of
   // truth. Setting empty values when the item has no data is deliberate: it
@@ -439,7 +469,35 @@ export async function maybeEmbedMetadata(
   }
 }
 
-export async function embedMetadataForSelectedItems() {
+// Persisted across sessions as ordinary Zotero tags (same pattern as the
+// reconciler's #auto-attached/#broken) so "only missing/failed" can tell,
+// without re-touching every PDF, which items already have current metadata.
+const TAG_METADATA_EMBEDDED = "#metadata-embedded";
+const TAG_METADATA_FAILED = "#metadata-failed";
+
+async function setEmbedStatusTag(item: Zotero.Item, success: boolean) {
+  try {
+    const tags = ((item.getTags() as { tag: string }[]) || []).map(
+      (t) => t.tag,
+    );
+    const toAdd = success ? TAG_METADATA_EMBEDDED : TAG_METADATA_FAILED;
+    const toRemove = success ? TAG_METADATA_FAILED : TAG_METADATA_EMBEDDED;
+    let changed = false;
+    if (!tags.includes(toAdd)) {
+      item.addTag(toAdd);
+      changed = true;
+    }
+    if (tags.includes(toRemove)) {
+      item.removeTag(toRemove);
+      changed = true;
+    }
+    if (changed) await item.saveTx();
+  } catch (e) {
+    ztoolkit.log("Could not update metadata embed status tag", e);
+  }
+}
+
+function collectSelectedPdfPairs() {
   const pairs = new Map<number, { item: Zotero.Item; attachment: Zotero.Item }>();
   for (const selected of ZoteroPane.getSelectedItems()) {
     if (selected.isAttachment() && selected.parentItemID) {
@@ -461,22 +519,69 @@ export async function embedMetadataForSelectedItems() {
       }
     }
   }
+  return pairs;
+}
+
+/**
+ * Shared runner behind both menu commands.
+ * - onlyMissingOrFailed=false: force-refresh every selected PDF, regardless
+ *   of prior state (already embedded, previously failed, or untouched).
+ * - onlyMissingOrFailed=true: skip PDFs already tagged #metadata-embedded —
+ *   only (re)tries items that were never embedded or previously failed.
+ */
+async function runEmbedMetadata(onlyMissingOrFailed: boolean) {
+  const pairs = collectSelectedPdfPairs();
+
+  let candidates = [...pairs.values()];
+  let alreadyEmbedded = 0;
+  if (onlyMissingOrFailed) {
+    candidates = candidates.filter(({ item }) => {
+      const tags = ((item.getTags() as { tag: string }[]) || []).map(
+        (t) => t.tag,
+      );
+      const done = tags.includes(TAG_METADATA_EMBEDDED);
+      if (done) alreadyEmbedded++;
+      return !done;
+    });
+  }
+
+  if (onlyMissingOrFailed && !candidates.length) {
+    new ztoolkit.ProgressWindow(config.addonName, { closeTime: 6000 })
+      .createLine({
+        text: alreadyEmbedded
+          ? `Tüm seçili kaynaklarda metadata zaten güncel (${alreadyEmbedded})`
+          : "PDF'li kaynak seçilmedi",
+        type: "default",
+      })
+      .show();
+    return;
+  }
 
   let success = 0;
   const failures: string[] = [];
-  for (const { item, attachment } of pairs.values()) {
+  for (const { item, attachment } of candidates) {
     try {
-      if (await embedMetadataIntoAttachment(item, attachment)) success++;
-      else failures.push(`${item.getDisplayTitle()}: atlandı`);
+      if (await embedMetadataIntoAttachment(item, attachment)) {
+        success++;
+        await setEmbedStatusTag(item, true);
+      } else {
+        failures.push(`${item.getDisplayTitle()}: atlandı`);
+        await setEmbedStatusTag(item, false);
+      }
     } catch (error) {
       const reason = (error as Error)?.message || String(error);
       failures.push(`${item.getDisplayTitle()}: ${reason}`);
       ztoolkit.log("PDF metadata embedding failed", attachment.id, error);
+      await setEmbedStatusTag(item, false);
     }
   }
+  const skippedNote =
+    onlyMissingOrFailed && alreadyEmbedded
+      ? ` (${alreadyEmbedded} zaten güncel, atlandı)`
+      : "";
   new ztoolkit.ProgressWindow(config.addonName, { closeTime: 6000 })
     .createLine({
-      text: `PDF metadata: ${success} güncellendi, ${failures.length} başarısız`,
+      text: `PDF metadata: ${success} güncellendi, ${failures.length} başarısız${skippedNote}`,
       type: success ? "success" : "default",
     })
     .show();
@@ -488,4 +593,14 @@ export async function embedMetadataForSelectedItems() {
         failures.slice(0, 30).join("\n"),
     );
   }
+}
+
+/** Force-refresh: (re)embeds every selected PDF regardless of prior state. */
+export async function embedMetadataForSelectedItems() {
+  await runEmbedMetadata(false);
+}
+
+/** Only (re)embeds PDFs with no current metadata: never-embedded or previously failed. */
+export async function embedMetadataForFailedOrMissingSelectedItems() {
+  await runEmbedMetadata(true);
 }

@@ -17,7 +17,8 @@ rename-linked-attachment-error = Impossibile rinominare l'allegato collegato: { 
 # --- PDF downloader ---
 pdf-download-menu = Download & attach PDF
 pdf-download-url-menu = Attach PDF from URL…
-pdf-embed-metadata-menu = Incorpora i metadati Zotero nel PDF
+pdf-embed-metadata-menu = Incorpora i metadati Zotero nel PDF (aggiorna tutti)
+pdf-embed-metadata-missing-menu = Incorpora i metadati solo per i PDF mancanti/falliti
 clean-metadata-menu = Cancella i campi metadata degli elementi selezionati…
 clean-metadata-dialog-title = Cancella campi metadata
 clean-metadata-dialog-intro = Seleziona i campi da cancellare. L’operazione non può essere annullata.
