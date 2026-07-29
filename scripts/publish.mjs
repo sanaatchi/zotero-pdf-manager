@@ -127,37 +127,27 @@ function publishUpdateJsonToBranch(body) {
 }
 
 function ensureUpdateRelease(body) {
+  const tmp = join(tmpdir(), `update.json`);
+  writeFileSync(tmp, body);
   try {
-    execSync(`gh release view ${UPDATE_RELEASE} --repo ${DIST_REPO}`, {
-      stdio: "ignore",
-      shell: true,
-    });
-    const tmp = join(tmpdir(), `zpdf-update-${Date.now()}.json`);
-    writeFileSync(tmp, body);
     try {
+      execSync(`gh release view ${UPDATE_RELEASE} --repo ${DIST_REPO}`, {
+        stdio: "ignore",
+        shell: true,
+      });
       runShell(
-        `gh release upload ${UPDATE_RELEASE} "${tmp}#update.json" --repo ${DIST_REPO} --clobber`,
+        `gh release upload ${UPDATE_RELEASE} "${tmp}" --repo ${DIST_REPO} --clobber`,
       );
-    } finally {
-      try {
-        unlinkSync(tmp);
-      } catch {
-        /* ignore */
-      }
+    } catch {
+      runShell(
+        `gh release create ${UPDATE_RELEASE} "${tmp}" --repo ${DIST_REPO} --title "update" --notes "Rolling update.json channel"`,
+      );
     }
-  } catch {
-    const tmp = join(tmpdir(), `zpdf-update-create-${Date.now()}.json`);
-    writeFileSync(tmp, body);
+  } finally {
     try {
-      runShell(
-        `gh release create ${UPDATE_RELEASE} "${tmp}#update.json" --repo ${DIST_REPO} --title "update" --notes "Rolling update.json channel"`,
-      );
-    } finally {
-      try {
-        unlinkSync(tmp);
-      } catch {
-        /* ignore */
-      }
+      unlinkSync(tmp);
+    } catch {
+      /* ignore */
     }
   }
 }

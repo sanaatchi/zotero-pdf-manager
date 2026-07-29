@@ -8,8 +8,8 @@
 
 **Tarih:** 2026-07-29  
 **Kapsam:** `zotero-pdf-manager` · v1.0.27  
-**Durum:** P1 kod düzeltmeleri (cleanup / incomplete gate / index queue /
-publish hash) uygulandı; public release bu oturumda hedefleniyor.
+**Durum:** P1 kod + public `v1.0.27` yayını kapandı. Kalan: gerçek Zotero
+iki-pencere kabulü; P2 (fail-open, ReDoS, CI, Sci-Hub politika).
 
 ## Güncel durum — 2026-07-29 (P1 follow-up)
 
