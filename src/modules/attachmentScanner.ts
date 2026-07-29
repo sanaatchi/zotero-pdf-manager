@@ -95,7 +95,7 @@ export async function scanAttachmentState(
       } else {
         hasPDF ||= Boolean(
           attachment.isPDFAttachment?.() ||
-            (attachment as any).isEPUBAttachment?.(),
+          (attachment as any).isEPUBAttachment?.(),
         );
         // Only files that actually exist count toward duplicate-type
         // detection; a broken link is a #broken problem, not a duplicate.
@@ -154,7 +154,12 @@ export async function scanAttachmentState(
     changed = true;
   }
   if (changed) await item.saveTx();
-  return { noSource: !hasFile, broken: hasBroken, duplicate, nonfile: hasNonfile };
+  return {
+    noSource: !hasFile,
+    broken: hasBroken,
+    duplicate,
+    nonfile: hasNonfile,
+  };
 }
 
 async function scanItems(items: Zotero.Item[], allowCleanup = true) {
@@ -192,9 +197,7 @@ export async function scanSelectedAttachments() {
   return scanItems(ZoteroPane.getSelectedItems());
 }
 
-export async function monitorChangedAttachmentItems(
-  ids: string[] | number[],
-) {
+export async function monitorChangedAttachmentItems(ids: string[] | number[]) {
   if (!scannerPref("monitorAttachments", false)) return;
   const parents = new Map<number, Zotero.Item>();
   for (const id of ids) {
@@ -364,7 +367,8 @@ export async function scanOrphanFiles() {
     const attachment = await Zotero.Items.getAsync(row.itemID);
     if (!attachment?.isFileAttachment()) continue;
     const path = await attachment.getFilePathAsync().catch(() => "");
-    if (path) referenced.add(PathUtils.normalize(path).normalize("NFC").toLowerCase());
+    if (path)
+      referenced.add(PathUtils.normalize(path).normalize("NFC").toLowerCase());
   }
 
   const { orphanFiles, emptyDirs } = await classifyOrphanTree(

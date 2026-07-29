@@ -14,9 +14,9 @@ yayınlarsın. Tüm bilgisayarlardaki Zotero güncellemeyi kendisi indirir.
 
 ## İki repo düzeni (kaynağın gizli kalır)
 
-| Repo | Görünürlük | İçerik |
-|---|---|---|
-| `sanaatchi/zotero-pdf-manager` | Private | Kaynak kod (yedek + iki bilgisayar senkronu) |
+| Repo                                    | Görünürlük | İçerik                                               |
+| --------------------------------------- | ---------- | ---------------------------------------------------- |
+| `sanaatchi/zotero-pdf-manager`          | Private    | Kaynak kod (yedek + iki bilgisayar senkronu)         |
 | `sanaatchi/zotero-pdf-manager-releases` | **Public** | Sadece `.xpi` + `update.json` (Zotero buradan çeker) |
 
 > Derlenmiş `.xpi` zorunlu olarak herkese açık indirilebilir olmak zorundadır —

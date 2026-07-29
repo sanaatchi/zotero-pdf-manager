@@ -249,9 +249,7 @@ function showCleanFieldsDialog(keys: string[]): Promise<string[] | null> {
         cursor: "pointer",
         borderRadius: "4px",
         border: primary ? "none" : "1px solid rgba(127,127,127,0.5)",
-        background: primary
-          ? "var(--accent-color, #0a84ff)"
-          : "transparent",
+        background: primary ? "var(--accent-color, #0a84ff)" : "transparent",
         color: primary ? "#fff" : "inherit",
       });
       return btn;
@@ -472,9 +470,7 @@ export async function cleanMetadataForSelectedItems() {
         (clearedSummary.length
           ? clearedSummary.slice(0, 20).join("\n")
           : getString("clean-metadata-nothing-cleared")) +
-        (failures.length
-          ? `\n\n—\n${failures.slice(0, 10).join("\n")}`
-          : ""),
+        (failures.length ? `\n\n—\n${failures.slice(0, 10).join("\n")}` : ""),
     );
   } catch (error) {
     const reason = (error as Error)?.message || String(error);

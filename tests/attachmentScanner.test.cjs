@@ -27,7 +27,8 @@ function loadModule() {
 function makeLister(tree) {
   return {
     getChildren: async (dir) => tree[dir] || [],
-    statType: async (p) => (Object.prototype.hasOwnProperty.call(tree, p) ? "directory" : "file"),
+    statType: async (p) =>
+      Object.prototype.hasOwnProperty.call(tree, p) ? "directory" : "file",
   };
 }
 

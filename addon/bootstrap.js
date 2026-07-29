@@ -7,7 +7,7 @@
 
 var chromeHandle;
 
-function install(data, reason) { }
+function install(data, reason) {}
 
 async function startup({ id, version, resourceURI, rootURI }, reason) {
   // await Zotero.initializationPromise;
@@ -74,4 +74,4 @@ async function shutdown({ id, version, resourceURI, rootURI }, reason) {
   }
 }
 
-async function uninstall(data, reason) { }
+async function uninstall(data, reason) {}

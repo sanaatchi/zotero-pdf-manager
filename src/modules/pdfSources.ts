@@ -1,6 +1,19 @@
+// @ajan: cursor · @etiket: katman-2, p1, p2-2, p2-4, pdfSources, oa-no-overwrite
 import { getString } from "../utils/locale";
 import { getPref } from "../utils/prefs";
-import { buildIndex, getWatchRoots, IndexedFile } from "./folderIndex";
+import {
+  buildIndex,
+  getWatchRoots,
+  IndexedFile,
+  registerDownloadedFile,
+} from "./folderIndex";
+import {
+  buildOaDownloadBasename,
+  oaPartialTempPath,
+  releaseDownloadPathReservation,
+  reserveUniqueDownloadPath,
+  resolveOaDownloadsDir,
+} from "./oaDownloadPath";
 
 // Gecko globals available in the Zotero sandbox but not in the type defs.
 declare const IOUtils: any;
@@ -22,9 +35,60 @@ export interface PDFSource {
 }
 
 export type LocalMatchResult =
-  | { status: "matched"; file: IndexedFile }
-  | { status: "ambiguous" }
+  | { status: "matched"; file: IndexedFile; score: number }
+  | { status: "review"; file?: IndexedFile; score?: number; reason: string }
+  | { status: "ambiguous"; score?: number }
   | { status: "none" };
+
+/** Clamp and order match thresholds (P2-2). Defaults: attach 0.85, review 0.60. */
+export function normalizeMatchThresholds(
+  autoAttach: unknown,
+  review: unknown,
+): { autoAttach: number; review: number } {
+  const parse = (value: unknown, fallback: number) => {
+    const n =
+      typeof value === "number" ? value : Number.parseFloat(`${value ?? ""}`);
+    if (!Number.isFinite(n)) return fallback;
+    return Math.min(1, Math.max(0, n));
+  };
+  let auto = parse(autoAttach, 0.85);
+  let rev = parse(review, 0.6);
+  if (rev > auto) {
+    const swap = rev;
+    rev = auto;
+    auto = swap;
+  }
+  return { autoAttach: auto, review: rev };
+}
+
+/**
+ * Classify a 0–1 confidence score against auto-attach / review thresholds.
+ * Inspired by Attanger's safe-auto vs manual review split (AGPL selective).
+ */
+export function classifyMatchConfidence(
+  score: number,
+  autoAttach = 0.85,
+  review = 0.6,
+): "attach" | "review" | "skip" {
+  const { autoAttach: hi, review: lo } = normalizeMatchThresholds(
+    autoAttach,
+    review,
+  );
+  if (!Number.isFinite(score) || score < lo) return "skip";
+  if (score >= hi) return "attach";
+  return "review";
+}
+
+function readMatchThresholds() {
+  try {
+    return normalizeMatchThresholds(
+      getPref("pdf.autoAttachThreshold"),
+      getPref("pdf.reviewThreshold"),
+    );
+  } catch {
+    return normalizeMatchThresholds(0.85, 0.6);
+  }
+}
 
 // --------------------------------------------------------------------------
 // Item type groups
@@ -198,44 +262,115 @@ async function contentMatches(
 }
 
 /**
- * Download bytes from `url`, verify they are a real PDF, import as a child
- * attachment, and (unless `validate` is false) confirm the content matches
- * the item's metadata — deleting the attachment again if it does not.
+ * Download bytes from `url`, verify they are a real PDF, then either:
+ * - **P2-4 downloads mode:** write under `{watchRoot}/downloads/`, link/import,
+ *   register in folder index; or
+ * - **legacy:** temp file + importFromFile (when no watch root / pref off).
  */
 export async function downloadAndAttach(
   item: Zotero.Item,
   url: string,
-  opts: { validate?: boolean } = {},
+  opts: { validate?: boolean; sourceId?: string; forceImport?: boolean } = {},
 ): Promise<unknown | null> {
   const bytes = await fetchPdfBytes(url);
   if (!bytes) return null;
 
-  const tmpDir = (Zotero as any).getTempDirectory().path as string;
-  const tmpPath = PathUtils.join(
-    tmpDir,
-    `pdffetch-${item.id}-${Date.now()}.pdf`,
-  );
+  const persistDownloads =
+    !opts.forceImport &&
+    getPref("pdf.saveOaToDownloads") !== false &&
+    getWatchRoots().length > 0;
+  const downloadsDir = persistDownloads
+    ? resolveOaDownloadsDir(getWatchRoots())
+    : null;
+
   let attachment: any = null;
+  let persistedPath: string | null = null;
+  let tmpPath: string | null = null;
+
   try {
-    await IOUtils.write(tmpPath, bytes);
-    attachment = await (Zotero.Attachments as any).importFromFile({
-      file: tmpPath,
-      libraryID: item.libraryID,
-      parentItemID: item.id,
-      title: getString("pdf-attachment-title"),
-      contentType: "application/pdf",
-    });
+    if (downloadsDir) {
+      try {
+        await IOUtils.makeDirectory(downloadsDir, {
+          createAncestors: true,
+          ignoreExisting: true,
+        });
+      } catch (e) {
+        ztoolkit.log("Could not create OA downloads dir", downloadsDir, e);
+      }
+      const basename = buildOaDownloadBasename(
+        {
+          doi: getDOI(item),
+          title: (item.getField("title") as string) || "",
+          itemID: item.id,
+        },
+        opts.sourceId || "oa",
+      );
+      persistedPath = await reserveUniqueDownloadPath(
+        downloadsDir,
+        basename,
+        async (p) => !!(await IOUtils.exists(p)),
+      );
+      const partial = oaPartialTempPath(persistedPath);
+      try {
+        await IOUtils.write(partial, bytes);
+        // noOverwrite: never clobber an existing final PDF if reservation raced.
+        await IOUtils.move(partial, persistedPath, { noOverwrite: true });
+      } catch (e) {
+        try {
+          await IOUtils.remove(partial);
+        } catch {
+          /* best-effort */
+        }
+        throw e;
+      } finally {
+        releaseDownloadPathReservation(persistedPath);
+      }
+      const asLink = getPref("pdf.localAsLink") !== false;
+      const method = asLink ? "linkFromFile" : "importFromFile";
+      attachment = await (Zotero.Attachments as any)[method]({
+        file: persistedPath,
+        libraryID: item.libraryID,
+        parentItemID: item.id,
+        title: getString("pdf-attachment-title"),
+        contentType: "application/pdf",
+      });
+      if (attachment) {
+        await registerDownloadedFile(persistedPath);
+      }
+    } else {
+      const tmpDir = (Zotero as any).getTempDirectory().path as string;
+      tmpPath = PathUtils.join(tmpDir, `pdffetch-${item.id}-${Date.now()}.pdf`);
+      await IOUtils.write(tmpPath, bytes);
+      attachment = await (Zotero.Attachments as any).importFromFile({
+        file: tmpPath,
+        libraryID: item.libraryID,
+        parentItemID: item.id,
+        title: getString("pdf-attachment-title"),
+        contentType: "application/pdf",
+      });
+    }
   } catch (e) {
-    ztoolkit.log("importFromFile failed", e);
-    return null;
+    ztoolkit.log("downloadAndAttach failed", e);
+    attachment = null;
   } finally {
-    try {
-      await IOUtils.remove(tmpPath);
-    } catch {
-      /* best-effort cleanup */
+    if (tmpPath) {
+      try {
+        await IOUtils.remove(tmpPath);
+      } catch {
+        /* best-effort cleanup */
+      }
     }
   }
-  if (!attachment) return null;
+  if (!attachment) {
+    if (persistedPath) {
+      try {
+        await IOUtils.remove(persistedPath);
+      } catch {
+        /* best-effort */
+      }
+    }
+    return null;
+  }
 
   if (opts.validate !== false) {
     const ok = await contentMatches(item, attachment.id);
@@ -246,10 +381,106 @@ export async function downloadAndAttach(
       } catch (e) {
         ztoolkit.log("erase rejected attachment failed", e);
       }
+      if (persistedPath) {
+        try {
+          await IOUtils.remove(persistedPath);
+        } catch {
+          /* best-effort */
+        }
+      }
       return null;
     }
   }
   return attachment;
+}
+
+/**
+ * After Zotero's addAvailablePDF (storage import), optionally copy the file
+ * into `{watchRoot}/downloads/` and re-attach as a link (P2-4 / folder authority).
+ */
+export async function relocateImportedPdfToDownloads(
+  item: Zotero.Item,
+  attachment: Zotero.Item,
+  sourceId = "doi",
+): Promise<Zotero.Item | null> {
+  if (getPref("pdf.saveOaToDownloads") === false) return attachment;
+  const dir = resolveOaDownloadsDir(getWatchRoots());
+  if (!dir) return attachment;
+
+  let srcPath = "";
+  try {
+    srcPath =
+      (await (attachment as any).getFilePathAsync?.()) ||
+      (attachment as any).getFilePath?.() ||
+      "";
+  } catch {
+    srcPath = "";
+  }
+  if (!srcPath) return attachment;
+
+  try {
+    await IOUtils.makeDirectory(dir, {
+      createAncestors: true,
+      ignoreExisting: true,
+    });
+  } catch (e) {
+    ztoolkit.log("relocate: makeDirectory failed", e);
+    return attachment;
+  }
+
+  const basename = buildOaDownloadBasename(
+    {
+      doi: getDOI(item),
+      title: (item.getField("title") as string) || "",
+      itemID: item.id,
+    },
+    sourceId,
+  );
+  const dest = await reserveUniqueDownloadPath(
+    dir,
+    basename,
+    async (p) => !!(await IOUtils.exists(p)),
+  );
+
+  try {
+    await IOUtils.copy(srcPath, dest, { noOverwrite: true });
+  } catch (e) {
+    releaseDownloadPathReservation(dest);
+    ztoolkit.log("relocate: copy failed", e);
+    return attachment;
+  }
+  releaseDownloadPathReservation(dest);
+
+  try {
+    await attachment.eraseTx();
+  } catch (e) {
+    ztoolkit.log("relocate: erase imported attachment failed", e);
+    try {
+      await IOUtils.remove(dest);
+    } catch {
+      /* best-effort */
+    }
+    return attachment;
+  }
+
+  try {
+    const asLink = getPref("pdf.localAsLink") !== false;
+    const method = asLink ? "linkFromFile" : "importFromFile";
+    const linked = await (Zotero.Attachments as any)[method]({
+      file: dest,
+      libraryID: item.libraryID,
+      parentItemID: item.id,
+      title: getString("pdf-attachment-title"),
+      contentType: "application/pdf",
+    });
+    if (linked) {
+      await registerDownloadedFile(dest);
+      return linked as Zotero.Item;
+    }
+  } catch (e) {
+    ztoolkit.log("relocate: re-attach failed", e);
+  }
+  return null;
 }
 
 export function getDOI(item: Zotero.Item): string {
@@ -341,32 +572,47 @@ export class LocalFolderSource implements PDFSource {
     }
   }
 
-  matchItem(
-    item: Zotero.Item,
-    index: IndexedFile[],
-  ): LocalMatchResult {
-    // 1) Exact DOI embedded in the filename.
+  matchItem(item: Zotero.Item, index: IndexedFile[]): LocalMatchResult {
+    const { autoAttach, review } = readMatchThresholds();
+
+    // 1) Exact DOI — filename alnum or IndexedFile.doi (P2-1).
     const doi = getDOI(item)
       .toLowerCase()
       .replace(/[^a-z0-9]+/g, "");
     if (doi.length > 8) {
-      const byDOI = index.filter((f) => f.alnum.includes(doi));
+      const byDOI = index.filter((f) => {
+        const field = (f.doi || "").toLowerCase().replace(/[^a-z0-9]+/g, "");
+        return field === doi || f.alnum.includes(doi);
+      });
       if (byDOI.length === 1) {
-        return { status: "matched", file: byDOI[0] };
+        return { status: "matched", file: byDOI[0], score: 1 };
       }
-      if (byDOI.length > 1) return { status: "ambiguous" };
+      if (byDOI.length > 1) {
+        return { status: "ambiguous", score: 1 };
+      }
     }
 
-    // 2) Title CONTAINMENT: fraction of the item's title words present in the
-    // filename. Filenames commonly add author/year/publisher, so a symmetric
-    // similarity keeps the ratio low and never matches. We add author/year
-    // bonuses, take the single best file, and bail out when two files tie
-    // (ambiguous) to avoid associating the wrong edition.
+    // 1b) ISBN — IndexedFile.isbn or alnum (books).
+    const isbn = String(item.getField("ISBN") || "")
+      .replace(/[^0-9Xx]/g, "")
+      .toUpperCase();
+    if (isbn.length === 10 || isbn.length === 13) {
+      const byISBN = index.filter((f) => {
+        const field = (f.isbn || "").replace(/[^0-9Xx]/g, "").toUpperCase();
+        return field === isbn || f.alnum.includes(isbn.toLowerCase());
+      });
+      if (byISBN.length === 1) {
+        return { status: "matched", file: byISBN[0], score: 1 };
+      }
+      if (byISBN.length > 1) {
+        return { status: "ambiguous", score: 1 };
+      }
+    }
+
+    // 2) Title CONTAINMENT + author/year → 0–1 confidence, then thresholds.
     const rawTitle = (item.getField("title") as string) || "";
     const titleTokens = tokenize(rawTitle);
     if (!titleTokens.length) return { status: "none" };
-    // Full token list INCLUDING short tokens/numbers (e.g. volume "1".."6"),
-    // used only as a tie-breaker to tell near-identical names apart.
     const titleTokensAll = normalizeSearchText(rawTitle)
       .split(/\s+/)
       .filter(Boolean);
@@ -381,35 +627,57 @@ export class LocalFolderSource implements PDFSource {
         const authorMatch =
           !!surname && surname.length > 2 && f.norm.includes(surname);
         const yearMatch = !!year && f.norm.includes(year);
-        // Eligible when the title is mostly contained, OR half the title is
-        // contained AND the author surname also appears (rescues subtitle-heavy
-        // titles like "X: bir giriş" without risking a wrong-book match, since
-        // the author must agree too).
-        const eligible = hit >= 0.7 || (hit >= 0.5 && authorMatch);
-        let score = hit;
-        if (authorMatch) score += 0.3;
-        if (yearMatch) score += 0.2;
+        // 0–1 confidence: title containment dominates; author/year bonuses.
+        let score = Math.min(
+          1,
+          hit + (authorMatch ? 0.15 : 0) + (yearMatch ? 0.1 : 0),
+        );
+        // Title from IndexedFile.pdfTitle can reinforce containment.
+        if (f.pdfTitle) {
+          const titleNorm = normalizeSearchText(f.pdfTitle);
+          const titleWords = new Set(titleNorm.split(/\s+/).filter(Boolean));
+          const titleHit =
+            titleTokens.filter((t) => titleWords.has(t)).length /
+            titleTokens.length;
+          score = Math.min(
+            1,
+            Math.max(score, titleHit + (authorMatch ? 0.1 : 0)),
+          );
+        }
         const fine =
           titleTokensAll.filter((t) => words.has(t)).length /
           titleTokensAll.length;
-        return { f, eligible, score, fine };
+        return { f, score, fine, hit, authorMatch };
       })
-      .filter((s) => s.eligible)
+      .filter((s) => s.score >= review || s.hit >= 0.5)
       .sort((a, b) => b.score - a.score || b.fine - a.fine);
 
     if (!scored.length) return { status: "none" };
-    // Ambiguous only when the runner-up is coarse-close AND the fine score
-    // (which includes volume numbers/short tokens) cannot separate them —
-    // e.g. two genuine copies of the same file. If the fine score CAN tell
-    // them apart (vol. 1 vs vol. 2), take the better one instead of skipping.
     if (
       scored[1] &&
       scored[0].score - scored[1].score < 0.15 &&
       scored[0].fine <= scored[1].fine
     ) {
-      return { status: "ambiguous" };
+      return {
+        status: "ambiguous",
+        score: scored[0].score,
+      };
     }
-    return { status: "matched", file: scored[0].f };
+
+    const best = scored[0];
+    const decision = classifyMatchConfidence(best.score, autoAttach, review);
+    if (decision === "attach") {
+      return { status: "matched", file: best.f, score: best.score };
+    }
+    if (decision === "review") {
+      return {
+        status: "review",
+        file: best.f,
+        score: best.score,
+        reason: `score ${best.score.toFixed(2)} below auto-attach ${autoAttach}`,
+      };
+    }
+    return { status: "none" };
   }
 }
 
@@ -452,7 +720,9 @@ export class ArxivSource implements PDFSource {
     else if (/arxiv\.org/i.test(hay))
       id = hay.match(/(\d{4}\.\d{4,5})/)?.[1] || "";
     if (!id) return null;
-    return await downloadAndAttach(item, `https://arxiv.org/pdf/${id}`);
+    return await downloadAndAttach(item, `https://arxiv.org/pdf/${id}`, {
+      sourceId: "arxiv",
+    });
   }
 }
 
@@ -589,7 +859,12 @@ function extractHtmlTitle(html: string): string {
       /<meta[^>]+property=["']og:title["'][^>]+content=["']([^"']+)["']/i,
     ) ||
     html.match(/<title>([\s\S]*?)<\/title>/i);
-  return m ? m[1].replace(/<[^>]+>/g, " ").replace(/\s+/g, " ").trim() : "";
+  return m
+    ? m[1]
+        .replace(/<[^>]+>/g, " ")
+        .replace(/\s+/g, " ")
+        .trim()
+    : "";
 }
 
 /**
@@ -648,8 +923,15 @@ export function extractDergiParkPdfURL(html: string, baseURL: string) {
   for (const match of html.matchAll(
     /<a[^>]+href=["']([^"']*\/download\/article-file\/\d+[^"']*)["'][^>]*>([\s\S]*?)<\/a>/gi,
   )) {
-    const label = match[2].replace(/<[^>]+>/g, " ").replace(/\s+/g, " ").trim();
-    if (/tam\s*metin|full\s*text|pdf\s*(?:görüntüle|view|indir|download)/i.test(label)) {
+    const label = match[2]
+      .replace(/<[^>]+>/g, " ")
+      .replace(/\s+/g, " ")
+      .trim();
+    if (
+      /tam\s*metin|full\s*text|pdf\s*(?:görüntüle|view|indir|download)/i.test(
+        label,
+      )
+    ) {
       return absoluteURL(baseURL, match[1]);
     }
   }
@@ -694,7 +976,9 @@ export function parseMirrors(raw: string, fallback: string[]): string[] {
 }
 
 export function isValidISBN(value: string): boolean {
-  const isbn = String(value || "").replace(/[^0-9Xx]/g, "").toUpperCase();
+  const isbn = String(value || "")
+    .replace(/[^0-9Xx]/g, "")
+    .toUpperCase();
   if (isbn.length === 10) {
     const sum = isbn
       .split("")
@@ -931,11 +1215,9 @@ async function searchYokTezByTitle(
   )}`;
   const html = (await httpGet(searchURL)).responseText || "";
   const links = uniqueStrings(
-    [
-      ...html.matchAll(
-        /href="([^"']*(?:tezDetay|TezGoster)[^"']*)"/gi,
-      ),
-    ].map((m) => m[1]),
+    [...html.matchAll(/href="([^"']*(?:tezDetay|TezGoster)[^"']*)"/gi)].map(
+      (m) => m[1],
+    ),
   ).slice(0, 5);
 
   for (const rel of links) {
@@ -994,7 +1276,7 @@ export class ProQuestSource implements PDFSource {
     const proxy = ((getPref("pdf.proxyURL") as string) || "").trim();
     if (getPref("pdf.proxyEnabled") && proxy) url = proxy + url;
     try {
-      let att = await downloadAndAttach(item, url);
+      const att = await downloadAndAttach(item, url);
       if (att) return att;
       const html = (await httpGet(url)).responseText || "";
       const m = html.match(/href="([^"]*fulltextPDF[^"]*|[^"]+\.pdf[^"]*)"/i);

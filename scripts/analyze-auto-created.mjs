@@ -2,8 +2,7 @@ import { spawnSync } from "node:child_process";
 import path from "node:path";
 import esbuild from "esbuild";
 
-const database =
-  process.argv[2] || "C:\\Users\\ibrah\\Zotero\\zotero.sqlite";
+const database = process.argv[2] || "C:\\Users\\ibrah\\Zotero\\zotero.sqlite";
 const python = String.raw`
 import json, sqlite3, sys
 db = sqlite3.connect("file:" + sys.argv[1] + "?mode=ro&immutable=1", uri=True)
@@ -73,17 +72,11 @@ for (const item of items) {
   const parsed = parseFilenameMetadata(filename);
   const missing = [];
   if (parsed.title && !item.fields.title) missing.push("title");
-  if (parsed.year && !item.fields.date)
-    missing.push("date");
-  if (parsed.publisher && !item.fields.publisher)
-    missing.push("publisher");
-  if (
-    parsed.publicationTitle &&
-    !item.fields.publicationTitle
-  )
+  if (parsed.year && !item.fields.date) missing.push("date");
+  if (parsed.publisher && !item.fields.publisher) missing.push("publisher");
+  if (parsed.publicationTitle && !item.fields.publicationTitle)
     missing.push("publicationTitle");
-  if (parsed.volume && !item.fields.volume)
-    missing.push("volume");
+  if (parsed.volume && !item.fields.volume) missing.push("volume");
   if (parsed.isbn && !item.fields.ISBN) missing.push("ISBN");
   if (parsed.authors?.length && !item.creatorCount) missing.push("creators");
   if (

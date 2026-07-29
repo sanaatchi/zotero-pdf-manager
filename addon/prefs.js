@@ -38,18 +38,9 @@ pref(
   "extensions.zotero.__addonRef__.fileTypes",
   "pdf,doc,docx,txt,rtf,djvu,epub",
 );
-pref(
-  "extensions.zotero.__addonRef__.filenameAsPrefixRules",
-  "",
-);
-pref(
-  "extensions.zotero.__addonRef__.filenameSkipRenameRules",
-  "",
-);
-pref(
-  "extensions.zotero.__addonRef__.filenameSkipAutoMoveRenameRules",
-  "",
-);
+pref("extensions.zotero.__addonRef__.filenameAsPrefixRules", "");
+pref("extensions.zotero.__addonRef__.filenameSkipRenameRules", "");
+pref("extensions.zotero.__addonRef__.filenameSkipAutoMoveRenameRules", "");
 pref("extensions.zotero.__addonRef__.autoRemoveEmptyFolder", false);
 
 pref("extensions.zotero.__addonRef__.moveWithoutDeleting", false);
@@ -64,7 +55,11 @@ pref("extensions.zotero.__addonRef__.pdf.showReport", true);
 pref("extensions.zotero.__addonRef__.pdf.autoOnStartup", true);
 pref("extensions.zotero.__addonRef__.pdf.autoOnAdd", true);
 pref("extensions.zotero.__addonRef__.pdf.periodicMinutes", 30);
+pref("extensions.zotero.__addonRef__.pdf.autoAttachThreshold", 0.85);
+pref("extensions.zotero.__addonRef__.pdf.reviewThreshold", 0.6);
+pref("extensions.zotero.__addonRef__.pdf.addSettleMs", 1000);
 pref("extensions.zotero.__addonRef__.pdf.onlineAutoDownload", true);
+pref("extensions.zotero.__addonRef__.pdf.saveOaToDownloads", true);
 pref("extensions.zotero.__addonRef__.pdf.onlineOnReconcile", false);
 pref("extensions.zotero.__addonRef__.pdf.onlineMaxPerRun", 10);
 pref("extensions.zotero.__addonRef__.pdf.orphanMode", "report");
@@ -94,6 +89,7 @@ pref(
 // Semicolon/newline-separated roots. Empty means migrate/fall back to the
 // legacy localFolder preference above.
 pref("extensions.zotero.__addonRef__.pdf.watchRoots", "");
+pref("extensions.zotero.__addonRef__.pdf.useLinkedAttachmentBase", true);
 pref("extensions.zotero.__addonRef__.pdf.localAsLink", true);
 pref("extensions.zotero.__addonRef__.pdf.doiEnabled", true);
 pref("extensions.zotero.__addonRef__.pdf.arxivEnabled", true);

@@ -124,10 +124,11 @@ export function compareMetadata(
           ? "Başlık metadata alanında eşleşiyor"
           : "Başlık PDF içeriğinde eşleşiyor",
       );
-    }
-    else {
+    } else {
       criticalMismatch = true;
-      details.push(`Başlık benzerliği düşük (${Math.round(titleScore * 100)}%)`);
+      details.push(
+        `Başlık benzerliği düşük (${Math.round(titleScore * 100)}%)`,
+      );
     }
   } else {
     warning = true;
@@ -155,9 +156,7 @@ export function compareMetadata(
   }
 
   const evidenceYear =
-    pdf.year ||
-    contentEvidence.match(/\b(?:18|19|20)\d{2}\b/)?.[0] ||
-    "";
+    pdf.year || contentEvidence.match(/\b(?:18|19|20)\d{2}\b/)?.[0] || "";
   if (zotero.year && evidenceYear) {
     possible += 1;
     if (zotero.year === evidenceYear) {
@@ -165,9 +164,7 @@ export function compareMetadata(
       details.push("Yıl eşleşiyor");
     } else {
       warning = true;
-      details.push(
-        `Yıl uyuşmuyor: Zotero=${zotero.year}, PDF=${evidenceYear}`,
-      );
+      details.push(`Yıl uyuşmuyor: Zotero=${zotero.year}, PDF=${evidenceYear}`);
     }
   }
 
@@ -229,13 +226,20 @@ async function pdfMetadata(attachment: Zotero.Item): Promise<CheckMetadata> {
   const subject = pdf.getSubject() || "";
   const keywords = pdf.getKeywords() || "";
   const indexedText = await readIndexedPDFText(attachment);
-  const evidence = [title, author, subject, keywords, attachment.attachmentFilename]
+  const evidence = [
+    title,
+    author,
+    subject,
+    keywords,
+    attachment.attachmentFilename,
+  ]
     .filter(Boolean)
     .join("\n");
   return {
     title,
     creators: author ? author.split(/[;,]/).map((name) => name.trim()) : [],
-    year: `${evidence}\n${indexedText}`.match(/\b(?:18|19|20)\d{2}\b/)?.[0] || "",
+    year:
+      `${evidence}\n${indexedText}`.match(/\b(?:18|19|20)\d{2}\b/)?.[0] || "",
     doi: cleanDOI(`${evidence}\n${indexedText}`),
     isbn: cleanISBN(`${evidence}\n${indexedText}`),
     evidence: indexedText,
@@ -274,10 +278,14 @@ async function readIndexedPDFText(attachment: Zotero.Item) {
 }
 
 export async function checkMetadataForSelectedItems() {
-  const pairs = new Map<number, { item: Zotero.Item; attachment: Zotero.Item }>();
+  const pairs = new Map<
+    number,
+    { item: Zotero.Item; attachment: Zotero.Item }
+  >();
   for (const selected of ZoteroPane.getSelectedItems()) {
     if (selected.isAttachment() && selected.parentItemID) {
-      const parent = selected.parentItem || Zotero.Items.get(selected.parentItemID);
+      const parent =
+        selected.parentItem || Zotero.Items.get(selected.parentItemID);
       if (parent?.isRegularItem()) {
         pairs.set(selected.id, { item: parent, attachment: selected });
       }
@@ -300,17 +308,18 @@ export async function checkMetadataForSelectedItems() {
   for (const { item, attachment } of pairs.values()) {
     try {
       const extracted = await pdfMetadata(attachment);
-      const result = compareMetadata(
-        itemMetadata(item),
-        extracted,
-      );
+      const result = compareMetadata(itemMetadata(item), extracted);
       if (!extracted.evidence) {
         result.details.unshift(
           "PDF metin katmanı bulunamadı; taranmış belge için OCR gerekli olabilir",
         );
       }
       const symbol =
-        result.status === "match" ? "✓" : result.status === "warning" ? "⚠" : "✗";
+        result.status === "match"
+          ? "✓"
+          : result.status === "warning"
+            ? "⚠"
+            : "✗";
       reports.push(
         `${symbol} ${item.getDisplayTitle()} — %${result.score}\n  ${result.details.join("; ")}`,
       );
@@ -320,5 +329,7 @@ export async function checkMetadataForSelectedItems() {
       );
     }
   }
-  window.alert(`${config.addonName} — Metadata kontrolü\n\n${reports.join("\n\n")}`);
+  window.alert(
+    `${config.addonName} — Metadata kontrolü\n\n${reports.join("\n\n")}`,
+  );
 }

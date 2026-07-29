@@ -21,6 +21,36 @@ function loadModule() {
   return module.exports;
 }
 
+test("orphan mode normalizes safely and gates automatic autoCreate", () => {
+  const { normalizeOrphanMode, shouldAutoCreateOrphan } = loadModule();
+
+  assert.equal(normalizeOrphanMode("report"), "report");
+  assert.equal(normalizeOrphanMode("autoCreate"), "autoCreate");
+  assert.equal(normalizeOrphanMode("AUTOcreate"), "autoCreate");
+  assert.equal(normalizeOrphanMode("off"), "off");
+  assert.equal(normalizeOrphanMode("weird"), "report");
+  assert.equal(normalizeOrphanMode(""), "report");
+
+  assert.equal(
+    shouldAutoCreateOrphan("report", "automatic", { doi: "10.1/x" }),
+    false,
+  );
+  assert.equal(shouldAutoCreateOrphan("autoCreate", "automatic", {}), false);
+  assert.equal(
+    shouldAutoCreateOrphan("autoCreate", "automatic", {
+      doi: "10.1000/example",
+    }),
+    true,
+  );
+  assert.equal(shouldAutoCreateOrphan("autoCreate", "manual", {}), true);
+  assert.equal(
+    shouldAutoCreateOrphan("autoCreate", "automatic", {
+      thesisNumber: "736678",
+    }),
+    true,
+  );
+});
+
 test("orphan filenames become readable fallback titles", () => {
   const { normalizeOrphanTitle } = loadModule();
 

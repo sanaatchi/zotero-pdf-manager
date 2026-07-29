@@ -33,9 +33,7 @@ function parseShortcut(raw: string) {
     alt: modifiers.has("alt") || modifiers.has("option"),
     control: modifiers.has("ctrl") || modifiers.has("control"),
     meta:
-      modifiers.has("meta") ||
-      modifiers.has("cmd") ||
-      modifiers.has("command"),
+      modifiers.has("meta") || modifiers.has("cmd") || modifiers.has("command"),
     shift: modifiers.has("shift"),
     key: normalizeKey(parts.at(-1) || ""),
   };
@@ -60,7 +58,10 @@ export function shortcutMatchesEvent(raw: string, event: KeyboardEvent) {
   );
 }
 
-export function registerShortcut(prefKey: string, callback: Function) {
+export function registerShortcut(
+  prefKey: string,
+  callback: () => void | Promise<void>,
+) {
   ztoolkit.Keyboard.register(async (ev, options) => {
     // The toolkit only supplies options.keyboard on keyup. Browser/Zotero
     // commands can move focus before keyup, so match and consume shortcuts on
@@ -76,38 +77,40 @@ export function registerShortcut(prefKey: string, callback: Function) {
   });
 }
 
-
-export function listenShortcut(inputNode: HTMLInputElement, callback: (shortcut: string) => void) {
+export function listenShortcut(
+  inputNode: HTMLInputElement,
+  callback: (shortcut: string) => void,
+) {
   inputNode.addEventListener("keydown", (e: KeyboardEvent) => {
     e.preventDefault();
     e.stopPropagation();
-    const shortcut: any = {}
+    const shortcut: any = {};
     shortcut.control = e.ctrlKey;
     shortcut.meta = e.metaKey;
     shortcut.shift = e.shiftKey;
     shortcut.alt = e.altKey;
-    if (
-      !["Shift", "Meta", "Ctrl", "Alt", "Control"].includes(e.key)
-    ) {
+    if (!["Shift", "Meta", "Ctrl", "Alt", "Control"].includes(e.key)) {
       shortcut.key = e.key.toUpperCase();
     }
-    let keys: string[] = []
+    const keys: string[] = [];
     if (shortcut.control) {
-      keys.push("Ctrl")
+      keys.push("Ctrl");
     }
     if (shortcut.meta) {
-      keys.push("Meta")
+      keys.push("Meta");
     }
     if (shortcut.shift) {
-      keys.push("Shift")
+      keys.push("Shift");
     }
     if (shortcut.alt) {
-      keys.push("Alt")
+      keys.push("Alt");
     }
     window.setTimeout(() => {
-      inputNode.value = [...keys, ...[shortcut.key]].filter(Boolean).join(" + ")
-      ztoolkit.log(keys, shortcut, inputNode.value)
-      callback(inputNode.value)
-    })
-  })
+      inputNode.value = [...keys, ...[shortcut.key]]
+        .filter(Boolean)
+        .join(" + ");
+      ztoolkit.log(keys, shortcut, inputNode.value);
+      callback(inputNode.value);
+    });
+  });
 }

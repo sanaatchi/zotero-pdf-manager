@@ -1,9 +1,10 @@
+// @ajan: cursor · @etiket: katman-2, p2-3, p2-5, p2-6, reconciler, notifier, orphan, audit
 import { getPref } from "../utils/prefs";
 import { buildIndex } from "./folderIndex";
 import { LocalFolderSource } from "./pdfSources";
 import { tryAutomaticOnlineSources } from "./pdfDownload";
-import { processOrphanPDFs } from "./orphanProcessor";
-import { appendAuditEvent } from "./automationAudit";
+import { processOrphanPDFs, normalizeOrphanMode } from "./orphanProcessor";
+import { appendAuditEvent, openAutomationAuditReport } from "./automationAudit";
 
 export interface ReconcileStats {
   scanned: number;
@@ -22,6 +23,14 @@ export function normalizePeriodicMinutes(value: unknown): number {
   return Math.min(Math.floor(parsed), 10080);
 }
 
+/** Attanger-style settle delay for add-notifier coalescing (P2-2/P2-3). */
+export function normalizeAddSettleMs(value: unknown): number {
+  const parsed =
+    typeof value === "number" ? value : Number.parseInt(`${value ?? ""}`, 10);
+  if (!Number.isFinite(parsed) || parsed < 0) return 1000;
+  return Math.min(Math.floor(parsed), 60000);
+}
+
 export function canReconcileItem(item: Zotero.Item): boolean {
   try {
     if (!item?.isRegularItem() || (item as any).isFeedItem || item.deleted) {
@@ -34,6 +43,55 @@ export function canReconcileItem(item: Zotero.Item): boolean {
   } catch {
     return false;
   }
+}
+
+/**
+ * Map notifier add IDs to top-level regular items (P2-3).
+ * Connector often fires separate `add` events for parent + attachments —
+ * attachment IDs resolve to their parent so one settle flush covers the row.
+ */
+export function expandAddedItemIDs(
+  ids: Iterable<number>,
+  getItem: (id: number) => Zotero.Item | false | undefined | null,
+): number[] {
+  const out = new Set<number>();
+  for (const id of ids) {
+    if (!Number.isFinite(id)) continue;
+    let item: Zotero.Item | false | undefined | null;
+    try {
+      item = getItem(id);
+    } catch {
+      continue;
+    }
+    if (!item) continue;
+    try {
+      if ((item as any).deleted) continue;
+      if (
+        typeof item.isRegularItem === "function" &&
+        item.isRegularItem() &&
+        (!(item as any).isTopLevelItem || (item as any).isTopLevelItem())
+      ) {
+        out.add(item.id);
+        continue;
+      }
+      if (typeof item.isAttachment === "function" && item.isAttachment()) {
+        const parentID = Number((item as any).parentItemID);
+        if (!Number.isFinite(parentID) || parentID <= 0) continue;
+        const parent = getItem(parentID);
+        if (
+          parent &&
+          !(parent as any).deleted &&
+          typeof parent.isRegularItem === "function" &&
+          parent.isRegularItem()
+        ) {
+          out.add(parent.id);
+        }
+      }
+    } catch {
+      /* skip malformed items */
+    }
+  }
+  return Array.from(out);
 }
 
 async function addAutomationTag(item: Zotero.Item, tag: string) {
@@ -52,12 +110,14 @@ async function addAutomationTag(item: Zotero.Item, tag: string) {
  *
  * Runs are coalesced: if a timer fires while reconciliation is active it gets
  * the existing promise instead of starting a second library scan.
+ * Add-notifier flushes drain pending IDs in a while-loop (Attanger P2-3).
  */
 export class PDFReconciler {
   private startupTimer: ReturnType<typeof setTimeout> | null = null;
   private periodicTimer: ReturnType<typeof setInterval> | null = null;
   private addTimer: ReturnType<typeof setTimeout> | null = null;
   private activeRun: Promise<ReconcileStats> | null = null;
+  private addFlushRunning = false;
   private notifierID = "";
   private pendingItemIDs = new Set<number>();
   private disposed = false;
@@ -83,6 +143,8 @@ export class PDFReconciler {
       );
     }
 
+    // Re-bind notifier every start so toggling autoOnAdd actually sticks.
+    this.unregisterNotifier();
     if (getPref("pdf.autoOnAdd") !== false) {
       this.registerNotifier();
     }
@@ -115,6 +177,7 @@ export class PDFReconciler {
       Number(getPref("pdf.orphanMaxPerRun") ?? 10),
       getPref("pdf.dryRun") === true,
       runID,
+      "manual",
     );
   }
 
@@ -122,10 +185,7 @@ export class PDFReconciler {
     this.disposed = true;
     this.disposeTimers();
     this.pendingItemIDs.clear();
-    if (this.notifierID) {
-      Zotero.Notifier.unregisterObserver(this.notifierID);
-      this.notifierID = "";
-    }
+    this.unregisterNotifier();
   }
 
   private disposeTimers() {
@@ -137,21 +197,29 @@ export class PDFReconciler {
     this.addTimer = null;
   }
 
+  private unregisterNotifier() {
+    if (!this.notifierID) return;
+    try {
+      Zotero.Notifier.unregisterObserver(this.notifierID);
+    } catch (e) {
+      ztoolkit.log("Could not unregister PDF reconciler notifier", e);
+    }
+    this.notifierID = "";
+  }
+
   private registerNotifier() {
     if (this.notifierID) return;
     this.notifierID = Zotero.Notifier.registerObserver(
       {
-        notify: (
-          event: string,
-          type: string,
-          ids: (string | number)[],
-        ) => {
-          if (this.disposed || event !== "add" || type !== "item") return;
-          for (const id of ids) {
-            const numericID = Number(id);
-            if (Number.isFinite(numericID)) this.pendingItemIDs.add(numericID);
+        notify: (event: string, type: string, ids: (string | number)[]) => {
+          if (this.disposed || type !== "item") return;
+          if (event === "add") {
+            this.queueAddedItems(ids);
+            return;
           }
-          this.scheduleAddedItems();
+          if (event === "trash" || event === "delete") {
+            this.cancelPendingItems(ids);
+          }
         },
       },
       ["item"],
@@ -159,32 +227,90 @@ export class PDFReconciler {
     );
   }
 
+  private queueAddedItems(ids: (string | number)[]) {
+    for (const id of ids) {
+      const numericID = Number(id);
+      if (Number.isFinite(numericID)) this.pendingItemIDs.add(numericID);
+    }
+    this.scheduleAddedItems();
+  }
+
+  private cancelPendingItems(ids: (string | number)[]) {
+    let removed = false;
+    for (const id of ids) {
+      const numericID = Number(id);
+      if (!Number.isFinite(numericID)) continue;
+      if (this.pendingItemIDs.delete(numericID)) removed = true;
+      // Parent deleted → drop any pending attachment IDs for that parent later
+      // via expand; also drop the parent itself if queued.
+    }
+    if (removed && this.pendingItemIDs.size === 0 && this.addTimer !== null) {
+      clearTimeout(this.addTimer);
+      this.addTimer = null;
+    }
+  }
+
   private scheduleAddedItems() {
+    // A flush already running will drain new IDs in its while-loop / finally.
+    if (this.addFlushRunning) return;
     if (this.addTimer !== null) clearTimeout(this.addTimer);
+    let settleMs = 1000;
+    try {
+      settleMs = normalizeAddSettleMs(getPref("pdf.addSettleMs") ?? 1000);
+    } catch {
+      settleMs = 1000;
+    }
     this.addTimer = setTimeout(() => {
       this.addTimer = null;
       void this.flushAddedItems();
-    }, 1000);
+    }, settleMs);
   }
 
   private async flushAddedItems() {
-    if (this.disposed || !this.pendingItemIDs.size) return;
-    const ids = Array.from(this.pendingItemIDs);
-    this.pendingItemIDs.clear();
+    if (this.disposed || this.addFlushRunning) return;
+    this.addFlushRunning = true;
+    try {
+      while (!this.disposed && this.pendingItemIDs.size > 0) {
+        const rawIDs = Array.from(this.pendingItemIDs);
+        this.pendingItemIDs.clear();
 
-    // A startup/periodic run already covers these records. Wait for it rather
-    // than racing attachment creation, then re-check eligibility.
-    if (this.activeRun) await this.activeRun;
-    if (this.disposed) return;
+        // Startup/periodic already covers the library — wait, then re-resolve.
+        if (this.activeRun) await this.activeRun;
+        if (this.disposed) return;
 
-    const loaded = Zotero.Items.get(ids) as unknown;
-    const items = (Array.isArray(loaded) ? loaded : [loaded]).filter(
-      Boolean,
-    ) as Zotero.Item[];
-    this.activeRun = this.performItems(items, "add", false).finally(() => {
-      this.activeRun = null;
-    });
-    await this.activeRun;
+        const parentIDs = expandAddedItemIDs(rawIDs, (id) => {
+          try {
+            return Zotero.Items.get(id) as Zotero.Item;
+          } catch {
+            return null;
+          }
+        });
+        if (!parentIDs.length) continue;
+
+        const loaded = Zotero.Items.get(parentIDs) as unknown;
+        const items = (Array.isArray(loaded) ? loaded : [loaded]).filter(
+          Boolean,
+        ) as Zotero.Item[];
+        if (!items.length) continue;
+
+        await appendAuditEvent({
+          run: `add-coalesce-${Date.now()}`,
+          action: "add-coalesce",
+          outcome: "info",
+          detail: `flush ${items.length} item(s) from ${rawIDs.length} notifier id(s)`,
+        });
+
+        this.activeRun = this.performItems(items, "add", false).finally(() => {
+          this.activeRun = null;
+        });
+        await this.activeRun;
+      }
+    } finally {
+      this.addFlushRunning = false;
+      if (!this.disposed && this.pendingItemIDs.size > 0) {
+        this.scheduleAddedItems();
+      }
+    }
   }
 
   private async performRun(reason: string): Promise<ReconcileStats> {
@@ -253,17 +379,24 @@ export class PDFReconciler {
 
       try {
         const match = source.matchItem(item, index);
-        if (match.status === "ambiguous") {
+        if (match.status === "ambiguous" || match.status === "review") {
           if (!dryRun) await addAutomationTag(item, "#pdf-review");
+          const detail =
+            match.status === "review"
+              ? dryRun
+                ? `Dry-run: mid-confidence match (${match.score?.toFixed(2) ?? "?"}); review tag not added`
+                : `Mid-confidence match (${match.reason}); tagged #pdf-review`
+              : dryRun
+                ? "Dry-run: ambiguous match; review tag not added"
+                : "Ambiguous match; tagged #pdf-review";
           await appendAuditEvent({
             run: runID,
             action: "local-match",
             outcome: "review",
             itemID: item.id,
             title: item.getDisplayTitle(),
-            detail: dryRun
-              ? "Dry-run: ambiguous match; review tag not added"
-              : "Ambiguous match; tagged #pdf-review",
+            path: match.status === "review" ? match.file?.path : undefined,
+            detail,
           });
           stats.review++;
           continue;
@@ -376,21 +509,23 @@ export class PDFReconciler {
       }
     }
 
-    if (!this.disposed && reason !== "add" && getPref("pdf.orphanMode") !== "off") {
-      const orphanStats = await processOrphanPDFs(
-        index,
-        items,
-        (Zotero.Libraries as any).userLibraryID,
-        // Automatic reconciliation may report orphans, but creation is only
-        // allowed through processOrphansNow(), an explicit user action.
-        "report",
-        Number(getPref("pdf.orphanMaxPerRun") ?? 10),
-        dryRun,
-        runID,
-      );
-      stats.created += orphanStats.created;
-      stats.planned += orphanStats.planned;
-      stats.errors += orphanStats.failed;
+    if (!this.disposed && reason !== "add") {
+      const orphanMode = normalizeOrphanMode(getPref("pdf.orphanMode"));
+      if (orphanMode !== "off") {
+        const orphanStats = await processOrphanPDFs(
+          index,
+          items,
+          (Zotero.Libraries as any).userLibraryID,
+          orphanMode,
+          Number(getPref("pdf.orphanMaxPerRun") ?? 10),
+          dryRun,
+          runID,
+          "automatic",
+        );
+        stats.created += orphanStats.created;
+        stats.planned += orphanStats.planned;
+        stats.errors += orphanStats.failed;
+      }
     }
 
     ztoolkit.log(`PDF reconcile finished (${reason})`, stats);
@@ -400,6 +535,13 @@ export class PDFReconciler {
       outcome: stats.errors ? "failed" : dryRun ? "planned" : "success",
       detail: JSON.stringify(stats),
     });
+    if (dryRun && reason === "manual") {
+      try {
+        await openAutomationAuditReport();
+      } catch (e) {
+        ztoolkit.log("Could not open dry-run audit report", e);
+      }
+    }
     return stats;
   }
 }

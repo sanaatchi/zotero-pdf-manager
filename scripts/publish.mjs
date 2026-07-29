@@ -17,7 +17,9 @@ import { readFileSync } from "node:fs";
 
 const DIST_REPO = "sanaatchi/zotero-pdf-manager-releases";
 
-const pkg = JSON.parse(readFileSync(new URL("../package.json", import.meta.url)));
+const pkg = JSON.parse(
+  readFileSync(new URL("../package.json", import.meta.url)),
+);
 const version = pkg.version;
 const xpi = "build/zotero-pdf-manager.xpi";
 const tag = `v${version}`;

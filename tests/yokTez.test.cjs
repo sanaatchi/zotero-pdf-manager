@@ -35,10 +35,7 @@ test("YÖK thesis PDF links are extracted from current and legacy markup", () =>
   const base = "https://tez.yok.gov.tr/UlusalTezMerkezi/tezDetay.jsp?id=1";
 
   assert.equal(
-    extractYokPdfURL(
-      "<a href='TezGoster?key=abc&amp;no=123'>PDF</a>",
-      base,
-    ),
+    extractYokPdfURL("<a href='TezGoster?key=abc&amp;no=123'>PDF</a>", base),
     "https://tez.yok.gov.tr/UlusalTezMerkezi/TezGoster?key=abc&no=123",
   );
   assert.equal(

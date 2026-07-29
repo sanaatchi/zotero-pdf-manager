@@ -5,11 +5,7 @@ declare const IOUtils: any;
 declare const PathUtils: any;
 
 export type AttemptOutcome =
-  | "attached"
-  | "no-match"
-  | "rejected"
-  | "error"
-  | "unsupported";
+  "attached" | "no-match" | "rejected" | "error" | "unsupported";
 
 export interface SourceAttempt {
   source: string;
@@ -57,9 +53,7 @@ export function reportToText(reports: ItemReport[]): string {
       )
       .join(" · ");
     const head = `[${RESULT_LABEL[r.result]}] ${r.title}`;
-    return r.note
-      ? `${head}\n  ${r.note}`
-      : `${head}\n  ${attempts || "—"}`;
+    return r.note ? `${head}\n  ${r.note}` : `${head}\n  ${attempts || "—"}`;
   });
   return `${config.addonName} — İndirme raporu\n\n${lines.join("\n\n")}`;
 }

@@ -53,7 +53,7 @@ export function parseThesisCoverText(text: string): FilenameMetadata {
         ? "Sanatta Yeterlik Tezi"
         : /eser metni/u.test(marker)
           ? "Yüksek Lisans Eser Metni"
-        : "Yüksek Lisans Tezi";
+          : "Yüksek Lisans Tezi";
   }
 
   const labelled = (labels: RegExp) => {
@@ -93,7 +93,11 @@ export function parseThesisCoverText(text: string): FilenameMetadata {
       .slice(Math.max(0, typeIndex - 10), typeIndex)
       .filter((line) => !noise.test(coverSearch(line)));
     const possibleAuthor = candidates.at(-1);
-    if (!result.authors && possibleAuthor && looksLikePersonName(possibleAuthor)) {
+    if (
+      !result.authors &&
+      possibleAuthor &&
+      looksLikePersonName(possibleAuthor)
+    ) {
       result.authors = [possibleAuthor];
       candidates.pop();
     }
@@ -276,8 +280,7 @@ function isValidISBN(value: string) {
       .slice(0, 12)
       .split("")
       .reduce(
-        (total, digit, index) =>
-          total + Number(digit) * (index % 2 ? 3 : 1),
+        (total, digit, index) => total + Number(digit) * (index % 2 ? 3 : 1),
         0,
       );
     return (10 - (sum % 10)) % 10 === Number(value[12]);
@@ -396,12 +399,11 @@ export function parseFilenameMetadata(filename: string): FilenameMetadata {
 
   const labelled: Record<string, string> = {};
   const labelPattern =
-    /(?:^|[\[({]|\s{2,}|__)(yazar|author|başlık|baslik|title|yıl|yil|year|yayınevi|yayinevi|publisher)\s*[:=]\s*([^\])}]+?)(?=(?:[\]})]|__|\s{2,}(?:yazar|author|başlık|baslik|title|yıl|yil|year|yayınevi|yayinevi|publisher)\s*[:=]|$))/giu;
+    /(?:^|[[({]|\s{2,}|__)(yazar|author|başlık|baslik|title|yıl|yil|year|yayınevi|yayinevi|publisher)\s*[:=]\s*([^\])}]+?)(?=(?:[\]})]|__|\s{2,}(?:yazar|author|başlık|baslik|title|yıl|yil|year|yayınevi|yayinevi|publisher)\s*[:=]|$))/giu;
   for (const match of stem.matchAll(labelPattern)) {
     labelled[match[1].toLocaleLowerCase("tr")] = clean(match[2]);
   }
-  const labelledTitle =
-    labelled["başlık"] || labelled.baslik || labelled.title;
+  const labelledTitle = labelled["başlık"] || labelled.baslik || labelled.title;
   if (labelledTitle) metadata.title = labelledTitle;
   const labelledAuthor = labelled.yazar || labelled.author;
   if (labelledAuthor) {
@@ -416,13 +418,9 @@ export function parseFilenameMetadata(filename: string): FilenameMetadata {
     labelled.year?.match(/\b(?:18|19|20)\d{2}\b/)?.[0];
   if (labelledYear) metadata.year = labelledYear;
   const labelledPublisher =
-    labelled["yayınevi"] ||
-    labelled.yayinevi ||
-    labelled.publisher;
+    labelled["yayınevi"] || labelled.yayinevi || labelled.publisher;
   if (labelledPublisher) metadata.publisher = labelledPublisher;
-  const explicitFields: Array<
-    [keyof FilenameMetadata, string[]]
-  > = [
+  const explicitFields: Array<[keyof FilenameMetadata, string[]]> = [
     ["volume", ["cilt", "volume", "vol"]],
     ["issue", ["sayı", "sayi", "issue", "no"]],
     ["edition", ["baskı", "baski", "edition", "ed"]],
@@ -467,10 +465,7 @@ export function parseFilenameMetadata(filename: string): FilenameMetadata {
   }
 
   const withoutIdentifiers = stem
-    .replace(
-      /\[\s*10\.\d{4,9}\s+[A-Z0-9][A-Z0-9._;():/-]*\s*\]/gi,
-      "",
-    )
+    .replace(/\[\s*10\.\d{4,9}\s+[A-Z0-9][A-Z0-9._;():/-]*\s*\]/gi, "")
     .replace(/\b10\.\d{4,9}\/[-._;()/:A-Z0-9]+\b/gi, "")
     .replace(/ISBN(?:-1[03])?\s*[:=_-]?\s*[\dX\s-]+/gi, "");
   const typed = withoutIdentifiers.match(
@@ -639,15 +634,9 @@ export function parseFilenameMetadata(filename: string): FilenameMetadata {
     return metadata;
   }
 
-  const rawParts = withoutIdentifiers
-    .split(/\s+(?:-|–|—)\s+/)
-    .filter(Boolean);
-  const parts = rawParts
-    .map(clean)
-    .filter(Boolean);
-  const yearIndex = parts.findIndex((part) =>
-    /^(?:18|19|20)\d{2}$/.test(part),
-  );
+  const rawParts = withoutIdentifiers.split(/\s+(?:-|–|—)\s+/).filter(Boolean);
+  const parts = rawParts.map(clean).filter(Boolean);
+  const yearIndex = parts.findIndex((part) => /^(?:18|19|20)\d{2}$/.test(part));
   const bracketYearIndex = rawParts.findIndex((part) =>
     /^\[(?:18|19|20)\d{2}\]$/.test(part),
   );
@@ -691,7 +680,10 @@ export function parseFilenameMetadata(filename: string): FilenameMetadata {
   // Conservative common forms: "Author - 2020 - Title" and
   // "Author - Title - 2020". Positional publisher guessing is deliberately
   // avoided; publisher is accepted only when explicitly labelled.
-  if (parts.length >= 3 && (yearIndex === 1 || yearIndex === parts.length - 1)) {
+  if (
+    parts.length >= 3 &&
+    (yearIndex === 1 || yearIndex === parts.length - 1)
+  ) {
     metadata.authors = [parts[0]];
     metadata.year = parts[yearIndex];
     const titleParts = parts.filter(
@@ -753,8 +745,7 @@ export function applyFilenameMetadata(
       // explicitly; other existing types are preserved.
       if (
         (currentType === "document" ||
-          (allowExplicitTypeCorrection &&
-            metadata.itemType !== "document")) &&
+          (allowExplicitTypeCorrection && metadata.itemType !== "document")) &&
         currentType !== metadata.itemType &&
         targetTypeID &&
         typeof (item as any).setType === "function"

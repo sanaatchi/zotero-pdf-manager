@@ -146,7 +146,7 @@ function prepareUpdateJson() {
   }
 
   const updateLink =
-    config.updateLink ?? isPreRelease
+    (config.updateLink ?? isPreRelease)
       ? `${config.releasePage}/download/v${version}/${name}.xpi`
       : `${config.releasePage}/latest/download/${name}.xpi`;
 
@@ -167,9 +167,10 @@ function prepareUpdateJson() {
   });
 
   Logger.debug(
-    `[Build] Prepare Update.json for ${isPreRelease
-      ? "\u001b[31m Prerelease \u001b[0m"
-      : "\u001b[32m Release \u001b[0m"
+    `[Build] Prepare Update.json for ${
+      isPreRelease
+        ? "\u001b[31m Prerelease \u001b[0m"
+        : "\u001b[32m Release \u001b[0m"
     }`,
     replaceResult
       .filter((f) => f.hasChanged)
@@ -204,7 +205,10 @@ export async function main() {
 
   clearFolder(buildDir);
   copyFolderRecursiveSync("addon", buildDir);
-  copyFileSync("THIRD_PARTY_NOTICES.md", `${buildDir}/addon/THIRD_PARTY_NOTICES.md`);
+  copyFileSync(
+    "THIRD_PARTY_NOTICES.md",
+    `${buildDir}/addon/THIRD_PARTY_NOTICES.md`,
+  );
 
   Logger.debug("[Build] Replacing");
   replaceString(buildTime);

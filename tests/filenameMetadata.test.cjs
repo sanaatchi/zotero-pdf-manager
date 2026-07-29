@@ -326,9 +326,8 @@ test("explicit Turkish thesis and report types are recognized", () => {
     },
   );
   assert.equal(
-    parseFilenameMetadata(
-      "Ayşe Kaya (2021) Kültür politikaları [rapor].pdf",
-    ).itemType,
+    parseFilenameMetadata("Ayşe Kaya (2021) Kültür politikaları [rapor].pdf")
+      .itemType,
     "report",
   );
 });
@@ -381,8 +380,7 @@ test("LibGen brace filenames provide initial book metadata", () => {
     ),
     {
       itemType: "book",
-      title:
-        "Dakikalar İçinde Felsefe — Anında Açıklanan 200 Temel Kavram",
+      title: "Dakikalar İçinde Felsefe — Anında Açıklanan 200 Temel Kavram",
       shortTitle: "Dakikalar İçinde Felsefe",
       authors: ["Marcus Weeks"],
       year: "2023",
@@ -594,9 +592,7 @@ test("APA archive filenames with ISBN and catalogue code are parsed", () => {
 test("title-author-place-year archive form requires a known place", () => {
   const { parseFilenameMetadata } = loadModule();
   assert.deepEqual(
-    parseFilenameMetadata(
-      "101 Kelam - Ramiz Abdullayev - Bakü - 2010.pdf",
-    ),
+    parseFilenameMetadata("101 Kelam - Ramiz Abdullayev - Bakü - 2010.pdf"),
     {
       itemType: "book",
       title: "101 Kelam",

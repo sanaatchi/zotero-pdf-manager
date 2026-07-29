@@ -1,10 +1,26 @@
+// @ajan: cursor · @etiket: katman-2, p1, multi-window, lifecycle
 import { config } from "../package.json";
-import { getString, initLocale } from "./utils/locale";
+import { initLocale } from "./utils/locale";
 import { registerPrefsScripts } from "./modules/preferenceScript";
 import { createZToolkit } from "./utils/ztoolkit";
 import Menu from "./modules/menu";
 import { PDFReconciler } from "./modules/pdfReconciler";
-// import { getPref } from "./utils/prefs";
+
+/** Open Zotero main windows that have UI loaded for this add-on. */
+const loadedWindows = new Set<Window>();
+
+function ensureProcessToolkit(): void {
+  if (!addon.data.ztoolkit) {
+    addon.data.ztoolkit = createZToolkit();
+  }
+}
+
+function ensureProcessReconciler(): void {
+  if (!addon.data.pdfReconciler) {
+    addon.data.pdfReconciler = new PDFReconciler();
+    addon.data.pdfReconciler.start();
+  }
+}
 
 async function onStartup() {
   await Promise.all([
@@ -13,48 +29,91 @@ async function onStartup() {
     Zotero.uiReadyPromise,
   ]);
   initLocale();
-  Zotero.PreferencePanes.register(
-    {
-      pluginID: config.addonID,
-      src: rootURI + "chrome/content/preferences.xhtml",
-      label: config.addonName,
-      image: `chrome://${config.addonRef}/content/icons/favicon.png`,
-      // defaultXUL: true,
-    }
+  ensureProcessToolkit();
+  Zotero.PreferencePanes.register({
+    pluginID: config.addonID,
+    src: rootURI + "chrome/content/preferences.xhtml",
+    label: config.addonName,
+    image: `chrome://${config.addonRef}/content/icons/favicon.png`,
+  });
+  // Process-wide reconciler once — not tied to any single window.
+  ensureProcessReconciler();
+  await Promise.all(
+    Zotero.getMainWindows().map((win) => onMainWindowLoad(win)),
   );
-  await onMainWindowLoad(window);
 }
 
 async function onMainWindowLoad(win: Window): Promise<void> {
-  addon.data.ztoolkit = createZToolkit();
-  addon.data.menu = new Menu();
-  addon.data.pdfReconciler?.dispose();
-  addon.data.pdfReconciler = new PDFReconciler();
-  addon.data.pdfReconciler.start();
+  if (loadedWindows.has(win)) return;
+  loadedWindows.add(win);
+  ensureProcessToolkit();
+  ensureProcessReconciler();
+
+  // Menu registers toolkit items once and refreshItemMenu updates all windows.
+  // Do not dispose/recreate on every window — that killed the previous window's UI.
+  if (!addon.data.menu) {
+    addon.data.menu = new Menu();
+  } else {
+    try {
+      addon.data.menu.refreshItemMenu();
+    } catch (e) {
+      ztoolkit.log("refreshItemMenu after window load failed", e);
+    }
+  }
 }
 
 async function onMainWindowUnload(win: Window): Promise<void> {
-  addon.data.pdfReconciler?.dispose();
-  addon.data.menu?.dispose();
-  ztoolkit.unregisterAll();
-  addon.data.dialog?.window?.close();
+  loadedWindows.delete(win);
+  // Keep reconciler + toolkit alive while other windows (or process) remain.
+  // Only tear down window-local dialog; process services end in onShutdown.
+  if (addon.data.dialog?.window === win) {
+    try {
+      addon.data.dialog.window.close();
+    } catch {
+      /* ignore */
+    }
+  }
+  if (loadedWindows.size === 0 && addon.data.menu) {
+    // No main window left — release menu notifier/timers, keep reconciler.
+    try {
+      addon.data.menu.dispose();
+    } catch (e) {
+      ztoolkit.log("menu dispose on last window unload failed", e);
+    }
+    addon.data.menu = undefined;
+  }
 }
 
 function onShutdown(): void {
-  addon.data.pdfReconciler?.dispose();
-  addon.data.menu?.dispose();
-  ztoolkit.unregisterAll();
-  addon.data.dialog?.window?.close();
-  // Remove addon object
+  loadedWindows.clear();
+  try {
+    addon.data.pdfReconciler?.dispose();
+  } catch (e) {
+    ztoolkit.log("reconciler dispose on shutdown failed", e);
+  }
+  addon.data.pdfReconciler = undefined;
+  try {
+    addon.data.menu?.dispose();
+  } catch (e) {
+    ztoolkit.log("menu dispose on shutdown failed", e);
+  }
+  addon.data.menu = undefined;
+  try {
+    ztoolkit.unregisterAll();
+  } catch {
+    /* ignore */
+  }
+  try {
+    addon.data.dialog?.window?.close();
+  } catch {
+    /* ignore */
+  }
   addon.data.alive = false;
-  delete Zotero[config.addonInstance];
+  delete (Zotero as any)[config.addonInstance];
 }
 
 /**
- * This function is just an example of dispatcher for Preference UI events.
- * Any operations should be placed in a function to keep this funcion clear.
- * @param type event type
- * @param data event data
+ * Preference UI dispatcher — keep thin; logic lives in preferenceScript.
  */
 async function onPrefsEvent(type: string, data: { [key: string]: any }) {
   switch (type) {
@@ -64,6 +123,11 @@ async function onPrefsEvent(type: string, data: { [key: string]: any }) {
     default:
       return;
   }
+}
+
+/** Test/surface helpers — not part of Zotero bootstrap contract. */
+export function __testLoadedWindowCount(): number {
+  return loadedWindows.size;
 }
 
 export default {

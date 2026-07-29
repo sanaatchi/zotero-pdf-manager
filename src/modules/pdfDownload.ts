@@ -1,13 +1,30 @@
+// @ajan: cursor · @etiket: katman-2, p2-4, pdfDownload, oa-downloads
 import { getString } from "../utils/locale";
 import { getPref } from "../utils/prefs";
 import { config } from "../../package.json";
-import { ALL_SOURCES, downloadAndAttach, ensureDOI, PDFSource } from "./pdfSources";
+import {
+  ALL_SOURCES,
+  downloadAndAttach,
+  ensureDOI,
+  PDFSource,
+  relocateImportedPdfToDownloads,
+} from "./pdfSources";
 import { maybeEmbedMetadata } from "./pdfMetadata";
 import {
   openDownloadReport,
   ItemReport,
   SourceAttempt,
 } from "./downloadReport";
+
+export {
+  resolveOaDownloadsDir,
+  buildOaDownloadBasename,
+  sanitizeDownloadBasename,
+  uniqueDownloadPath,
+  reserveUniqueDownloadPath,
+  releaseDownloadPathReservation,
+  oaPartialTempPath,
+} from "./oaDownloadPath";
 
 export const AUTOMATIC_ONLINE_SOURCE_IDS = [
   "doi",
@@ -44,7 +61,7 @@ function hasPDFAttachment(item: Zotero.Item): boolean {
 /**
  * Automatic OA-only fallback. Deliberately excludes Sci-Hub, LibGen,
  * institutional proxies, YÖKTEZ and ProQuest even when those manual sources
- * are enabled.
+ * are enabled. P2-4: successful downloads land under watch-root/downloads/.
  */
 export async function tryAutomaticOnlineSources(item: Zotero.Item) {
   if (hasPDFAttachment(item)) return null;
@@ -54,9 +71,14 @@ export async function tryAutomaticOnlineSources(item: Zotero.Item) {
     const source = ALL_SOURCES[id];
     if (!source?.isEnabled() || !source.supportsItem(item)) continue;
     try {
-      const attachment = await source.tryAttach(item);
+      let attachment = (await source.tryAttach(item)) as Zotero.Item | null;
       if (!attachment) continue;
-      await maybeEmbedMetadata(item, attachment as Zotero.Item);
+      if (id === "doi") {
+        attachment =
+          (await relocateImportedPdfToDownloads(item, attachment, "doi")) ||
+          attachment;
+      }
+      await maybeEmbedMetadata(item, attachment);
       return { attachment, source: id };
     } catch (e) {
       ztoolkit.log(`Automatic OA source ${id} failed`, e);
@@ -65,7 +87,10 @@ export async function tryAutomaticOnlineSources(item: Zotero.Item) {
   return null;
 }
 
-function notify(text: string, type: "default" | "success" | "fail" = "default") {
+function notify(
+  text: string,
+  type: "default" | "success" | "fail" = "default",
+) {
   new ztoolkit.ProgressWindow(config.addonName)
     .createLine({ text, type })
     .show();

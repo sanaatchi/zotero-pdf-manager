@@ -1,10 +1,14 @@
+// @ajan: cursor · @etiket: katman-2, p2-2, p2-6, prefs, thresholds, audit
 import { config } from "../../package.json";
 import { getString } from "../utils/locale";
 import { getPref, setPref } from "../utils/prefs";
 import { listenShortcut } from "../utils/shortcut";
 import { invalidateIndex } from "./folderIndex";
-import { normalizePeriodicMinutes } from "./pdfReconciler";
-import { openAutomationAuditReport } from "./automationAudit";
+import {
+  normalizeAddSettleMs,
+  normalizePeriodicMinutes,
+} from "./pdfReconciler";
+import { clearAuditEvents, openAutomationAuditReport } from "./automationAudit";
 
 export async function registerPrefsScripts(_window: Window) {
   if (!addon.data.prefs) {
@@ -21,12 +25,15 @@ export async function registerPrefsScripts(_window: Window) {
   ensureBooleanPref("autoRenameOnModifyDelayEnabled", false);
   ensureNumberPref("autoRenameOnModifyDelayMs", 0);
   ensureNumberPref("pdf.periodicMinutes", 30);
+  ensureNumberPref("pdf.autoAttachThreshold", 0.85);
+  ensureNumberPref("pdf.reviewThreshold", 0.6);
+  ensureNumberPref("pdf.addSettleMs", 1000);
+  ensureBooleanPref("pdf.saveOaToDownloads", true);
   ensureNumberPref("pdf.onlineMaxPerRun", 10);
   ensureNumberPref("pdf.orphanMaxPerRun", 10);
-  if (getPref("pdf.orphanMode") === "autoCreate") {
-    setPref("pdf.orphanMode", "report");
-  }
+  // Keep user-chosen orphanMode (including opt-in autoCreate). Default in prefs.js is report.
   migratePDFWatchRoots();
+  ensureBooleanPref("pdf.useLinkedAttachmentBase", true);
   updatePrefsUI();
   bindPrefEvents(_window);
 }
@@ -156,18 +163,22 @@ function bindPrefEvents(_window: Window) {
     .querySelector("#file-renaming-button")
     ?.addEventListener("command", () => {
       // @ts-ignore Zotero exposes this preferences controller at runtime.
-      _window.Zotero_Preferences.General.openFileRenamingDialog()
-    })
+      _window.Zotero_Preferences.General.openFileRenamingDialog();
+    });
   doc
     .querySelector("#choose-source-dir")
     ?.addEventListener("command", async () => {
       let oldPath = getPref("sourceDir") as string;
-      try { PathUtils.normalize(oldPath) } catch { oldPath = "" }
+      try {
+        PathUtils.normalize(oldPath);
+      } catch {
+        oldPath = "";
+      }
 
       // @ts-ignore _window
       const fp = new window.FilePicker();
       if (oldPath) {
-        fp.displayDirectory = PathUtils.normalize(oldPath)
+        fp.displayDirectory = PathUtils.normalize(oldPath);
       }
       fp.init(window, "Select Source Directory", fp.modeGetFolder);
       fp.appendFilters(fp.filterAll);
@@ -184,11 +195,15 @@ function bindPrefEvents(_window: Window) {
     .querySelector("#choose-dest-dir")
     ?.addEventListener("command", async () => {
       let oldPath = getPref("destDir") as string;
-      try { PathUtils.normalize(oldPath) } catch { oldPath  = ""}
+      try {
+        PathUtils.normalize(oldPath);
+      } catch {
+        oldPath = "";
+      }
       // @ts-ignore _window
       const fp = new window.FilePicker();
       if (oldPath) {
-        fp.displayDirectory = PathUtils.normalize(oldPath)
+        fp.displayDirectory = PathUtils.normalize(oldPath);
       }
       fp.init(window, "Select Destination Directory", fp.modeGetFolder);
       fp.appendFilters(fp.filterAll);
@@ -227,6 +242,12 @@ function bindPrefEvents(_window: Window) {
   doc
     .querySelector('[preference$=".pdf.watchRoots"]')
     ?.addEventListener("change", invalidateIndex);
+  doc
+    .querySelector('[preference$=".pdf.useLinkedAttachmentBase"]')
+    ?.addEventListener("command", invalidateIndex);
+  doc
+    .querySelector('[preference$=".pdf.useLinkedAttachmentBase"]')
+    ?.addEventListener("change", invalidateIndex);
   bindNumberPrefInput(
     "#auto-rename-on-modify-debounce-ms",
     "autoRenameOnModifyDebounceMs",
@@ -254,6 +275,14 @@ function bindPrefEvents(_window: Window) {
     setPref("pdf.periodicMinutes", normalized);
     addon.data.pdfReconciler?.start();
   });
+  const settleInput = doc.querySelector(
+    '[preference$=".pdf.addSettleMs"]',
+  ) as HTMLInputElement | null;
+  settleInput?.addEventListener("change", () => {
+    const normalized = normalizeAddSettleMs(settleInput.value);
+    settleInput.value = `${normalized}`;
+    setPref("pdf.addSettleMs", normalized);
+  });
   bindNumberPrefInput(
     '[preference$=".pdf.onlineMaxPerRun"]',
     "pdf.onlineMaxPerRun",
@@ -266,21 +295,26 @@ function bindPrefEvents(_window: Window) {
   doc
     .querySelector('[preference$=".pdf.autoOnAdd"]')
     ?.addEventListener("command", () => addon.data.pdfReconciler?.start());
-  doc
-    .querySelector("#pdf-run-reconcile")
-    ?.addEventListener("command", () => {
-      void addon.data.pdfReconciler?.run("manual");
-    });
-  doc
-    .querySelector("#pdf-open-audit")
-    ?.addEventListener("command", () => {
-      void openAutomationAuditReport();
-    });
-  doc
-    .querySelector("#pdf-create-orphans")
-    ?.addEventListener("command", () => {
-      void addon.data.pdfReconciler?.processOrphansNow();
-    });
+  doc.querySelector("#pdf-run-reconcile")?.addEventListener("command", () => {
+    void addon.data.pdfReconciler?.run("manual");
+  });
+  doc.querySelector("#pdf-open-audit")?.addEventListener("command", () => {
+    void openAutomationAuditReport();
+  });
+  doc.querySelector("#pdf-clear-audit")?.addEventListener("command", () => {
+    void (async () => {
+      await clearAuditEvents();
+      new ztoolkit.ProgressWindow(config.addonName, { closeTime: 4000 })
+        .createLine({
+          text: "Automation audit log cleared",
+          type: "success",
+        })
+        .show();
+    })();
+  });
+  doc.querySelector("#pdf-create-orphans")?.addEventListener("command", () => {
+    void addon.data.pdfReconciler?.processOrphansNow();
+  });
   doc
     .querySelector('[preference$=".moveWithoutDeleting"]')
     ?.addEventListener("command", () => {

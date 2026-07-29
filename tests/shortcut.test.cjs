@@ -36,15 +36,9 @@ function keyEvent(overrides = {}) {
 test("matches editable shortcut text against keydown events", () => {
   const { shortcutMatchesEvent } = loadShortcutModule();
 
+  assert.equal(shortcutMatchesEvent("Ctrl + M", keyEvent()), true);
   assert.equal(
-    shortcutMatchesEvent("Ctrl + M", keyEvent()),
-    true,
-  );
-  assert.equal(
-    shortcutMatchesEvent(
-      "Ctrl+Shift+M",
-      keyEvent({ shiftKey: true }),
-    ),
+    shortcutMatchesEvent("Ctrl+Shift+M", keyEvent({ shiftKey: true })),
     true,
   );
   assert.equal(
@@ -57,17 +51,11 @@ test("matches Turkish dotted and dotless I keyboard events", () => {
   const { shortcutMatchesEvent } = loadShortcutModule();
 
   assert.equal(
-    shortcutMatchesEvent(
-      "Ctrl + I",
-      keyEvent({ key: "ı", code: "KeyI" }),
-    ),
+    shortcutMatchesEvent("Ctrl + I", keyEvent({ key: "ı", code: "KeyI" })),
     true,
   );
   assert.equal(
-    shortcutMatchesEvent(
-      "Ctrl + İ",
-      keyEvent({ key: "i", code: "KeyI" }),
-    ),
+    shortcutMatchesEvent("Ctrl + İ", keyEvent({ key: "i", code: "KeyI" })),
     true,
   );
 });

@@ -1,3 +1,4 @@
+// @ajan: cursor · @etiket: katman-2, p2-5, orphanProcessor, watch-folder
 import { IndexedFile } from "./folderIndex";
 import { appendAuditEvent } from "./automationAudit";
 import {
@@ -15,11 +16,46 @@ declare const IOUtils: any;
 const SOURCE_PATH_PREFIX = "ZPDF-Source-Path:";
 const YOK_TEZ_NUMBER_PREFIX = "YÖK Tez No:";
 
+export type OrphanMode = "report" | "autoCreate" | "off";
+export type OrphanSource = "automatic" | "manual";
+
 export interface OrphanStats {
   found: number;
   created: number;
   planned: number;
   failed: number;
+  skipped: number;
+}
+
+/** Safe default is report — unknown values never escalate to autoCreate. */
+export function normalizeOrphanMode(value: unknown): OrphanMode {
+  const mode = String(value ?? "")
+    .trim()
+    .toLowerCase();
+  if (mode === "autocreate") return "autoCreate";
+  if (mode === "off") return "off";
+  if (mode === "report") return "report";
+  return "report";
+}
+
+/**
+ * Automatic periodic/startup autoCreate only when an identifier anchors the
+ * new item (watch-folder safety: no blind filename-only mass create).
+ * Manual button may create filename-titled drafts.
+ */
+export function shouldAutoCreateOrphan(
+  mode: OrphanMode,
+  source: OrphanSource,
+  anchors: { doi?: string; isbn?: string; thesisNumber?: string },
+): boolean {
+  if (mode !== "autoCreate") return false;
+  if (source === "manual") return true;
+  return Boolean(
+    (anchors.doi && anchors.doi.length > 5) ||
+    (anchors.isbn &&
+      (anchors.isbn.length === 10 || anchors.isbn.length === 13)) ||
+    (anchors.thesisNumber && /^\d{5,}$/.test(anchors.thesisNumber)),
+  );
 }
 
 export function normalizeOrphanTitle(filename: string): string {
@@ -47,8 +83,7 @@ export function extractDocumentIdentifiers(text: string) {
         .slice(0, 12)
         .split("")
         .reduce(
-          (total, digit, index) =>
-            total + Number(digit) * (index % 2 ? 3 : 1),
+          (total, digit, index) => total + Number(digit) * (index % 2 ? 3 : 1),
           0,
         );
       return (10 - (sum % 10)) % 10 === Number(value[12]);
@@ -114,7 +149,6 @@ async function identifiersFromPDF(path: string) {
   }
 }
 
-
 async function crossrefMetadata(doi: string): Promise<any | null> {
   if (!doi) return null;
   try {
@@ -152,15 +186,16 @@ async function createItemForFile(
   const thesisNumber = yokThesisNumber(file.name);
   if (thesisNumber) filenameMetadata.itemType = "thesis";
   const identifiers = await identifiersFromPDF(file.path);
-  const doi = identifiers.doi || filenameMetadata.doi || "";
-  const isbn = identifiers.isbn || filenameMetadata.isbn || "";
+  const doi = identifiers.doi || filenameMetadata.doi || file.doi || "";
+  const isbn = identifiers.isbn || filenameMetadata.isbn || file.isbn || "";
   const rawMetadata = await crossrefMetadata(doi);
   // Only trust Crossref if its title plausibly matches the filename — a DOI
   // scraped from the PDF body may belong to a cited work, not this document.
   const filenameTitle =
     filenameMetadata.title || normalizeOrphanTitle(file.name);
   const metadata =
-    rawMetadata && titlesRoughlyMatch(rawMetadata.title?.[0] || "", filenameTitle)
+    rawMetadata &&
+    titlesRoughlyMatch(rawMetadata.title?.[0] || "", filenameTitle)
       ? rawMetadata
       : null;
   if (rawMetadata && !metadata) {
@@ -242,8 +277,7 @@ async function createItemForFile(
     });
     if (!attachment) throw new Error("Linked attachment was not created");
     if (thesisNumber) {
-      const coverMetadata =
-        await thesisCoverMetadataFromAttachment(attachment);
+      const coverMetadata = await thesisCoverMetadataFromAttachment(attachment);
       applyFilenameMetadata(item, coverMetadata);
       safeSetField(item, "title", coverMetadata.title);
       if (coverMetadata.authors?.length) {
@@ -286,7 +320,9 @@ async function knownSourcePaths(items: Zotero.Item[]) {
       const extra = String(item.getField("extra") || "");
       for (const line of extra.split(/\r?\n/)) {
         if (line.startsWith(SOURCE_PATH_PREFIX)) {
-          paths.add(canonicalPath(line.slice(SOURCE_PATH_PREFIX.length).trim()));
+          paths.add(
+            canonicalPath(line.slice(SOURCE_PATH_PREFIX.length).trim()),
+          );
         }
       }
       for (const attachmentID of item.getAttachments()) {
@@ -309,20 +345,71 @@ export async function processOrphanPDFs(
   limit: number,
   dryRun = false,
   run = "manual",
+  source: OrphanSource = "manual",
 ): Promise<OrphanStats> {
-  const stats: OrphanStats = { found: 0, created: 0, planned: 0, failed: 0 };
-  if (mode === "off") return stats;
+  const stats: OrphanStats = {
+    found: 0,
+    created: 0,
+    planned: 0,
+    failed: 0,
+    skipped: 0,
+  };
+  const orphanMode = normalizeOrphanMode(mode);
+  if (orphanMode === "off") return stats;
 
   const known = await knownSourcePaths(items);
   const orphans = files.filter((file) => !known.has(canonicalPath(file.path)));
   stats.found = orphans.length;
-  if (mode !== "autoCreate") {
+
+  if (orphanMode !== "autoCreate") {
     ztoolkit.log(`Orphan PDF report: ${orphans.length} file(s)`);
+    if (orphans.length) {
+      await appendAuditEvent({
+        run,
+        action: "orphan-report",
+        outcome: "info",
+        detail: `${orphans.length} orphan PDF(s); mode=${orphanMode}`,
+      });
+    }
     return stats;
   }
 
   const boundedLimit = Math.max(0, Math.min(100, Math.floor(limit) || 10));
   for (const file of orphans.slice(0, boundedLimit)) {
+    const thesisNumber = yokThesisNumber(file.name);
+    let doi = file.doi || "";
+    let isbn = file.isbn || "";
+    if (
+      source === "automatic" &&
+      !shouldAutoCreateOrphan(orphanMode, source, {
+        doi,
+        isbn,
+        thesisNumber: thesisNumber || undefined,
+      })
+    ) {
+      const peeked = await identifiersFromPDF(file.path);
+      doi = peeked.doi || doi;
+      isbn = peeked.isbn || isbn;
+    }
+    if (
+      !shouldAutoCreateOrphan(orphanMode, source, {
+        doi,
+        isbn,
+        thesisNumber: thesisNumber || undefined,
+      })
+    ) {
+      stats.skipped++;
+      await appendAuditEvent({
+        run,
+        action: "orphan-skip",
+        outcome: "review",
+        path: file.path,
+        title: normalizeOrphanTitle(file.name),
+        detail: "Automatic autoCreate requires DOI, ISBN, or YÖK thesis number",
+      });
+      continue;
+    }
+
     if (dryRun) {
       stats.planned++;
       await appendAuditEvent({

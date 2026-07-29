@@ -22,9 +22,13 @@ export function escapeXml(value: string): string {
   return String(value).replace(
     /[<>&'"]/g,
     (c) =>
-      ({ "<": "&lt;", ">": "&gt;", "&": "&amp;", "'": "&apos;", '"': "&quot;" })[
-        c
-      ] as string,
+      ({
+        "<": "&lt;",
+        ">": "&gt;",
+        "&": "&amp;",
+        "'": "&apos;",
+        '"': "&quot;",
+      })[c] as string,
   );
 }
 
@@ -130,7 +134,7 @@ function embedXmpMetadata(
     xmpSimple("xmp:MetadataDate", now) +
     xmpSimple("xmp:ModifyDate", now);
 
-  const xmp = `<?xpacket begin="﻿" id="W5M0MpCehiHzreSzNTczkc9d"?>
+  const xmp = `<?xpacket begin="\uFEFF" id="W5M0MpCehiHzreSzNTczkc9d"?>
 <x:xmpmeta xmlns:x="adobe:ns:meta/">
  <rdf:RDF xmlns:rdf="http://www.w3.org/1999/02/22-rdf-syntax-ns#">
   <rdf:Description rdf:about=""
@@ -544,7 +548,9 @@ async function hasEmbeddedMetadataMarker(
     const xmpBytes = stream?.contents ?? stream?.getContents?.();
     if (!xmpBytes) return false;
     const xmpText = new TextDecoder("utf-8").decode(xmpBytes);
-    return xmpText.includes(`<xmp:CreatorTool>${escapeXml(config.addonName)}</xmp:CreatorTool>`);
+    return xmpText.includes(
+      `<xmp:CreatorTool>${escapeXml(config.addonName)}</xmp:CreatorTool>`,
+    );
   } catch {
     // Can't read it (encrypted, corrupt, missing) — treat as "not embedded"
     // so it surfaces in the failed/missing run rather than being silently
@@ -554,7 +560,10 @@ async function hasEmbeddedMetadataMarker(
 }
 
 function collectSelectedPdfPairs() {
-  const pairs = new Map<number, { item: Zotero.Item; attachment: Zotero.Item }>();
+  const pairs = new Map<
+    number,
+    { item: Zotero.Item; attachment: Zotero.Item }
+  >();
   for (const selected of ZoteroPane.getSelectedItems()) {
     if (selected.isAttachment() && selected.parentItemID) {
       const parent =
@@ -643,7 +652,9 @@ async function runEmbedMetadata(onlyMissingOrFailed: boolean) {
   // attachment succeeded (or vice versa). The item is only tagged
   // #metadata-embedded if EVERY attachment processed for it this run
   // succeeded.
-  for (const { item, allSucceeded } of aggregateItemOutcomes(results).values()) {
+  for (const { item, allSucceeded } of aggregateItemOutcomes(
+    results,
+  ).values()) {
     await setEmbedStatusTag(item, allSucceeded);
   }
   const skippedNote =

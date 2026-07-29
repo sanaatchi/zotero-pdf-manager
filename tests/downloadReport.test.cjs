@@ -52,7 +52,10 @@ test("reportToText renders one block per item with title and outcome", () => {
   assert.match(text, /\[Eklendi\] Added Item/);
   assert.match(text, /doi: eklendi/);
   assert.match(text, /\[Başarısız\] Failed Item <script>/);
-  assert.match(text, /scihub: reddedildi \(içerik uyuşmadı\) \(yazar uyuşmuyor\)/);
+  assert.match(
+    text,
+    /scihub: reddedildi \(içerik uyuşmadı\) \(yazar uyuşmuyor\)/,
+  );
   assert.match(text, /\[Atlandı\] Skipped Item/);
   assert.match(text, /Zaten PDF eki var/);
 });

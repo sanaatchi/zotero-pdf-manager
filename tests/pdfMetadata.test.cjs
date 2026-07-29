@@ -42,7 +42,10 @@ test("xmpAlt omits the element entirely for an empty value", () => {
 test("xmpAlt wraps a value in rdf:Alt/rdf:li with escaping", () => {
   const { xmpAlt } = loadModule();
   const xml = xmpAlt("dc:title", "A & B");
-  assert.match(xml, /<dc:title><rdf:Alt><rdf:li xml:lang="x-default">A &amp; B<\/rdf:li><\/rdf:Alt><\/dc:title>/);
+  assert.match(
+    xml,
+    /<dc:title><rdf:Alt><rdf:li xml:lang="x-default">A &amp; B<\/rdf:li><\/rdf:Alt><\/dc:title>/,
+  );
 });
 
 test("xmpBag omits the element for an empty array", () => {
@@ -53,7 +56,10 @@ test("xmpBag omits the element for an empty array", () => {
 test("xmpBag renders every item as an escaped rdf:li inside rdf:Bag", () => {
   const { xmpBag } = loadModule();
   const xml = xmpBag("dc:subject", ["bilim", "AT&T"]);
-  assert.match(xml, /<dc:subject><rdf:Bag><rdf:li>bilim<\/rdf:li><rdf:li>AT&amp;T<\/rdf:li><\/rdf:Bag><\/dc:subject>/);
+  assert.match(
+    xml,
+    /<dc:subject><rdf:Bag><rdf:li>bilim<\/rdf:li><rdf:li>AT&amp;T<\/rdf:li><\/rdf:Bag><\/dc:subject>/,
+  );
 });
 
 test("xmpSeq omits the element for an empty array", () => {
@@ -64,7 +70,10 @@ test("xmpSeq omits the element for an empty array", () => {
 test("xmpSeq renders items in order inside rdf:Seq", () => {
   const { xmpSeq } = loadModule();
   const xml = xmpSeq("dc:creator", ["Yazar Bir", "Yazar İki"]);
-  assert.match(xml, /<dc:creator><rdf:Seq><rdf:li>Yazar Bir<\/rdf:li><rdf:li>Yazar İki<\/rdf:li><\/rdf:Seq><\/dc:creator>/);
+  assert.match(
+    xml,
+    /<dc:creator><rdf:Seq><rdf:li>Yazar Bir<\/rdf:li><rdf:li>Yazar İki<\/rdf:li><\/rdf:Seq><\/dc:creator>/,
+  );
 });
 
 test("xmpSimple omits the element for an empty value", () => {
@@ -74,7 +83,10 @@ test("xmpSimple omits the element for an empty value", () => {
 
 test("xmpSimple renders a single escaped value", () => {
   const { xmpSimple } = loadModule();
-  assert.match(xmpSimple("pdf:Producer", "Alan & Co"), /<pdf:Producer>Alan &amp; Co<\/pdf:Producer>/);
+  assert.match(
+    xmpSimple("pdf:Producer", "Alan & Co"),
+    /<pdf:Producer>Alan &amp; Co<\/pdf:Producer>/,
+  );
 });
 
 test("isSystemTag rejects hash-prefixed automation tags", () => {

@@ -60,7 +60,10 @@ test("DOI or ISBN conflicts are critical metadata mismatches", () => {
   );
 
   assert.equal(result.status, "mismatch");
-  assert.equal(result.details.some((detail) => detail.includes("DOI uyuşmuyor")), true);
+  assert.equal(
+    result.details.some((detail) => detail.includes("DOI uyuşmuyor")),
+    true,
+  );
 });
 
 test("missing embedded PDF fields produce a warning, not a false match", () => {
@@ -109,6 +112,9 @@ test("isEncryptedPdfError recognizes pdf-lib's encrypted-document message", () =
 
 test("isEncryptedPdfError does not misfire on unrelated errors", () => {
   const { isEncryptedPdfError } = loadModule();
-  assert.equal(isEncryptedPdfError(new Error("Unexpected token in PDF stream")), false);
+  assert.equal(
+    isEncryptedPdfError(new Error("Unexpected token in PDF stream")),
+    false,
+  );
   assert.equal(isEncryptedPdfError(new Error("File not found")), false);
 });
