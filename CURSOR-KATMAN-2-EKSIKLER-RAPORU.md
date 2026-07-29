@@ -14,20 +14,19 @@
 
 **Doğrulama:** **180/180** · lint · typecheck · (release sonrası URL)
 
-| Madde                     | Durum | Not                                                                                      |
-| ------------------------- | ----- | ---------------------------------------------------------------------------------------- |
-| Review-source cascade     | ✅    | `oaCascade` + `AttachStoppedError` — zincir durur                                        |
-| Cascade davranış testi    | ✅    | `tests/pdfCascade.test.cjs`                                                              |
-| `#pdf-quarantine` etiketi | ✅    | unverifiable/erase-failed; match temizler; reversible audit listesinde                   |
-| Manuel Cancel UI          | ✅    | prefs ProgressWindow + `#pdf-cancel-reconcile` → `reconciler.cancel()`                   |
-| Add-notifier cancellation | ✅    | flush → `runAbort` + signal’lı performItems/index                                        |
-| Public patch              | 🟡    | v1.0.31 yayın sırada                                                                     |
-| Çoklu pencere checklist   | 🟡    | [`ZOTERO-KABUL-CHECKLIST.md`](ZOTERO-KABUL-CHECKLIST.md)                                 |
+| Madde                     | Durum | Not                                                                    |
+| ------------------------- | ----- | ---------------------------------------------------------------------- |
+| Review-source cascade     | ✅    | `oaCascade` + `AttachStoppedError` — zincir durur                      |
+| Cascade davranış testi    | ✅    | `tests/pdfCascade.test.cjs`                                            |
+| `#pdf-quarantine` etiketi | ✅    | unverifiable/erase-failed; match temizler; reversible audit listesinde |
+| Manuel Cancel UI          | ✅    | prefs ProgressWindow + `#pdf-cancel-reconcile` → `reconciler.cancel()` |
+| Add-notifier cancellation | ✅    | flush → `runAbort` + signal’lı performItems/index                      |
+| Public patch              | 🟡    | v1.0.31 yayın sırada                                                   |
+| Çoklu pencere checklist   | 🟡    | [`ZOTERO-KABUL-CHECKLIST.md`](ZOTERO-KABUL-CHECKLIST.md)               |
 
 ---
 
 ## Codex derin P2 kapanış doğrulaması — 2026-07-29 (arşiv)
-
 
 **Karar:** `request changes`
 
