@@ -2,9 +2,34 @@
 /**
  * Atomic JSON persistence for Zotero's IOUtils sandbox.
  * Write to a sibling temp file, then move over the target (replace).
+ *
+ * IO is injectable for crash/quarantine unit tests outside Zotero.
  */
 
+export type AtomicJsonIO = {
+  exists: (path: string) => Promise<boolean>;
+  readUTF8: (path: string) => Promise<string>;
+  writeUTF8: (path: string, text: string) => Promise<void>;
+  move: (from: string, to: string) => Promise<void>;
+  remove: (path: string) => Promise<void>;
+};
+
 declare const IOUtils: any;
+
+const defaultIO: AtomicJsonIO = {
+  exists: (p) => IOUtils.exists(p),
+  readUTF8: (p) => IOUtils.readUTF8(p),
+  writeUTF8: (p, t) => IOUtils.writeUTF8(p, t),
+  move: (a, b) => IOUtils.move(a, b),
+  remove: (p) => IOUtils.remove(p),
+};
+
+let io: AtomicJsonIO = defaultIO;
+
+/** @internal */
+export function __setAtomicJsonIOForTests(next: AtomicJsonIO | null): void {
+  io = next || defaultIO;
+}
 
 export type AtomicJsonEnvelope<T> = {
   schemaVersion: number;
@@ -19,11 +44,11 @@ export async function writeUtf8Atomic(
 ): Promise<void> {
   const tmp = `${path}.tmp-${Date.now()}-${Math.random().toString(36).slice(2, 10)}`;
   try {
-    await IOUtils.writeUTF8(tmp, text);
-    await IOUtils.move(tmp, path);
+    await io.writeUTF8(tmp, text);
+    await io.move(tmp, path);
   } catch (e) {
     try {
-      await IOUtils.remove(tmp);
+      await io.remove(tmp);
     } catch {
       /* best-effort */
     }
@@ -46,13 +71,13 @@ export async function readJsonOrQuarantine(
   path: string,
 ): Promise<unknown | null> {
   try {
-    if (!(await IOUtils.exists(path))) return null;
-    const raw = await IOUtils.readUTF8(path);
+    if (!(await io.exists(path))) return null;
+    const raw = await io.readUTF8(path);
     return JSON.parse(raw);
   } catch (e) {
     try {
-      if (await IOUtils.exists(path)) {
-        await IOUtils.move(path, `${path}.corrupt-${Date.now()}`);
+      if (await io.exists(path)) {
+        await io.move(path, `${path}.corrupt-${Date.now()}`);
       }
     } catch {
       /* quarantine best-effort */

@@ -12,7 +12,7 @@ export const MAX_INDEX_FILES = 99999;
 export const MAX_WALK_DEPTH = 8;
 export const INDEX_SCHEMA_VERSION = 1;
 
-export type IndexTruncateReason = "maxFiles" | "maxDepth" | null;
+export type IndexTruncateReason = "maxFiles" | "maxDepth" | "ioError" | null;
 
 export interface IndexBuildMeta {
   incomplete: boolean;
@@ -44,6 +44,32 @@ export function isFolderIndexComplete(
 /** @internal test helper — simulate a truncated scan result. */
 export function __setLastIndexBuildMetaForTests(meta: IndexBuildMeta): void {
   lastBuildMeta = { ...meta };
+}
+
+type FolderIO = {
+  getChildren: (dir: string) => Promise<string[]>;
+  stat: (
+    path: string,
+  ) => Promise<{ type: string; lastModified?: number; size?: number }>;
+};
+
+const defaultFolderIO: FolderIO = {
+  getChildren: (dir) => IOUtils.getChildren(dir),
+  stat: (path) => IOUtils.stat(path),
+};
+
+let folderIO: FolderIO = defaultFolderIO;
+
+/** @internal — inject IO for walker incomplete/IO-error tests. */
+export function __setFolderIOForTests(io: FolderIO | null): void {
+  folderIO = io || defaultFolderIO;
+}
+
+/** @internal — expose mutation queue sequencing for tests. */
+export function __enqueueIndexMutationForTests<T>(
+  fn: () => Promise<T>,
+): Promise<T> {
+  return enqueueIndexMutation(fn);
 }
 
 /** Serialize all index mutations in-process (build + registerDownloadedFile). */
@@ -289,9 +315,11 @@ async function walk(
   }
   let children: string[] = [];
   try {
-    children = await IOUtils.getChildren(dir);
+    children = await folderIO.getChildren(dir);
   } catch {
-    return; // unreadable folder
+    state.incomplete = true;
+    if (!state.truncateReason) state.truncateReason = "ioError";
+    return;
   }
   for (const child of children) {
     if (out.length >= MAX_INDEX_FILES) {
@@ -300,7 +328,7 @@ async function walk(
       return;
     }
     try {
-      const info = await IOUtils.stat(child);
+      const info = await folderIO.stat(child);
       if (info.type === "directory") {
         await walk(child, depth + 1, out, state);
       } else if (/\.pdf$/i.test(child)) {
@@ -311,7 +339,8 @@ async function walk(
         });
       }
     } catch {
-      /* skip unreadable entry */
+      state.incomplete = true;
+      if (!state.truncateReason) state.truncateReason = "ioError";
     }
   }
 }
@@ -321,15 +350,21 @@ async function walk(
  * in-memory cache; pass `force` to rescan immediately. Unchanged files (same
  * mtime) reuse their cached entry so derived data is not recomputed.
  */
-export async function buildIndex(force = false): Promise<IndexedFile[]> {
-  return enqueueIndexMutation(() => buildIndexLocked(force));
+export async function buildIndex(
+  force = false,
+  rootsOverride?: string[],
+): Promise<IndexedFile[]> {
+  return enqueueIndexMutation(() => buildIndexLocked(force, rootsOverride));
 }
 
-async function buildIndexLocked(force = false): Promise<IndexedFile[]> {
+async function buildIndexLocked(
+  force = false,
+  rootsOverride?: string[],
+): Promise<IndexedFile[]> {
   const now = Date.now();
   if (!force && memCache && now - memCacheAt < 60000) return memCache;
 
-  const roots = getWatchRoots();
+  const roots = rootsOverride ?? getWatchRoots();
   const persisted = await loadPersisted();
   const discovered: WalkOut = [];
   const walkState: {

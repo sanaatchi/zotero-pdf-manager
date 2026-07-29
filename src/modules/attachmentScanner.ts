@@ -1,5 +1,7 @@
+// @ajan: cursor · @etiket: katman-2, p2, attachmentScanner, safe-regex
 import { config } from "../../package.json";
 import { getPref } from "../utils/prefs";
+import { compileUserRegex, safeRegexTest } from "../utils/safeRegex";
 import { getWatchRoots } from "./folderIndex";
 
 declare const IOUtils: any;
@@ -64,12 +66,12 @@ export async function scanAttachmentState(
     .map((mask) => mask.trim())
     .filter(Boolean)
     .flatMap((mask) => {
-      try {
-        return [new RegExp(mask, "i")];
-      } catch {
-        ztoolkit.log("Invalid Attachment Scanner ignore mask", mask);
+      const re = compileUserRegex(mask, "i");
+      if (!re) {
+        ztoolkit.log("Invalid or unsafe Attachment Scanner ignore mask", mask);
         return [];
       }
+      return [re];
     });
 
   for (const attachmentID of item.getAttachments()) {
@@ -101,7 +103,7 @@ export async function scanAttachmentState(
         // detection; a broken link is a #broken problem, not a duplicate.
         const type = attachment.attachmentContentType || "unknown";
         const filename = attachment.attachmentFilename || "";
-        if (!ignoredMasks.some((regex) => regex.test(filename))) {
+        if (!ignoredMasks.some((regex) => safeRegexTest(regex, filename))) {
           if (contentTypes.has(type)) duplicate = true;
           contentTypes.add(type);
         }

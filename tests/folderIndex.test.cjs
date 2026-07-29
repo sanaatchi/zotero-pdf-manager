@@ -142,3 +142,98 @@ test("folder index caps align with 99_999 contract and expose incomplete meta", 
   });
   assert.equal(isFolderIndexComplete(), true);
 });
+
+test("unreadable getChildren marks index incomplete via ioError", async () => {
+  const {
+    buildIndex,
+    getLastIndexBuildMeta,
+    isFolderIndexComplete,
+    __setFolderIOForTests,
+    invalidateIndex,
+  } = loadModule();
+
+  globalThis.IOUtils = {
+    exists: async () => false,
+    readUTF8: async () => "[]",
+    writeUTF8: async () => {},
+    move: async () => {},
+    remove: async () => {},
+  };
+  globalThis.PathUtils = { join: (...parts) => parts.join("/") };
+  globalThis.Zotero = { DataDirectory: { dir: "/tmp/zotero-data" } };
+  globalThis.ztoolkit = { log: () => {} };
+
+  __setFolderIOForTests({
+    getChildren: async () => {
+      throw new Error("permission denied");
+    },
+    stat: async () => ({ type: "directory" }),
+  });
+  invalidateIndex();
+  await buildIndex(true, ["D:\\Papers"]);
+  const meta = getLastIndexBuildMeta();
+  assert.equal(meta.incomplete, true);
+  assert.equal(meta.truncateReason, "ioError");
+  assert.equal(isFolderIndexComplete(), false);
+  __setFolderIOForTests(null);
+});
+
+test("stat error on a child marks incomplete while other root still scanned", async () => {
+  const {
+    buildIndex,
+    getLastIndexBuildMeta,
+    __setFolderIOForTests,
+    invalidateIndex,
+  } = loadModule();
+
+  globalThis.IOUtils = {
+    exists: async () => false,
+    readUTF8: async () => "[]",
+    writeUTF8: async () => {},
+    move: async () => {},
+    remove: async () => {},
+  };
+  globalThis.PathUtils = { join: (...parts) => parts.join("/") };
+  globalThis.Zotero = { DataDirectory: { dir: "/tmp/zotero-data" } };
+  globalThis.ztoolkit = { log: () => {} };
+
+  __setFolderIOForTests({
+    getChildren: async (dir) => {
+      if (dir === "D:\\Good") return ["D:\\Good\\a.pdf"];
+      if (dir === "D:\\Bad") return ["D:\\Bad\\x.pdf"];
+      return [];
+    },
+    stat: async (p) => {
+      if (p.includes("Bad")) throw new Error("stat fail");
+      if (p.endsWith(".pdf")) {
+        return { type: "file", lastModified: 1, size: 10 };
+      }
+      return { type: "directory" };
+    },
+  });
+  invalidateIndex();
+  const files = await buildIndex(true, ["D:\\Good", "D:\\Bad"]);
+  assert.equal(files.length, 1);
+  assert.equal(getLastIndexBuildMeta().incomplete, true);
+  assert.equal(getLastIndexBuildMeta().truncateReason, "ioError");
+  __setFolderIOForTests(null);
+});
+
+test("index mutation queue runs tasks sequentially", async () => {
+  const { __enqueueIndexMutationForTests } = loadModule();
+  const order = [];
+  const a = __enqueueIndexMutationForTests(async () => {
+    order.push("a-start");
+    await new Promise((r) => setTimeout(r, 20));
+    order.push("a-end");
+    return 1;
+  });
+  const b = __enqueueIndexMutationForTests(async () => {
+    order.push("b-start");
+    order.push("b-end");
+    return 2;
+  });
+  const [ra, rb] = await Promise.all([a, b]);
+  assert.deepEqual(order, ["a-start", "a-end", "b-start", "b-end"]);
+  assert.deepEqual([ra, rb], [1, 2]);
+});

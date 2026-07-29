@@ -243,22 +243,49 @@ function scoreText(item: Zotero.Item, rawText: string): number {
 
 /**
  * After a PDF is attached, read its text and confirm it matches the item's
- * metadata. Fails "open" (returns true) when text cannot be extracted so we
- * never block a legitimately scanned/borderline PDF.
+ * metadata.
+ *
+ * - match: extractable text supports the item
+ * - mismatch: extractable text conflicts — reject
+ * - unverifiable: no/short text or PDFWorker error — do not auto-accept
+ * - skipped: validation pref off
  */
-async function contentMatches(
+export type ContentValidation =
+  "match" | "mismatch" | "unverifiable" | "skipped";
+
+export async function validateAttachmentContent(
   item: Zotero.Item,
   attachmentID: number,
-): Promise<boolean> {
-  if (!getPref("pdf.validateContent")) return true;
+): Promise<ContentValidation> {
+  if (!getPref("pdf.validateContent")) return "skipped";
   try {
     const res = await (Zotero as any).PDFWorker.getFullText(attachmentID, 5);
     const text: string = res?.text || "";
-    if (text.replace(/\s/g, "").length < 50) return true; // no extractable text
-    return scoreText(item, text) >= 0.6;
+    if (text.replace(/\s/g, "").length < 50) return "unverifiable";
+    return scoreText(item, text) >= 0.6 ? "match" : "mismatch";
   } catch (e) {
     ztoolkit.log("content validation error", e);
-    return true;
+    return "unverifiable";
+  }
+}
+
+/** @deprecated Prefer validateAttachmentContent — boolean collapses unverifiable. */
+export async function contentMatches(
+  item: Zotero.Item,
+  attachmentID: number,
+): Promise<boolean> {
+  const verdict = await validateAttachmentContent(item, attachmentID);
+  return verdict === "match" || verdict === "skipped";
+}
+
+async function tagItem(item: Zotero.Item, tag: string): Promise<void> {
+  try {
+    const tags = (item.getTags() as { tag: string }[]) || [];
+    if (tags.some((entry) => entry.tag === tag)) return;
+    item.addTag(tag);
+    await item.saveTx();
+  } catch (e) {
+    ztoolkit.log("tagItem failed", tag, e);
   }
 }
 
@@ -382,13 +409,18 @@ export async function downloadAndAttach(
   }
 
   if (opts.validate !== false) {
-    const ok = await contentMatches(item, attachment.id);
-    if (!ok) {
-      ztoolkit.log(`Rejected PDF (metadata mismatch) for ${item.id}`);
+    const verdict = await validateAttachmentContent(item, attachment.id);
+    if (verdict === "match" || verdict === "skipped") {
+      return attachment;
+    }
+    if (verdict === "unverifiable") {
+      ztoolkit.log(`Unverifiable PDF content for ${item.id} — #pdf-review`);
+      await tagItem(item, "#pdf-review");
+      // Auto-attach path must not keep unverifiable PDFs as success.
       try {
         await attachment.eraseTx();
       } catch (e) {
-        ztoolkit.log("erase rejected attachment failed", e);
+        ztoolkit.log("erase unverifiable attachment failed", e);
       }
       if (
         persistedPath &&
@@ -402,6 +434,24 @@ export async function downloadAndAttach(
       }
       return null;
     }
+    // mismatch
+    ztoolkit.log(`Rejected PDF (metadata mismatch) for ${item.id}`);
+    try {
+      await attachment.eraseTx();
+    } catch (e) {
+      ztoolkit.log("erase rejected attachment failed", e);
+    }
+    if (
+      persistedPath &&
+      shouldCleanupPersistedDownload(finalCreatedByThisRun)
+    ) {
+      try {
+        await IOUtils.remove(persistedPath);
+      } catch {
+        /* best-effort */
+      }
+    }
+    return null;
   }
   return attachment;
 }

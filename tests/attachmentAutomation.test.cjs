@@ -290,7 +290,12 @@ test("invalid filename rules are logged and do not abort modify renaming", async
 
   assert.deepEqual(attachment.calls.rename, ["valid-result.pdf"]);
   assert.ok(
-    harness.logs.some((entry) => entry[0] === "Invalid filename matching rule"),
+    harness.logs.some(
+      (entry) =>
+        String(entry[0] || "").includes(
+          "Invalid or unsafe filename matching rule",
+        ) || String(entry[0] || "").includes("Invalid filename matching rule"),
+    ),
   );
   menu.dispose();
 });

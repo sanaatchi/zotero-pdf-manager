@@ -1,4 +1,4 @@
-<!-- @ajan: cursor · @etiket: katman-2, derin-analiz, eksik-raporu, p1-fix -->
+<!-- @ajan: cursor · @etiket: katman-2, eksik-raporu, p1-p2 -->
 
 # Cursor — Katman 2 Eksikler Raporu
 
@@ -7,15 +7,142 @@
 > Rule: `.cursor/rules/katman-eksik-raporu.mdc`
 
 **Tarih:** 2026-07-29  
-**Kapsam:** `zotero-pdf-manager` · v1.0.27  
-**Durum:** P1 kod + public `v1.0.27` yayını kapandı. Kalan: gerçek Zotero
-iki-pencere kabulü; P2 (fail-open, ReDoS, CI, Sci-Hub politika).
+**Kapsam:** `zotero-pdf-manager` · v1.0.28  
+**Durum:** P1 kapanış maddeleri (IO incomplete, publish arg-array/provenance,
+davranış testleri) + P2 (içerik üçlü durum, ReDoS, CI, Sci-Hub politika) kodlandı.
+Gerçek Zotero iki-pencere kabulü ve `v1.0.28` yayını sırada.
 
-## Güncel durum — 2026-07-29 (P1 follow-up)
+## Güncel durum — 2026-07-29 (P1 kapanış + P2)
 
-**Doğrulama:** **159/159 test** ✅ · lint:check ✅ · typecheck ✅
+**Doğrulama:** **165/165 test** ✅ · lint:check ✅ · typecheck ✅
 
-| Madde                          | Durum | Not                                                                                               |
+| Madde                          | Durum | Not                                                      |
+| ------------------------------ | ----- | -------------------------------------------------------- |
+| İndeks IO → incomplete         | ✅    | `ioError`; walker enjeksiyon testleri                    |
+| Publish arg-array + provenance | ✅    | `execFileSync`; `build/provenance.json`; notes tek argv  |
+| Davranış testleri              | ✅    | atomic crash/quarantine, index queue, IO incomplete      |
+| Çoklu pencere (manuel)         | 🟡    | [`ZOTERO-KABUL-CHECKLIST.md`](ZOTERO-KABUL-CHECKLIST.md) |
+| Public `v1.0.28`               | ❌    | bump hazır; `gh-release` sırada                          |
+| Fail-open PDF doğrulama        | ✅ P2 | `match\|mismatch\|unverifiable` → review/reject          |
+| ReDoS                          | ✅ P2 | `safeRegex.ts` + scanner/menu                            |
+| CI                             | ✅ P2 | `.github/workflows/ci.yml`                               |
+| Sci-Hub/LibGen politika        | ✅ P2 | default `sourceOrder` dışı + README uyarı                |
+
+---
+
+## Codex derin yeniden doğrulama — 2026-07-29 (güncel / arşiv notu)
+
+**Karar:** `request changes` — public yayın geçerli, fakat “P1 bitti” kabulü
+için aşağıdaki iki uygulama açığı ve davranış testleri kapatılmalı.
+
+**Bağımsız doğrulama:** **159/159 test** ✅ · TypeScript ✅ · Prettier ✅ ·
+ESLint ✅. HEAD/origin `0dc4e989`, analiz başında çalışma ağacı temizdi. GitHub
+API ile public
+[`v1.0.27`](https://github.com/sanaatchi/zotero-pdf-manager-releases/releases/tag/v1.0.27)
+ve rolling `update` release’i canlı doğrulandı. İndirilen **645.142 bayt** XPI
+için manifest SHA-512 değeri ile gerçek dosya hash’i birebir eşleşti.
+
+| Madde                          | Durum | Derin doğrulama sonucu                                               |
+| ------------------------------ | ----- | -------------------------------------------------------------------- |
+| OA cleanup sahipliği           | 🟡    | Kod doğru; gerçek IO yarış testi yerine boolean helper testi var     |
+| İndeks incomplete → otomasyon  | ❌    | Cap/depth kapanıyor; okunamayan klasör/entry sessizce “complete”     |
+| İndeks mutasyon kuyruğu        | 🟡    | Seri kuyruk var; gerçek concurrent build/register testi yok          |
+| Atomik JSON crash recovery     | 🟡    | Atomik replace var; hata enjeksiyonu/quarantine kabul testi yok      |
+| Çoklu pencere lifecycle        | 🟡    | Kod düzeltildi; gerçek Zotero iki-pencere kabulü yok                 |
+| Public `v1.0.27` artefact/hash | ✅    | Versioned link, update channel ve indirilen XPI SHA-512 doğrulandı   |
+| Release shell/provenance       | ❌    | Kullanıcı girdisi shell-string; artefact→source commit bağı kayıtsız |
+| Fail-open / ReDoS / CI         | ❌ P2 | Önceki P2 maddeleri açık                                             |
+
+### P1 — Okunamayan indeks bölümü otomasyonu fail-open bırakıyor
+
+`src/modules/folderIndex.ts:291-295`, `IOUtils.getChildren(dir)` hata verdiğinde
+klasörü sessizce atlıyor. `src/modules/folderIndex.ts:302-315` de bir child için
+`stat` hatasını sessizce atlıyor. Her iki yol da
+`walkState.incomplete = true` veya bir `truncateReason` üretmiyor. Sonuçta
+`isFolderIndexComplete()` yanlışlıkla `true` kalıyor; reconciler yereldeki PDF’yi
+göremediği halde OA otomasyonunu çalıştırıp yinelenen dosya ekleyebilir.
+
+Bu, önceki “incomplete indeks otomasyonu durdurur” kabulünün yalnız max-files ve
+max-depth yollarında kapandığını gösterir. Mevcut test de gerçek walker hatası
+üretmiyor; `__setLastIndexBuildMetaForTests()` ile sonucu doğrudan enjekte ediyor.
+
+**Cursor görevi:** `IndexTruncateReason` sözleşmesine en az
+`unreadableDirectory` / `statError` ekle veya tek bir `ioError` nedeni kullan.
+Her erişim hatasında indeksi incomplete yap; kök hiç okunamadığında ve alt child
+atlanınca audit/UI’da kök/yol bilgisi sızdırmadan görünür uyarı üret. Böyle bir
+indeksle OA ve yüksek güvenli otomasyon çalışmamalı.
+
+**Kabul:** sahte `IOUtils.getChildren` ve `IOUtils.stat` hatalarıyla gerçek
+`buildIndex(true)` testi; sonuç `incomplete`; audit olayı mevcut; OA çağrısı
+sıfır. Bir kökün bozuk, diğerinin okunabilir olduğu çoklu-kök testi de olmalı.
+
+### P1 — Release betiği shell-safe ve source-provenance’lı değil
+
+`scripts/publish.mjs:43-46` hâlâ `execSync(..., { shell: true })` kullanan
+`runShell()` tanımlıyor. `--notes` kullanıcı girdisi
+`scripts/publish.mjs:206-208` içinde `JSON.stringify(notes)` ile bir shell
+komutuna birleştiriliyor. Windows `cmd.exe` için JSON’un `\"` kaçışı shell
+kaçışı değildir; çift tırnak/metakarakter içeren not shell sınırını bozabilir.
+Betiğin başında tanımlanan arg-array `run()` ise yayın komutlarında
+kullanılmıyor.
+
+Ayrıca public XPI’nin hash’i doğrulanıyor, fakat release notu/asset/manifest
+içinde kaynak commit `18fe8cf1` veya tam source SHA bulunmuyor. Yerel
+`v1.0.27` etiketi sonraki belge commit’i `809450ba` üzerinde; dağıtım
+reposundaki etiket ise başka bir reponun commitini gösterir. Bu nedenle hash,
+indirilen dosyanın değişmediğini kanıtlıyor ama hangi kaynak committen
+üretildiğini kanıtlamıyor.
+
+**Cursor görevi:** tüm `git`, `npm` ve `gh` çağrılarını arg-array
+`execFileSync`/`spawnSync` ile yap; `runShell` ve string komutları kaldır.
+Release öncesi tam source SHA’yı al; XPI içine build metadata olarak ve release
+notu/provenance JSON asset’ine yaz. Manifestte source SHA + XPI SHA-512 +
+build zamanı/sürümü ilişkilendir. Kullanıcı notunda `"`, `&`, `|`, `%`, satır
+sonu bulunan güvenli subprocess testi ekle; gerçek komut çalıştırmadan argv’yi
+doğrula.
+
+**Kabul:** shell çağrısı sıfır; adversarial notes tek argv değeri; public
+artefact SHA-512 eşleşmesi yanında source commit bağı makinece okunabilir.
+
+### P1 kabul boşluğu — düzeltmeler davranış seviyesinde test edilmiyor
+
+- OA testi yalnız `shouldCleanupPersistedDownload(false/true)` boolean helper’ını
+  test ediyor; rezervasyon ile move arasına dış dosya koyup byte’ların korunduğu
+  `downloadAndAttach` IO yarış testi yok.
+- İndeks kuyruğu için `buildIndex()` ve `registerDownloadedFile()` gerçekten
+  eşzamanlı başlatılıp iki güncellemenin de korunduğu test yok.
+- `atomicJson.ts` için temp write/move hata enjeksiyonu, eski tam JSON’un
+  korunması ve bozuk JSON quarantine/recovery testi yok.
+
+**Cursor görevi:** helper/source-regex testleri yerine yukarıdaki üç davranış
+testini ekle. Bunlar kod değişikliği gerektirmese bile P1 kabulünün parçasıdır.
+
+### P1 koşullu — gerçek Zotero çoklu pencere kabulü
+
+Kaynak lifecycle düzeltmesi korunuyor. Fakat iki ana Zotero penceresinde ilk
+pencere kapandıktan sonra ikinci pencerede menü/dialog/otomasyonun çalıştığı ve
+son kapanışta notifier/timer sızıntısı kalmadığı hâlâ kaydedilmedi. Bu madde
+otomatik testle kapatılamıyorsa sürüm ve ortam bilgili manuel kabul kaydı
+zorunlu.
+
+### Cursor için zorunlu kapanış sırası
+
+1. İndeks IO hatalarını `incomplete` yap ve gerçek walker/OA suppression
+   entegrasyon testlerini ekle.
+2. Publish betiğini tamamen arg-array yap; source SHA provenance asset’i ekle.
+3. OA cleanup, concurrent index mutation ve atomic JSON crash davranış testlerini
+   ekle.
+4. Gerçek Zotero iki-pencere kabul kaydını tamamla.
+5. Kalite kapıları + yeni public patch sürümü/hash/provenance doğrulamasından
+   sonra P1’i kapat.
+
+---
+
+## Cursor P1 follow-up — 2026-07-29 (arşiv)
+
+**Cursor doğrulaması:** **159/159 test** ✅ · lint:check ✅ · typecheck ✅
+
+| Madde                          | Durum | O oturumdaki not                                                                                  |
 | ------------------------------ | ----- | ------------------------------------------------------------------------------------------------- |
 | Çoklu pencere lifecycle        | 🟡    | Kod ✅; gerçek Zotero iki-pencere kabulü açık                                                     |
 | OA cleanup sahipliği           | ✅    | `finalCreatedByThisRun` + fail-closed exists                                                      |

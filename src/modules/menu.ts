@@ -9,6 +9,7 @@ import {
   isShortcutEnabled,
   getShortcutText,
 } from "../utils/shortcut";
+import { compileUserRegex, safeRegexTest } from "../utils/safeRegex";
 import { downloadPdfForSelectedItems, attachPdfFromUrl } from "./pdfDownload";
 import {
   embedMetadataForSelectedItems,
@@ -1741,12 +1742,12 @@ function isFilenameMatched(prefName: string, filenameNoExt: string | null) {
   const rules = getRuleList(prefName);
   if (rules.length === 0) return false;
   return rules.some((rule: string) => {
-    try {
-      return new RegExp(rule).test(filenameNoExt);
-    } catch (e) {
-      ztoolkit.log("Invalid filename matching rule", prefName, rule, e);
+    const re = compileUserRegex(rule);
+    if (!re) {
+      ztoolkit.log("Invalid or unsafe filename matching rule", prefName, rule);
       return false;
     }
+    return safeRegexTest(re, filenameNoExt);
   });
 }
 
@@ -2446,12 +2447,15 @@ function checkFileType(attItem: Zotero.Item, filename?: string) {
   const fileTypes = getPref("fileTypes") as string;
   if (!fileTypes) return true;
   const attachmentFilename = filename || attItem.attachmentFilename || "";
-  const pos = attachmentFilename.lastIndexOf("."),
-    fileType =
-      pos == -1 ? "" : attachmentFilename.substring(pos + 1).toLowerCase(),
-    regex = fileTypes.toLowerCase().replace(/,/gi, "|");
-  // return value
-  return fileType.search(new RegExp(regex)) >= 0 ? true : false;
+  const pos = attachmentFilename.lastIndexOf(".");
+  const fileType =
+    pos == -1 ? "" : attachmentFilename.substring(pos + 1).toLowerCase();
+  const allowed = fileTypes
+    .toLowerCase()
+    .split(",")
+    .map((s) => s.trim())
+    .filter(Boolean);
+  return allowed.includes(fileType);
 }
 
 function showRenameMessage(text: string) {

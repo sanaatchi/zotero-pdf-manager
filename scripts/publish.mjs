@@ -1,16 +1,16 @@
-// @ajan: cursor · @etiket: katman-2, p1, publish, update-hash
+// @ajan: cursor · @etiket: katman-2, p1, publish, update-hash, provenance
 /**
  * Publish a release to the PUBLIC dist repo so Zotero can auto-update.
  *
+ * All subprocesses use arg-array execFileSync (no shell). Notes are a single
+ * argv value. Provenance JSON links source commit ↔ XPI sha512.
+ *
  * Usage:
  *   npm run gh-release
- *   node scripts/publish.mjs --notes "P1 lifecycle + OA"
- *
- * Gates: clean git tree, lint:check, test, build. Writes update.json with
- * versioned update_link + sha512 update_hash (not latest/download).
+ *   node scripts/publish.mjs --notes "safe notes"
  */
 
-import { execFileSync, execSync } from "node:child_process";
+import { execFileSync } from "node:child_process";
 import { createHash } from "node:crypto";
 import { existsSync, readFileSync, unlinkSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
@@ -19,6 +19,9 @@ import { tmpdir } from "node:os";
 const DIST_REPO = "sanaatchi/zotero-pdf-manager-releases";
 const SOURCE_REPO = "sanaatchi/zotero-pdf-manager";
 const UPDATE_RELEASE = "update";
+const isWin = process.platform === "win32";
+const npmBin = isWin ? "npm.cmd" : "npm";
+const ghBin = "gh";
 
 const pkg = JSON.parse(
   readFileSync(new URL("../package.json", import.meta.url), "utf8"),
@@ -28,6 +31,7 @@ const tag = `v${version}`;
 const addonID = pkg.config.addonID;
 const xpiName = "zotero-pdf-manager.xpi";
 const xpiPath = join("build", xpiName);
+const provenancePath = join("build", "provenance.json");
 
 const notesArg = process.argv.indexOf("--notes");
 const notes =
@@ -35,19 +39,44 @@ const notes =
     ? process.argv[notesArg + 1]
     : `Zotero PDF Manager ${tag}`;
 
-function run(cmd, args = []) {
-  console.log(`> ${cmd} ${args.join(" ")}`.trim());
-  execFileSync(cmd, args, { stdio: "inherit", shell: false });
+export function buildGhReleaseCreateArgs({
+  tag: t,
+  xpi,
+  updateJson,
+  repo,
+  title,
+  releaseNotes,
+}) {
+  return [
+    "release",
+    "create",
+    t,
+    xpi,
+    updateJson,
+    "--repo",
+    repo,
+    "--title",
+    title,
+    "--notes",
+    releaseNotes,
+  ];
 }
 
-function runShell(cmd) {
-  console.log(`> ${cmd}`);
-  execSync(cmd, { stdio: "inherit", shell: true });
+function run(bin, args) {
+  console.log(`> ${bin} ${args.join(" ")}`);
+  execFileSync(bin, args, { stdio: "inherit", shell: false });
+}
+
+function capture(bin, args) {
+  return execFileSync(bin, args, {
+    encoding: "utf8",
+    shell: false,
+  }).trim();
 }
 
 function assertCleanTree() {
-  const out = execSync("git status --porcelain", { encoding: "utf8" });
-  if (out.trim()) {
+  const out = capture("git", ["status", "--porcelain"]);
+  if (out) {
     throw new Error(
       `Working tree not clean — commit or stash before release:\n${out}`,
     );
@@ -58,10 +87,8 @@ function sha512File(filePath) {
   return createHash("sha512").update(readFileSync(filePath)).digest("hex");
 }
 
-function writeUpdateFiles() {
-  if (!existsSync(xpiPath)) {
-    throw new Error(`Missing ${xpiPath}`);
-  }
+function writeUpdateAndProvenance(sourceCommit) {
+  if (!existsSync(xpiPath)) throw new Error(`Missing ${xpiPath}`);
   const updateLink = `https://github.com/${DIST_REPO}/releases/download/${tag}/${xpiName}`;
   const updateHash = `sha512:${sha512File(xpiPath)}`;
   const updateJson = {
@@ -86,19 +113,34 @@ function writeUpdateFiles() {
   const body = JSON.stringify(updateJson, null, 2) + "\n";
   writeFileSync("update.json", body);
   writeFileSync("update-beta.json", body);
+
+  const provenance = {
+    addonID,
+    version,
+    tag,
+    sourceRepo: SOURCE_REPO,
+    sourceCommit,
+    distRepo: DIST_REPO,
+    xpi: xpiName,
+    update_hash: updateHash,
+    update_link: updateLink,
+    builtAt: new Date().toISOString(),
+  };
+  writeFileSync(provenancePath, JSON.stringify(provenance, null, 2) + "\n");
   console.log("Wrote update.json →", updateLink);
   console.log("update_hash →", updateHash);
-  return { body, updateHash, updateLink };
+  console.log("sourceCommit →", sourceCommit);
+  return { body, updateHash, updateLink, provenance };
 }
 
 function publishUpdateJsonToBranch(body) {
   const path = "update.json";
   let sha;
   try {
-    const meta = execSync(
-      `gh api repos/${DIST_REPO}/contents/${path}?ref=main`,
-      { encoding: "utf8", shell: true },
-    );
+    const meta = capture("gh", [
+      "api",
+      `repos/${DIST_REPO}/contents/${path}?ref=main`,
+    ]);
     sha = JSON.parse(meta).sha;
   } catch {
     sha = undefined;
@@ -114,9 +156,14 @@ function publishUpdateJsonToBranch(body) {
   const tmp = join(tmpdir(), `zpdf-update-put-${Date.now()}.json`);
   writeFileSync(tmp, JSON.stringify(payload));
   try {
-    runShell(
-      `gh api --method PUT repos/${DIST_REPO}/contents/${path} --input "${tmp}"`,
-    );
+    run("gh", [
+      "api",
+      "--method",
+      "PUT",
+      `repos/${DIST_REPO}/contents/${path}`,
+      "--input",
+      tmp,
+    ]);
   } finally {
     try {
       unlinkSync(tmp);
@@ -127,21 +174,33 @@ function publishUpdateJsonToBranch(body) {
 }
 
 function ensureUpdateRelease(body) {
-  const tmp = join(tmpdir(), `update.json`);
+  const tmp = join(tmpdir(), "update.json");
   writeFileSync(tmp, body);
   try {
     try {
-      execSync(`gh release view ${UPDATE_RELEASE} --repo ${DIST_REPO}`, {
-        stdio: "ignore",
-        shell: true,
-      });
-      runShell(
-        `gh release upload ${UPDATE_RELEASE} "${tmp}" --repo ${DIST_REPO} --clobber`,
-      );
+      capture("gh", ["release", "view", UPDATE_RELEASE, "--repo", DIST_REPO]);
+      run("gh", [
+        "release",
+        "upload",
+        UPDATE_RELEASE,
+        tmp,
+        "--repo",
+        DIST_REPO,
+        "--clobber",
+      ]);
     } catch {
-      runShell(
-        `gh release create ${UPDATE_RELEASE} "${tmp}" --repo ${DIST_REPO} --title "update" --notes "Rolling update.json channel"`,
-      );
+      run("gh", [
+        "release",
+        "create",
+        UPDATE_RELEASE,
+        tmp,
+        "--repo",
+        DIST_REPO,
+        "--title",
+        "update",
+        "--notes",
+        "Rolling update.json channel",
+      ]);
     }
   } finally {
     try {
@@ -153,15 +212,21 @@ function ensureUpdateRelease(body) {
 }
 
 function verifyPublicDownload(updateHash) {
-  const url = `https://github.com/${DIST_REPO}/releases/download/${tag}/${xpiName}`;
-  const tmp = join(tmpdir(), `zpdf-verify-${Date.now()}.xpi`);
+  run("gh", [
+    "release",
+    "download",
+    tag,
+    "--repo",
+    DIST_REPO,
+    "--pattern",
+    xpiName,
+    "--dir",
+    tmpdir(),
+    "--clobber",
+  ]);
+  const downloaded = join(tmpdir(), xpiName);
+  const got = `sha512:${sha512File(downloaded)}`;
   try {
-    runShell(
-      `gh release download ${tag} --repo ${DIST_REPO} --pattern ${xpiName} --dir "${tmpdir()}" --clobber`,
-    );
-    // gh downloads with original name into dir
-    const downloaded = join(tmpdir(), xpiName);
-    const got = `sha512:${sha512File(downloaded)}`;
     if (got !== updateHash) {
       throw new Error(
         `Public XPI hash mismatch:\n  expected ${updateHash}\n  got      ${got}`,
@@ -169,50 +234,63 @@ function verifyPublicDownload(updateHash) {
     }
     console.log("Post-download hash OK");
   } finally {
-    for (const p of [tmp, join(tmpdir(), xpiName)]) {
-      try {
-        unlinkSync(p);
-      } catch {
-        /* ignore */
-      }
+    try {
+      unlinkSync(downloaded);
+    } catch {
+      /* ignore */
     }
   }
 }
 
-console.log(`\n=== Gates for ${tag} (${SOURCE_REPO}) ===`);
-assertCleanTree();
-runShell("npm run lint:check");
-runShell("npm test");
+function main() {
+  console.log(`\n=== Gates for ${tag} (${SOURCE_REPO}) ===`);
+  assertCleanTree();
+  const sourceCommit = capture("git", ["rev-parse", "HEAD"]);
+  run(npmBin, ["run", "lint:check"]);
+  run(npmBin, ["test"]);
 
-console.log(`\n=== Building ${tag} ===`);
-runShell("npm run build");
+  console.log(`\n=== Building ${tag} ===`);
+  run(npmBin, ["run", "build"]);
 
-const { body, updateHash, updateLink } = writeUpdateFiles();
+  const { body, updateHash, updateLink, provenance } =
+    writeUpdateAndProvenance(sourceCommit);
 
-console.log(`\n=== Publishing ${tag} to ${DIST_REPO} ===`);
-try {
-  execSync(`gh release view ${tag} --repo ${DIST_REPO}`, {
-    stdio: "ignore",
-    shell: true,
+  console.log(`\n=== Publishing ${tag} to ${DIST_REPO} ===`);
+  try {
+    capture("gh", ["release", "view", tag, "--repo", DIST_REPO]);
+    throw new Error(
+      `Release ${tag} already exists on ${DIST_REPO}. Refusing to delete/recreate (immutable).`,
+    );
+  } catch (e) {
+    if (e && /already exists/.test(String(e.message))) throw e;
+  }
+
+  const createArgs = buildGhReleaseCreateArgs({
+    tag,
+    xpi: xpiPath,
+    updateJson: "update.json",
+    repo: DIST_REPO,
+    title: tag,
+    releaseNotes: `${notes}\n\nsource: ${SOURCE_REPO}@${sourceCommit}\nhash: ${updateHash}`,
   });
-  throw new Error(
-    `Release ${tag} already exists on ${DIST_REPO}. Refusing to delete/recreate (immutable).`,
+  // Append provenance asset
+  createArgs.splice(5, 0, provenancePath);
+  run(ghBin, createArgs);
+
+  ensureUpdateRelease(body);
+  publishUpdateJsonToBranch(body);
+  verifyPublicDownload(updateHash);
+
+  console.log(`\nDone. ${tag}`);
+  console.log(`XPI: ${updateLink}`);
+  console.log(`Provenance: ${JSON.stringify(provenance)}`);
+  console.log(
+    `Update channel: https://github.com/${DIST_REPO}/releases/download/${UPDATE_RELEASE}/update.json`,
   );
-} catch (e) {
-  if (e && /already exists/.test(String(e.message))) throw e;
-  // no release — ok
 }
 
-runShell(
-  `gh release create ${tag} "${xpiPath}" update.json --repo ${DIST_REPO} --title "${tag}" --notes ${JSON.stringify(notes)}`,
-);
-
-ensureUpdateRelease(body);
-publishUpdateJsonToBranch(body);
-verifyPublicDownload(updateHash);
-
-console.log(`\nDone. ${tag}`);
-console.log(`XPI: ${updateLink}`);
-console.log(
-  `Update channel: https://github.com/${DIST_REPO}/releases/download/${UPDATE_RELEASE}/update.json`,
-);
+const isDirectRun =
+  process.argv[1] && /publish\.mjs$/.test(process.argv[1].replace(/\\/g, "/"));
+if (isDirectRun) {
+  main();
+}
