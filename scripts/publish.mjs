@@ -129,10 +129,21 @@ function writeUpdateAndProvenance(sourceCommit) {
     update_link: updateLink,
     builtAt: new Date().toISOString(),
   };
+  // Optional: GH_CI_RUN_ID / GH_CI_RUN_URL from caller or Actions env.
+  const ciRunId = process.env.GH_CI_RUN_ID || process.env.GITHUB_RUN_ID;
+  const ciRunUrl =
+    process.env.GH_CI_RUN_URL ||
+    (ciRunId
+      ? `https://github.com/${SOURCE_REPO}/actions/runs/${ciRunId}`
+      : undefined);
+  if (ciRunId) provenance.ciRunId = String(ciRunId);
+  if (ciRunUrl) provenance.ciRunUrl = ciRunUrl;
+  provenance.sourceVisibility = process.env.GH_SOURCE_VISIBILITY || "public";
   writeFileSync(provenancePath, JSON.stringify(provenance, null, 2) + "\n");
   console.log("Wrote update.json →", updateLink);
   console.log("update_hash →", updateHash);
   console.log("sourceCommit →", sourceCommit);
+  if (ciRunUrl) console.log("ciRunUrl →", ciRunUrl);
   return { body, updateHash, updateLink, provenance };
 }
 
