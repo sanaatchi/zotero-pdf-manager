@@ -23,7 +23,7 @@
 | Atomik indeks/audit JSON      | ✅    | `atomicJson.ts` tmp+move; corrupt quarantine                       |
 | Kalite kapısı lint/prettier   | ✅    | `lint:check` / `format:check` / `typecheck`                        |
 | README ürün kimliği           | ✅    | Zotero PDF Manager + releases URL                                  |
-| Dirty → commit tabanı         | 🟡    | bu oturum commitlenecek                                            |
+| Dirty → commit tabanı         | ✅    | `d9b986cf` on `main`                                               |
 | Public `v1.0.27` release      | ❌    | `gh-release` + update hash                                         |
 | Fail-open PDF doğrulama       | ❌ P2 |                                                                    |
 | ReDoS / Sci-Hub politika      | ❌ P2 |                                                                    |
