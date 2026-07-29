@@ -1,13 +1,16 @@
-<!-- @ajan: cursor · @etiket: katman-2, lisans, notices -->
+<!-- @ajan: cursor · @etiket: katman-2, lisans, notices, provenance -->
 
 # Third-Party Notices
+
+Pinned SHAs and path mapping: [`PDFMANAGER-VENDOR.md`](PDFMANAGER-VENDOR.md).
 
 ## Zotero Attachment Scanner
 
 Attachment scanning behavior in this project is adapted from
 `zotero-attachment-scanner` by W. Chang:
 
-https://github.com/SciImage/zotero-attachment-scanner
+https://github.com/SciImage/zotero-attachment-scanner  
+Pinned review SHA: `bd64d535edb265a336bbdeb661fd4cd896aacf22`
 
 MIT License
 
@@ -36,8 +39,10 @@ SOFTWARE.
 P2-1 linked-base merge and multi-root incremental indexing were informed by
 behavior review of:
 
-- https://github.com/wileyyugioh/zotmoov (GPL-3.0)
-- https://github.com/ArgilDD/zotero-watch-folder (GPL-3.0)
+- https://github.com/wileyyugioh/zotmoov (GPL-3.0) —
+  SHA `8fb20ab8baebe6976b2a281b40bc48910bc3ca62`
+- https://github.com/josesiqueira/zotero-watch-folder (GPL-3.0; local mirror) —
+  SHA `07068206dce23a4ad261c208734d318078108425`
 
 No substantial source was copied into this repository for those features;
 attribution lives in `src/modules/folderIndex.ts` and `PDFMANAGER-VENDOR.md`.
@@ -54,7 +59,8 @@ Attanger's safe-auto vs review patterns and notifier debounce.
 P2-3 add-flush drain loop, attachment→parent expansion, and trash/delete
 cancellation follow Attanger's `queueAddedItems` / `flushAddedItems` behavior:
 
-- https://github.com/MuiseDestiny/zotero-attanger (AGPL-3.0)
+- https://github.com/MuiseDestiny/zotero-attanger (AGPL-3.0) —
+  SHA `a1f98bfab1dc487ee84fdd9d2533d20596d4aea1`
 
 Attribution: `src/modules/pdfSources.ts`, `src/modules/pdfReconciler.ts`,
 `src/modules/automationAudit.ts`, `PDFMANAGER-VENDOR.md`. Combined work remains
@@ -66,7 +72,8 @@ P2-4 OA persistence under a library downloads folder (folder as authority)
 follows zotadata-style download-to-disk discipline. Sci-Hub is not part of
 the automatic cascade:
 
-- https://github.com/PanagiotisKaraliolios/zotero-zotadata
+- https://github.com/ydeng11/zotero-zotadata (local mirror; treat as AGPL) —
+  SHA `ad1a8143ae48ea2750fa5bd647921c529a4b17a7`
 
 Attribution: `src/modules/oaDownloadPath.ts`, `pdfDownload.ts`, `pdfSources.ts`,
 `PDFMANAGER-VENDOR.md`. Treat as AGPL-compatible combined work.

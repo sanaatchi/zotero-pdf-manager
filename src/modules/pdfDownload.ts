@@ -1,4 +1,4 @@
-// @ajan: cursor · @etiket: katman-2, p1, p2-4, pdfDownload, oa-downloads
+// @ajan: cursor · @etiket: katman-2, p1, p2-4, p2, pdfDownload, oa-downloads, cancel
 import { getString } from "../utils/locale";
 import { getPref } from "../utils/prefs";
 import { config } from "../../package.json";
@@ -16,6 +16,7 @@ import {
   SourceAttempt,
 } from "./downloadReport";
 import { getLastIndexBuildMeta, isFolderIndexComplete } from "./folderIndex";
+import { throwIfRunAborted } from "../utils/cancelToken";
 
 export {
   resolveOaDownloadsDir,
@@ -66,6 +67,7 @@ function hasPDFAttachment(item: Zotero.Item): boolean {
  * are enabled. P2-4: successful downloads land under watch-root/downloads/.
  */
 export async function tryAutomaticOnlineSources(item: Zotero.Item) {
+  throwIfRunAborted();
   if (hasPDFAttachment(item)) return null;
   if (!isFolderIndexComplete()) {
     const meta = getLastIndexBuildMeta();
@@ -75,12 +77,15 @@ export async function tryAutomaticOnlineSources(item: Zotero.Item) {
     return null;
   }
   await ensureDOI(item);
+  throwIfRunAborted();
 
   for (const id of AUTOMATIC_ONLINE_SOURCE_IDS) {
+    throwIfRunAborted();
     const source = ALL_SOURCES[id];
     if (!source?.isEnabled() || !source.supportsItem(item)) continue;
     try {
       let attachment = (await source.tryAttach(item)) as Zotero.Item | null;
+      throwIfRunAborted();
       if (!attachment) continue;
       if (id === "doi") {
         attachment =
@@ -90,6 +95,7 @@ export async function tryAutomaticOnlineSources(item: Zotero.Item) {
       await maybeEmbedMetadata(item, attachment);
       return { attachment, source: id };
     } catch (e) {
+      if ((e as Error)?.name === "RunAbortedError") throw e;
       ztoolkit.log(`Automatic OA source ${id} failed`, e);
     }
   }

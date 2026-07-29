@@ -1,4 +1,4 @@
-<!-- @ajan: cursor · @etiket: katman-2, eksik-raporu, p1-p2 -->
+<!-- @ajan: cursor · @etiket: katman-2, eksik-raporu, p2-close -->
 
 # Cursor — Katman 2 Eksikler Raporu
 
@@ -7,13 +7,186 @@
 > Rule: `.cursor/rules/katman-eksik-raporu.mdc`
 
 **Tarih:** 2026-07-29  
-**Kapsam:** `zotero-pdf-manager` · v1.0.28  
-**Durum:** P1 kapanış + P2 çekirdek + public **v1.0.28**. Kalan: gerçek Zotero
-iki-pencere checklist doldurma; P2 ölçek/abort/vendor derinliği.
+**Kapsam:** `zotero-pdf-manager` · v1.0.28 + P2 kapanış düzeltmeleri (CI/ReDoS/validation/abort/orphan)  
+**Durum:** Codex P2 `request changes` maddeleri kodlandı. Yerel **175/175** · lint ·
+typecheck yeşil. Public CI / patch release / manuel Zotero checklist sırada.
 
-## Güncel durum — 2026-07-29 (P1 kapanış + P2)
+## Güncel durum — 2026-07-29 (P2 kapanış uygulaması)
 
-**Doğrulama:** **165/165 test** ✅ · lint:check ✅ · typecheck ✅
+**Doğrulama:** **175/175 test** ✅ · lint:check ✅ · typecheck ✅
+
+| Madde                       | Durum | Not                                                                     |
+| --------------------------- | ----- | ----------------------------------------------------------------------- |
+| CI lockfile / Node 22 / pin | ✅    | `package-lock.json` izlenir; actions SHA; `permissions: contents: read` |
+| ReDoS / safeRegex           | ✅    | `(a\|aa)+`, `(a\|a?)+`, backref, lookaround reddedilir                  |
+| Validation cleanup          | ✅    | erase-gates file; unverifiable quarantine; match clears `#pdf-review`   |
+| Orphan bounded memory       | ✅    | `mergeKnownSourcePaths` — item birikimi yok                             |
+| XHR / index abort           | ✅    | `cancellerReceiver` + walker `signal`                                   |
+| Vendor SHA                  | ✅    | pinned + notices testi                                                  |
+| Sci-Hub/LibGen politika     | ✅    | bilerek manuel opt-in; README risk notu                                 |
+| Public CI yeşil run         | 🟡    | push sonrası doğrulanacak                                               |
+| Çoklu pencere checklist     | 🟡    | [`ZOTERO-KABUL-CHECKLIST.md`](ZOTERO-KABUL-CHECKLIST.md)                |
+| Patch release               | 🟡    | CI yeşil + checklist sonrası                                            |
+
+### Cursor için zorunlu P2 kapanış sırası
+
+1. CI lockfile/Node/action pin — ✅ kod; 🟡 public run
+2. ReDoS — ✅
+3. Validation cleanup — ✅
+4. Orphan bounded-memory — ✅
+5. XHR/index cancellation — ✅ (progress/Cancel UI sonra)
+6. Vendor + Sci-Hub politika — ✅
+7. Commit + CI + checklist + patch release — sırada
+
+---
+
+## Codex derin P2 doğrulaması — 2026-07-29 (arşiv)
+
+**Karar:** `request changes`
+
+**İncelenen taban:** HEAD/origin `9ab363a4` + Cursor’un commit edilmemiş P2
+derinlik değişiklikleri. Yerelde **171/171 test** ✅ · TypeScript ✅ · ESLint ✅;
+rapor dosyası Prettier kontrolünde ❌. Public
+[`v1.0.28`](https://github.com/sanaatchi/zotero-pdf-manager-releases/releases/tag/v1.0.28)
+XPI/update/provenance SHA-512 zinciri önceki doğrulamada sağlamdı; yeni dirty
+P2 derinlik kodu henüz public artefact içinde değil.
+
+| Madde                        | Durum | Derin doğrulama sonucu                                              |
+| ---------------------------- | ----- | ------------------------------------------------------------------- |
+| İndeks IO → incomplete       | ✅    | `ioError` ve gerçek walker enjeksiyon testleri mevcut               |
+| Publish arg-array/provenance | ✅    | Public source SHA + XPI SHA-512 bağı doğrulandı                     |
+| Vendor SHA/provenance        | 🟡    | Dirty belgeler/test var; commit/public artefact yok                 |
+| Sayfalı kütüphane yükleme    | 🟡    | Item batch var; orphan yolları tüm item nesnelerini tekrar topluyor |
+| Abort / dispose              | ❌    | Promise yarışı var; alttaki XHR ve folder walk iptal edilmiyor      |
+| 99.999 ölçek                 | ❌    | Yalnız `chunkIds` smoke; gerçek reconcile/bellek/latency ölçümü yok |
+| İçerik üçlü doğrulama        | ❌    | Erase hatasında linked dosya silinip kırık attachment kalabilir     |
+| ReDoS                        | ❌    | `(a\|aa)+$` ve `(a\|a?)+$` güvenli kabul ediliyor                   |
+| GitHub CI                    | ❌    | Son üç run failure; izlenen lockfile yok                            |
+| Çoklu pencere/Zotero kabulü  | 🟡 P1 | Checklist boş                                                       |
+| Sci-Hub/LibGen politika      | 🟡    | Otomatik sıra dışı; çalışan manual adapter’lar XPI içinde           |
+
+### P2 kritik — CI tanımlı fakat canlıda tamamen kırmızı
+
+GitHub’daki son üç `ci` çalışması (`cc64f8ed`, `5a173f1f`, `9ab363a4`)
+**failure**. En son run
+[`30479135020`](https://github.com/sanaatchi/zotero-pdf-manager/actions/runs/30479135020),
+`actions/setup-node` aşamasında “Dependencies lock file is not found” ile
+duruyor. `.gitignore:5-7` npm/pnpm/yarn lockfile’larını dışlıyor; yerel
+`package-lock.json` Git tarafından izlenmiyor. Bu yüzden `npm ci`, lint,
+typecheck, test ve build GitHub’da hiç çalışmıyor.
+
+Workflow ayrıca kaldırılmakta olan Node 20’yi istiyor, action’ları tam commit
+SHA yerine hareketli `@v4` etiketiyle çağırıyor ve salt-okunur permissions
+tanımlamıyor.
+
+**Cursor görevi:** tek paket yöneticisinin lockfile’ını izlemeye al; güncel
+desteklenen Node kullan; `permissions: contents: read` ekle; action’ları tam
+SHA’ya sabitle. HEAD için yeşil public run URL’sini rapora kaydet.
+
+**Kabul:** temiz Linux checkout’ta install/lint/typecheck/test/build çalışır;
+HEAD GitHub Actions sonucu success ve required check olarak korunur.
+
+### P2 kritik — safeRegex klasik üstel alternasyonu kabul ediyor
+
+`src/utils/safeRegex.ts` yalnız bazı nested-quantifier şekillerini reddediyor.
+Bağımsız sınıflandırmada `(a|aa)+$` ve `(a|a?)+$` riskli sayılmadı ve
+derlenebilir kaldı. İlki klasik belirsiz alternasyon backtracking desenidir.
+Hedefi 4096 karaktere kesmek üstel maliyeti güvenli yapmaz; çağrı Zotero UI
+thread’inde senkron çalışır. Mevcut test yalnız `(a+)+` ve pattern uzunluğunu
+ölçüyor.
+
+**Cursor görevi:** kullanıcı regex’i yerine güvenli glob/allowlist tercih et.
+Regex kalacaksa ambiguous alternation, backreference ve desteklenmeyen
+lookaround’ı parser seviyesinde reddet; adversarial corpus’u ana thread dışında
+süre bütçesiyle test et.
+
+**Kabul:** yukarıdaki iki desen, backreference ve nested quantifier sınıfı
+reddedilir; kötü corpus UI thread’ini bloke etmez.
+
+### P2 yüksek — validation cleanup hata yolunda kırık link üretebilir
+
+`src/modules/pdfSources.ts:431-468`, `unverifiable` ve `mismatch` verdict’lerinde
+önce `attachment.eraseTx()` çağırıyor; hata yalnız loglanıyor, ardından default
+linked-file modunda `persistedPath` siliniyor. Attachment kaydı silinemezse
+Zotero’da kırık link kalır.
+
+İlk kaynak `unverifiable` olduğunda parent’a `#pdf-review` eklenip PDF hemen
+siliniyor; sonraki kaynak doğru PDF eklese bile stale review etiketi
+temizlenmiyor ve kullanıcıya incelenecek artefact kalmıyor. Bu dört verdict
+akışı için doğrudan entegrasyon testi yok.
+
+**Cursor görevi:** attachment erase ile dosya cleanup’ını tek sonuç sözleşmesine
+bağla. Erase başarısızsa linked dosyayı koru ve audit failure üret. Review PDF
+karantinada korunmalı veya yalnız audit kaydı oluşturulmalı; sonraki doğrulanmış
+başarı stale etiketi temizlemeli.
+
+**Kabul:** erase hata enjeksiyonunda kayıt/dosya tutarlı; unverifiable→match
+zincirinde yanlış review etiketi yok; dört verdict entegrasyon testi mevcut.
+
+### P2 yüksek — sayfalama varsayılan orphan yolunda belleği sınırlamıyor
+
+Yeni `iterateLibraryItemBatches()` itemları 250’lik gruplarla yüklüyor. Fakat
+`pdfReconciler.performRun()` varsayılan `orphanMode=report` durumunda her batch’i
+`orphanItems.push(...batch)` ile yeniden biriktirip tarama sonunda
+`processOrphanPDFs()`e veriyor. `processOrphansNow()` da bütün batch’leri tek
+`items` dizisinde topluyor. Böylece normal çalışma yolunda 99.999 item nesnesi
+yine aynı anda bellekte tutuluyor.
+
+Üstelik `getAllIDs()` bütün ID listesini alıyor ve `chunkIds()` bütün chunk
+dizilerini önceden üretiyor; API yoksa fallback tekrar `getAll()` kullanıyor.
+171 testteki 99.999 smoke yalnız sayı dizisini parçalar; gerçek Zotero itemları,
+reconciler, orphan eşleştirmesi, süre veya peak-memory ölçülmüyor.
+
+**Cursor görevi:** orphan referans setini minimal alanlarla akış içinde üret
+veya orphan işlemeyi batch/DB sorgusu yap; item nesnelerini tutma. `chunkIds`
+generator olsun. 99.999 fixture ile gerçek reconcile benchmarkı, peak-memory ve
+UI-yield bütçesi kaydet; fallback’in büyük kütüphanede otomasyonu
+fail-closed/uyarılı yapmasını sağla.
+
+### P2 yüksek — AbortController alttaki işi iptal etmiyor
+
+`src/utils/cancelToken.ts:43-65` kendi yorumunda da belirttiği gibi promise’i
+abort ile yarıştırıyor ama underlying XHR’ı iptal etmiyor. `httpGet()` 60
+saniyelik `Zotero.HTTP.request` işini arka planda sürdürür. `buildIndex(true)`
+cancel signal almıyor; 99.999 dosyalık seri walk dispose sonrası tamamlanana
+kadar devam edebilir. `getAllIDs/getAsync` çağrıları da abortable değil.
+
+Global `activeSignal` süreç kapsamlıdır; gelecekte paralel manuel/reconciler
+işleri birbirinin sinyalini devralabilir. Test yalnız wrapper promise’in erken
+reject olduğunu ve kaynakta sembollerin bulunduğunu doğruluyor; gerçek XHR
+abort, geç yan etki veya index walk iptali testi yok. Kullanıcıya ait Cancel UI
+ve progress de bulunmuyor.
+
+**Cursor görevi:** Zotero HTTP’nin döndürdüğü XHR/abort handle’ını gerçekten
+`abort()` et; cancel signal’ı folder walker ve loader zincirine geçir; global
+mutable signal yerine açık parametre/run context kullan. Progress + kullanıcı
+iptali ekle ve geç yan etkinin oluşmadığını test et.
+
+### P2 kısmi — vendor/politika
+
+Pinned SHA, SPDX ve notices eşlemesi iyi yönde; ancak değişiklikler dirty ve SHA
+testi yalnız belgelerde sabit metin arıyor, mirror repo HEAD/lisansını
+doğrulamıyor. Sci-Hub/LibGen otomatik listeden çıkarılmış ve README uyarılı;
+yine de çalışan adapter, mirror URL ve UI public XPI içinde. Bu bilinçli politika
+kararıysa risk açıkça “kabul edildi” olarak kaydedilmeli; değilse ayrı opsiyonel
+pakete taşınmalı.
+
+### Cursor için zorunlu P2 kapanış sırası
+
+1. CI lockfile/Node/action pin sorununu düzelt ve yeşil public run al.
+2. ReDoS yüzeyini glob/parser ile kapat; adversarial test ekle.
+3. Validation cleanup transaction’ını ve stale review etiketini düzelt.
+4. Orphan işlemeyi gerçek bounded-memory akışa dönüştür.
+5. XHR/index/loader için gerçek cancellation + progress/Cancel UI ekle.
+6. Vendor mirror doğrulaması ve Sci-Hub/LibGen politika kararını tamamla.
+7. Dirty ağacı commit et; gerçek Zotero checklist + test/build/hash/provenance +
+   canlı CI ile yeni patch release’i doğrula.
+
+---
+
+## Cursor P2 derinlik — 2026-07-29 (arşiv)
+
+**Cursor doğrulaması:** **171/171 test** ✅ · lint:check ✅ · typecheck ✅
 
 | Madde                          | Durum | Not                                                                                                   |
 | ------------------------------ | ----- | ----------------------------------------------------------------------------------------------------- |
@@ -26,6 +199,10 @@ iki-pencere checklist doldurma; P2 ölçek/abort/vendor derinliği.
 | ReDoS                          | ✅ P2 | `safeRegex.ts` + scanner/menu                                                                         |
 | CI                             | ✅ P2 | `.github/workflows/ci.yml`                                                                            |
 | Sci-Hub/LibGen politika        | ✅ P2 | default `sourceOrder` dışı + README uyarı                                                             |
+| Abort / dispose iptal          | ✅ P2 | `cancelToken` + reconciler `runAbort` + OA `throwIfRunAborted`                                        |
+| Sayfalı kütüphane tarama       | ✅ P2 | `libraryIterate` + `pdf.libraryBatchSize` (250); getAllIDs+getAsync                                   |
+| Vendor SHA/provenance          | ✅ P2 | `PDFMANAGER-VENDOR.md` pinned SHA + notices sync testi                                                |
+| 99 999 ölçek smoke             | ✅ P2 | `chunkIds(99999)` + `MAX_INDEX_FILES`                                                                 |
 
 ---
 
@@ -480,33 +657,19 @@ yazımlar kayıp güncelleme üretmez; bozuk veri sessizce silinmez.
 
 ### P2 — Büyük kütüphanede tam tarama maliyeti kontrolsüz
 
-`src/modules/pdfReconciler.ts:168` ve `:322` `Zotero.Items.getAll` ile tüm
-kütüphaneyi belleğe alıyor. Startup/periyodik uzlaştırma ve orphan işleme
-99.999 öğede UI gecikmesi ve bellek baskısı oluşturabilir. İptal/progress ve
-sayfalama sınırı yok.
-
-**Cursor görevi:** değişiklik watermark’ı/queue, sayfalı sorgu ve bounded batch;
-yield/cancel/progress; ilk tam taramadan sonra artımlı uzlaştırma.
+**Durum:** ✅ (2026-07-29 P2 derinlik) — `iterateLibraryItemBatches` /
+`pdf.libraryBatchSize`; full `getAll` yalnız fallback. Artımlı watermark hâlâ
+ileride (tam tarama sayfalı + abort/yield).
 
 ### P2 — Dispose, aktif ağ isteğini gerçek anlamda iptal etmiyor
 
-Reconciler `disposed` kontrolleri ve timer/notifier temizliği yapıyor; ancak
-çalışan OA isteği için `AbortController` benzeri iptal zinciri yok. Kapanıştan
-sonra istek tamamlanıp geç yan etki üretebilir veya shutdown’u uzatabilir.
-
-**Cursor görevi:** run-scoped cancellation token’ı bütün source/download
-zincirine geçir; attach/index/audit öncesi iptal kontrolü ve rollback testi ekle.
+**Durum:** ✅ — `cancelToken` + reconciler `runAbort`; OA/HTTP `abortable` /
+`throwIfRunAborted`; dispose → abort.
 
 ### P2 — Vendor provenance yeniden üretilebilir değil
 
-`PDFMANAGER-VENDOR.md` kaynak repo ve lisansı söylüyor ama port edilen kesin
-commit SHA, dosya/fonksiyon eşlemesi ve değişiklik özeti yok. “AGPL gibi işle”
-lisans tanımı değildir. Bu haliyle hangi upstream kodun kullanıldığı ve notice
-uyumu bağımsız doğrulanamaz.
-
-**Cursor görevi:** her port için repo, commit SHA, lisans SPDX, kaynak yollar,
-hedef yollar, uyarlama özeti ve testleri kaydet; `THIRD_PARTY_NOTICES.md` ile
-otomatik tutarlılık kontrolü kur.
+**Durum:** ✅ — pinned SHA tablosu + `THIRD_PARTY_NOTICES.md` +
+`tests/vendorProvenance.test.cjs`.
 
 ### P2 — Update/release bütünlük kapısı eksik
 
@@ -531,8 +694,8 @@ Zotero 7–10 üzerinde manuel/otomatik kabul kaydı yok.
 2. Çoklu pencere/process yaşam döngüsünü düzelt.
 3. Atomik indeks/audit yazımı ve bozuk-dosya kurtarması.
 4. README ürün/yayın kimliğini düzelt.
-5. Büyük-kütüphane artımlı tarama ve ağ iptali.
-6. Vendor SHA/provenance ve yayın bütünlüğü.
+5. Büyük-kütüphane artımlı tarama ve ağ iptali. ✅ (sayfalı + abort; watermark sonra)
+6. Vendor SHA/provenance ve yayın bütünlüğü. ✅ (vendor SHA); release hash kısmen v1.0.28
 7. Gerçek Zotero 7–10 kabul matrisi.
 
 ## Tamamlanma kapısı
@@ -541,5 +704,5 @@ Zotero 7–10 üzerinde manuel/otomatik kabul kaydı yok.
 - İki pencereli yaşam döngüsü: kod + yüzey testi ✅; gerçek Zotero matrisi ❌
 - Atomik yazım/crash/concurrency: atomic helper + OA rezervasyon testi ✅
 - README ve release URL’leri yalnız Zotero PDF Manager’ı gösteriyor. ✅
-- XPI, update manifesti, tag ve kaynak commit SHA doğrulanabilir. ❌ public yayın
-- 99.999 öğe ölçek testi ve gerçek Zotero kabul matrisi kayıtlı. ❌ (cap sabit; smoke yok)
+- XPI, update manifesti, tag ve kaynak commit SHA doğrulanabilir. ✅ v1.0.28
+- 99.999 öğe ölçek smoke + vendor SHA kayıtlı. ✅; gerçek Zotero kabul matrisi ❌

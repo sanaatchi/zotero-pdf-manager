@@ -266,6 +266,7 @@ test("automatic online fallback is configurable and bulk-limited", () => {
   assert.match(prefs, /pdf\.onlineAutoDownload", true/);
   assert.match(prefs, /pdf\.onlineOnReconcile", false/);
   assert.match(prefs, /pdf\.onlineMaxPerRun", 10/);
+  assert.match(prefs, /pdf\.libraryBatchSize", 250/);
   assert.match(preferences, /preference="[^"]+\.pdf\.onlineAutoDownload"/);
   assert.match(preferences, /preference="[^"]+\.pdf\.onlineOnReconcile"/);
   assert.match(preferences, /preference="[^"]+\.pdf\.onlineMaxPerRun"/);
@@ -273,6 +274,9 @@ test("automatic online fallback is configurable and bulk-limited", () => {
   assert.match(reconciler, /isFolderIndexComplete/);
   assert.match(reconciler, /index-incomplete/);
   assert.match(reconciler, /"#auto-oa"/);
+  assert.match(reconciler, /iterateLibraryItemBatches/);
+  assert.match(reconciler, /AbortController/);
+  assert.match(reconciler, /runWithAbortSignal/);
 
   for (const locale of ["de", "en-US", "it-IT"]) {
     const source = fs.readFileSync(

@@ -51,11 +51,12 @@ Do **not** merge the three addons. Data flows 1 → 2 → 3.
 
 ## Policy note (Sci-Hub / LibGen)
 
-Automatic OA fallback never contacts Sci-Hub or LibGen. Those adapters remain
-in the codebase for **manual, opt-in** use only (`pdf.scihubEnabled` /
-`pdf.libgenEnabled`, default **off**) and are **not** in the default
-`sourceOrder`. Enable them only if you accept the legal/policy risk in your
-jurisdiction; the project does not encourage circumvention of access controls.
+**Accepted policy (Katman 2):** Automatic OA fallback never contacts Sci-Hub or
+LibGen. Those adapters remain in the public XPI for **manual, opt-in** use only
+(`pdf.scihubEnabled` / `pdf.libgenEnabled`, default **off**) and are **not** in
+the default `sourceOrder`. Enable them only if you accept the legal/policy risk
+in your jurisdiction; the project does not encourage circumvention of access
+controls.
 
 ## Build / test
 

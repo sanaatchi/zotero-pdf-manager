@@ -1,4 +1,4 @@
-// @ajan: cursor · @etiket: katman-2, p2-3, p2-5, p2-6, reconciler, notifier, orphan, audit
+// @ajan: cursor · @etiket: katman-2, p2, p2-3, p2-5, p2-6, reconciler, cancel, batch
 import { getPref } from "../utils/prefs";
 import {
   buildIndex,
@@ -7,8 +7,18 @@ import {
 } from "./folderIndex";
 import { LocalFolderSource } from "./pdfSources";
 import { tryAutomaticOnlineSources } from "./pdfDownload";
-import { processOrphanPDFs, normalizeOrphanMode } from "./orphanProcessor";
+import {
+  processOrphanPDFs,
+  normalizeOrphanMode,
+  mergeKnownSourcePaths,
+} from "./orphanProcessor";
 import { appendAuditEvent, openAutomationAuditReport } from "./automationAudit";
+import { runWithAbortSignal, isRunAborted } from "../utils/cancelToken";
+import {
+  DEFAULT_LIBRARY_BATCH_SIZE,
+  iterateLibraryItemBatches,
+  normalizeLibraryBatchSize,
+} from "../utils/libraryIterate";
 
 export interface ReconcileStats {
   scanned: number;
@@ -125,6 +135,7 @@ export class PDFReconciler {
   private notifierID = "";
   private pendingItemIDs = new Set<number>();
   private disposed = false;
+  private runAbort: AbortController | null = null;
 
   start() {
     this.disposeTimers();
@@ -167,26 +178,47 @@ export class PDFReconciler {
     if (this.disposed) return null;
     const runID = `manual-orphans-${Date.now()}`;
     const libraryID = (Zotero.Libraries as any).userLibraryID;
-    const [index, items] = await Promise.all([
-      buildIndex(true),
-      (Zotero.Items as any).getAll(libraryID, true, false) as Promise<
-        Zotero.Item[]
-      >,
-    ]);
-    return processOrphanPDFs(
-      index,
-      items,
-      libraryID,
-      "autoCreate",
-      Number(getPref("pdf.orphanMaxPerRun") ?? 10),
-      getPref("pdf.dryRun") === true,
-      runID,
-      "manual",
+    const batchSize = normalizeLibraryBatchSize(
+      getPref("pdf.libraryBatchSize") ?? DEFAULT_LIBRARY_BATCH_SIZE,
     );
+    const controller = new AbortController();
+    this.runAbort?.abort();
+    this.runAbort = controller;
+    try {
+      const index = await buildIndex(true, undefined, controller.signal);
+      if (this.disposed || controller.signal.aborted) return null;
+      const knownPaths = new Set<string>();
+      for await (const batch of iterateLibraryItemBatches(libraryID, {
+        batchSize,
+        signal: controller.signal,
+      })) {
+        if (this.disposed || controller.signal.aborted) break;
+        await mergeKnownSourcePaths(batch, knownPaths);
+      }
+      if (this.disposed || controller.signal.aborted) return null;
+      return processOrphanPDFs(
+        index,
+        knownPaths,
+        libraryID,
+        "autoCreate",
+        Number(getPref("pdf.orphanMaxPerRun") ?? 10),
+        getPref("pdf.dryRun") === true,
+        runID,
+        "manual",
+      );
+    } finally {
+      if (this.runAbort === controller) this.runAbort = null;
+    }
   }
 
   dispose() {
     this.disposed = true;
+    try {
+      this.runAbort?.abort();
+    } catch {
+      /* ignore */
+    }
+    this.runAbort = null;
     this.disposeTimers();
     this.pendingItemIDs.clear();
     this.unregisterNotifier();
@@ -319,18 +351,146 @@ export class PDFReconciler {
 
   private async performRun(reason: string): Promise<ReconcileStats> {
     const libraryID = (Zotero.Libraries as any).userLibraryID;
-    const items = (await (Zotero.Items as any).getAll(
-      libraryID,
-      true,
-      false,
-    )) as Zotero.Item[];
-    return this.performItems(items, reason, true);
+    const batchSize = normalizeLibraryBatchSize(
+      getPref("pdf.libraryBatchSize") ?? DEFAULT_LIBRARY_BATCH_SIZE,
+    );
+    const controller = new AbortController();
+    this.runAbort?.abort();
+    this.runAbort = controller;
+
+    const empty: ReconcileStats = {
+      scanned: 0,
+      attached: 0,
+      review: 0,
+      skipped: 0,
+      errors: 0,
+      created: 0,
+      planned: 0,
+    };
+
+    try {
+      return await runWithAbortSignal(controller.signal, async () => {
+        const source = new LocalFolderSource();
+        if (this.disposed || !source.isEnabled()) return empty;
+
+        const runID = `${reason}-${Date.now()}`;
+        const dryRun = getPref("pdf.dryRun") === true;
+        ztoolkit.log(`PDF reconcile started (${reason})`);
+        await appendAuditEvent({
+          run: runID,
+          action: "reconcile-start",
+          outcome: "info",
+          detail: dryRun ? "Dry-run enabled" : reason,
+        });
+
+        const index = await buildIndex(true, undefined, controller.signal);
+        if (this.disposed || isRunAborted(controller.signal)) return empty;
+
+        const indexComplete = isFolderIndexComplete();
+        if (!indexComplete) {
+          const meta = getLastIndexBuildMeta();
+          await appendAuditEvent({
+            run: runID,
+            action: "index-incomplete",
+            outcome: "review",
+            detail: `Folder index incomplete (${meta.truncateReason || "unknown"}); OA auto-download suppressed`,
+          });
+          ztoolkit.log(
+            `PDF reconcile: incomplete index — OA suppressed (reason=${meta.truncateReason})`,
+          );
+        }
+
+        const allowOnline =
+          indexComplete &&
+          getPref("pdf.onlineAutoDownload") !== false &&
+          (reason === "add" || getPref("pdf.onlineOnReconcile") === true);
+        const onlineCap = Math.max(
+          0,
+          Math.min(100, Number(getPref("pdf.onlineMaxPerRun") ?? 10) || 10),
+        );
+        const shared: ItemBatchShared = {
+          runID,
+          reason,
+          dryRun,
+          source,
+          index,
+          allowOnline,
+          usedPaths: new Set<string>(),
+          onlineBudget: onlineCap,
+          signal: controller.signal,
+          stats: { ...empty },
+        };
+
+        const orphanMode = normalizeOrphanMode(getPref("pdf.orphanMode"));
+        const collectOrphans = reason !== "add" && orphanMode !== "off";
+        const knownPaths = new Set<string>();
+
+        for await (const batch of iterateLibraryItemBatches(libraryID, {
+          batchSize,
+          signal: controller.signal,
+        })) {
+          if (this.disposed || isRunAborted(controller.signal)) break;
+          if (collectOrphans) await mergeKnownSourcePaths(batch, knownPaths);
+          await this.processItemBatch(batch, shared);
+        }
+
+        if (
+          !this.disposed &&
+          !isRunAborted(controller.signal) &&
+          collectOrphans
+        ) {
+          const orphanStats = await processOrphanPDFs(
+            index,
+            knownPaths,
+            libraryID,
+            orphanMode,
+            Number(getPref("pdf.orphanMaxPerRun") ?? 10),
+            dryRun,
+            runID,
+            "automatic",
+          );
+          shared.stats.created += orphanStats.created;
+          shared.stats.planned += orphanStats.planned;
+          shared.stats.errors += orphanStats.failed;
+        }
+
+        ztoolkit.log(`PDF reconcile finished (${reason})`, shared.stats);
+        await appendAuditEvent({
+          run: runID,
+          action: "reconcile-finish",
+          outcome: shared.stats.errors
+            ? "failed"
+            : dryRun
+              ? "planned"
+              : "success",
+          detail: JSON.stringify(shared.stats),
+        });
+        if (dryRun && reason === "manual") {
+          try {
+            await openAutomationAuditReport();
+          } catch (e) {
+            ztoolkit.log("Could not open dry-run audit report", e);
+          }
+        }
+        return shared.stats;
+      });
+    } catch (e) {
+      if ((e as Error)?.name === "RunAbortedError") {
+        ztoolkit.log(`PDF reconcile aborted (${reason})`);
+        return empty;
+      }
+      throw e;
+    } finally {
+      if (this.runAbort === controller) this.runAbort = null;
+    }
   }
 
+  /** Small-list path for add-notifier coalesce (already loaded items). */
   private async performItems(
     items: Zotero.Item[],
     reason: string,
     forceIndex: boolean,
+    signal?: AbortSignal,
   ): Promise<ReconcileStats> {
     const stats: ReconcileStats = {
       scanned: 0,
@@ -354,7 +514,7 @@ export class PDFReconciler {
       detail: dryRun ? "Dry-run enabled" : reason,
     });
     const index = await buildIndex(forceIndex);
-    if (this.disposed) return stats;
+    if (this.disposed || isRunAborted(signal)) return stats;
     const indexComplete = isFolderIndexComplete();
     if (!indexComplete) {
       const meta = getLastIndexBuildMeta();
@@ -372,23 +532,80 @@ export class PDFReconciler {
       indexComplete &&
       getPref("pdf.onlineAutoDownload") !== false &&
       (reason === "add" || getPref("pdf.onlineOnReconcile") === true);
-    // Cap the number of online lookups per run — on EVERY path, including
-    // "add". A bulk import must not fire an unbounded burst of OA requests
-    // (slow + rate-limit/IP-block risk); it is limited to onlineMaxPerRun too.
     const onlineCap = Math.max(
       0,
       Math.min(100, Number(getPref("pdf.onlineMaxPerRun") ?? 10) || 10),
     );
-    let onlineBudget =
-      reason === "add" ? Math.min(items.length, onlineCap) : onlineCap;
+    const shared: ItemBatchShared = {
+      runID,
+      reason,
+      dryRun,
+      source,
+      index,
+      allowOnline,
+      usedPaths: new Set<string>(),
+      onlineBudget:
+        reason === "add" ? Math.min(items.length, onlineCap) : onlineCap,
+      signal,
+      stats,
+    };
 
-    // Files already claimed by an earlier item in THIS run. Prevents two
-    // different items from both being linked to the same PDF (a collision that
-    // usually means a duplicate item or a wrong match).
-    const usedPaths = new Set<string>();
+    await this.processItemBatch(items, shared);
+
+    if (!this.disposed && !isRunAborted(signal) && reason !== "add") {
+      const orphanMode = normalizeOrphanMode(getPref("pdf.orphanMode"));
+      if (orphanMode !== "off") {
+        const knownPaths = await mergeKnownSourcePaths(items);
+        const orphanStats = await processOrphanPDFs(
+          index,
+          knownPaths,
+          (Zotero.Libraries as any).userLibraryID,
+          orphanMode,
+          Number(getPref("pdf.orphanMaxPerRun") ?? 10),
+          dryRun,
+          runID,
+          "automatic",
+        );
+        stats.created += orphanStats.created;
+        stats.planned += orphanStats.planned;
+        stats.errors += orphanStats.failed;
+      }
+    }
+
+    ztoolkit.log(`PDF reconcile finished (${reason})`, stats);
+    await appendAuditEvent({
+      run: runID,
+      action: "reconcile-finish",
+      outcome: stats.errors ? "failed" : dryRun ? "planned" : "success",
+      detail: JSON.stringify(stats),
+    });
+    if (dryRun && reason === "manual") {
+      try {
+        await openAutomationAuditReport();
+      } catch (e) {
+        ztoolkit.log("Could not open dry-run audit report", e);
+      }
+    }
+    return stats;
+  }
+
+  private async processItemBatch(
+    items: Zotero.Item[],
+    shared: ItemBatchShared,
+  ): Promise<void> {
+    const {
+      runID,
+      dryRun,
+      source,
+      index,
+      allowOnline,
+      usedPaths,
+      signal,
+      stats,
+    } = shared;
 
     for (const item of items) {
-      if (this.disposed) break;
+      if (this.disposed || isRunAborted(signal)) break;
       stats.scanned++;
       if (!canReconcileItem(item)) {
         stats.skipped++;
@@ -421,8 +638,6 @@ export class PDFReconciler {
         }
         if (match.status === "matched") {
           const filePath = match.file.path;
-          // Cross-item collision: this file was already matched to another
-          // item in this run. Don't attach it twice — route to review.
           if (usedPaths.has(filePath)) {
             if (!dryRun) await addAutomationTag(item, "#pdf-review");
             await appendAuditEvent({
@@ -439,7 +654,7 @@ export class PDFReconciler {
             stats.review++;
             continue;
           }
-          usedPaths.add(filePath); // reserve this file for this item
+          usedPaths.add(filePath);
 
           if (dryRun) {
             stats.planned++;
@@ -469,7 +684,7 @@ export class PDFReconciler {
               source: "local",
             });
           } else {
-            usedPaths.delete(filePath); // attach failed → release the file
+            usedPaths.delete(filePath);
             stats.errors++;
             await appendAuditEvent({
               run: runID,
@@ -484,8 +699,8 @@ export class PDFReconciler {
           continue;
         }
 
-        if (allowOnline && onlineBudget > 0) {
-          onlineBudget--;
+        if (allowOnline && shared.onlineBudget > 0) {
+          shared.onlineBudget--;
           if (dryRun) {
             stats.planned++;
             await appendAuditEvent({
@@ -514,6 +729,7 @@ export class PDFReconciler {
           }
         }
       } catch (e) {
+        if ((e as Error)?.name === "RunAbortedError") break;
         stats.errors++;
         ztoolkit.log(`PDF reconcile failed for item ${item.id}`, e);
         await appendAuditEvent({
@@ -526,40 +742,18 @@ export class PDFReconciler {
         });
       }
     }
-
-    if (!this.disposed && reason !== "add") {
-      const orphanMode = normalizeOrphanMode(getPref("pdf.orphanMode"));
-      if (orphanMode !== "off") {
-        const orphanStats = await processOrphanPDFs(
-          index,
-          items,
-          (Zotero.Libraries as any).userLibraryID,
-          orphanMode,
-          Number(getPref("pdf.orphanMaxPerRun") ?? 10),
-          dryRun,
-          runID,
-          "automatic",
-        );
-        stats.created += orphanStats.created;
-        stats.planned += orphanStats.planned;
-        stats.errors += orphanStats.failed;
-      }
-    }
-
-    ztoolkit.log(`PDF reconcile finished (${reason})`, stats);
-    await appendAuditEvent({
-      run: runID,
-      action: "reconcile-finish",
-      outcome: stats.errors ? "failed" : dryRun ? "planned" : "success",
-      detail: JSON.stringify(stats),
-    });
-    if (dryRun && reason === "manual") {
-      try {
-        await openAutomationAuditReport();
-      } catch (e) {
-        ztoolkit.log("Could not open dry-run audit report", e);
-      }
-    }
-    return stats;
   }
 }
+
+type ItemBatchShared = {
+  runID: string;
+  reason: string;
+  dryRun: boolean;
+  source: LocalFolderSource;
+  index: Awaited<ReturnType<typeof buildIndex>>;
+  allowOnline: boolean;
+  usedPaths: Set<string>;
+  onlineBudget: number;
+  signal?: AbortSignal | null;
+  stats: ReconcileStats;
+};

@@ -1,4 +1,4 @@
-// @ajan: cursor · @etiket: katman-2, p1, p2-2, p2-4, pdfSources, oa-no-overwrite
+// @ajan: cursor · @etiket: katman-2, p1, p2-2, p2-4, pdfSources, oa-no-overwrite, validation-cleanup
 import { getString } from "../utils/locale";
 import { getPref } from "../utils/prefs";
 import {
@@ -15,6 +15,12 @@ import {
   resolveOaDownloadsDir,
   shouldCleanupPersistedDownload,
 } from "./oaDownloadPath";
+
+import {
+  abortable,
+  getActiveAbortSignal,
+  throwIfRunAborted,
+} from "../utils/cancelToken";
 
 // Gecko globals available in the Zotero sandbox but not in the type defs.
 declare const IOUtils: any;
@@ -144,20 +150,44 @@ async function httpGet(
   url: string,
   responseType: "text" | "arraybuffer" = "text",
 ): Promise<any> {
-  return await (Zotero.HTTP as any).request("GET", url, {
+  throwIfRunAborted();
+  const signal = getActiveAbortSignal();
+  const cancelRef: { fn: (() => void) | null } = { fn: null };
+  const request = (Zotero.HTTP as any).request("GET", url, {
     responseType,
     timeout: 60000,
     successCodes: false,
+    cancellerReceiver: (cancel: () => void) => {
+      cancelRef.fn = cancel;
+    },
   });
+  const invokeCancel = () => {
+    try {
+      cancelRef.fn?.();
+    } catch {
+      /* ignore */
+    }
+  };
+  try {
+    const xhr = await abortable(request, signal, invokeCancel);
+    throwIfRunAborted(signal);
+    return xhr;
+  } catch (e) {
+    if ((e as Error)?.name === "RunAbortedError") invokeCancel();
+    throw e;
+  }
 }
 
 export async function fetchPdfBytes(url: string): Promise<Uint8Array | null> {
   try {
+    throwIfRunAborted();
     const xhr = await httpGet(url, "arraybuffer");
+    throwIfRunAborted();
     if (!xhr || !xhr.response) return null;
     const bytes = new Uint8Array(xhr.response as ArrayBuffer);
     return looksLikePDF(bytes) ? bytes : null;
   } catch (e) {
+    if ((e as Error)?.name === "RunAbortedError") throw e;
     ztoolkit.log("fetchPdfBytes failed", url, e);
     return null;
   }
@@ -289,6 +319,48 @@ async function tagItem(item: Zotero.Item, tag: string): Promise<void> {
   }
 }
 
+async function removeAutomationTag(
+  item: Zotero.Item,
+  tag: string,
+): Promise<void> {
+  try {
+    const tags = (item.getTags() as { tag: string }[]) || [];
+    if (!tags.some((entry) => entry.tag === tag)) return;
+    item.removeTag(tag);
+    await item.saveTx();
+  } catch (e) {
+    ztoolkit.log("removeAutomationTag failed", tag, e);
+  }
+}
+
+/**
+ * Erase attachment first; only then remove the on-disk file this run created.
+ * If erase fails, keep the file so Zotero does not keep a broken linked path.
+ */
+export async function cleanupRejectedAttachment(opts: {
+  attachment: Zotero.Item;
+  persistedPath?: string | null;
+  finalCreatedByThisRun: boolean | null;
+}): Promise<"cleaned" | "erase-failed"> {
+  try {
+    await opts.attachment.eraseTx();
+  } catch (e) {
+    ztoolkit.log("erase rejected/unverifiable attachment failed", e);
+    return "erase-failed";
+  }
+  if (
+    opts.persistedPath &&
+    shouldCleanupPersistedDownload(opts.finalCreatedByThisRun === true)
+  ) {
+    try {
+      await IOUtils.remove(opts.persistedPath);
+    } catch {
+      /* best-effort */
+    }
+  }
+  return "cleaned";
+}
+
 /**
  * Download bytes from `url`, verify they are a real PDF, then either:
  * - **P2-4 downloads mode:** write under `{watchRoot}/downloads/`, link/import,
@@ -300,7 +372,9 @@ export async function downloadAndAttach(
   url: string,
   opts: { validate?: boolean; sourceId?: string; forceImport?: boolean } = {},
 ): Promise<unknown | null> {
+  throwIfRunAborted();
   const bytes = await fetchPdfBytes(url);
+  throwIfRunAborted();
   if (!bytes) return null;
 
   const persistDownloads =
@@ -411,45 +485,27 @@ export async function downloadAndAttach(
   if (opts.validate !== false) {
     const verdict = await validateAttachmentContent(item, attachment.id);
     if (verdict === "match" || verdict === "skipped") {
+      await removeAutomationTag(item, "#pdf-review");
       return attachment;
     }
     if (verdict === "unverifiable") {
-      ztoolkit.log(`Unverifiable PDF content for ${item.id} — #pdf-review`);
+      ztoolkit.log(
+        `Unverifiable PDF content for ${item.id} — quarantine + #pdf-review`,
+      );
       await tagItem(item, "#pdf-review");
-      // Auto-attach path must not keep unverifiable PDFs as success.
-      try {
-        await attachment.eraseTx();
-      } catch (e) {
-        ztoolkit.log("erase unverifiable attachment failed", e);
-      }
-      if (
-        persistedPath &&
-        shouldCleanupPersistedDownload(finalCreatedByThisRun)
-      ) {
-        try {
-          await IOUtils.remove(persistedPath);
-        } catch {
-          /* best-effort */
-        }
-      }
+      // Keep the attachment for human review; do not erase/delete so the
+      // artefact remains and the link cannot go stale from a failed erase.
       return null;
     }
-    // mismatch
+    // mismatch — must erase before deleting the linked file
     ztoolkit.log(`Rejected PDF (metadata mismatch) for ${item.id}`);
-    try {
-      await attachment.eraseTx();
-    } catch (e) {
-      ztoolkit.log("erase rejected attachment failed", e);
-    }
-    if (
-      persistedPath &&
-      shouldCleanupPersistedDownload(finalCreatedByThisRun)
-    ) {
-      try {
-        await IOUtils.remove(persistedPath);
-      } catch {
-        /* best-effort */
-      }
+    const cleaned = await cleanupRejectedAttachment({
+      attachment,
+      persistedPath,
+      finalCreatedByThisRun,
+    });
+    if (cleaned === "erase-failed") {
+      await tagItem(item, "#pdf-review");
     }
     return null;
   }

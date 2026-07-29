@@ -45,6 +45,12 @@ test("safeRegex rejects nested quantifier / oversized patterns", () => {
   assert.equal(isRiskyUserRegexPattern("(a+)+"), true);
   assert.equal(compileUserRegex("(a+)+"), null);
   assert.equal(compileUserRegex("a".repeat(201)), null);
+  assert.equal(isRiskyUserRegexPattern("(a|aa)+$"), true);
+  assert.equal(compileUserRegex("(a|aa)+$"), null);
+  assert.equal(isRiskyUserRegexPattern("(a|a?)+$"), true);
+  assert.equal(compileUserRegex("(a|a?)+$"), null);
+  assert.equal(isRiskyUserRegexPattern("(foo)\\1"), true);
+  assert.equal(isRiskyUserRegexPattern("(?=a)"), true);
   const ok = compileUserRegex("^draft", "i");
   assert.ok(ok);
   assert.equal(safeRegexTest(ok, "Draft-notes"), true);

@@ -1,7 +1,8 @@
-// @ajan: cursor · @etiket: katman-2, p1, p2-1, p2-4, folderIndex, incomplete-index
+// @ajan: cursor · @etiket: katman-2, p1, p2-1, p2-4, folderIndex, incomplete-index, abort
 import { getPref } from "../utils/prefs";
 import { parseFilenameMetadata } from "./filenameMetadata";
 import { readJsonOrQuarantine, writeJsonAtomic } from "../utils/atomicJson";
+import { RunAbortedError } from "../utils/cancelToken";
 
 // Gecko globals available in the Zotero sandbox but not in the type defs.
 declare const IOUtils: any;
@@ -302,7 +303,11 @@ async function walk(
   depth: number,
   out: WalkOut,
   state: { incomplete: boolean; truncateReason: IndexTruncateReason },
+  signal?: AbortSignal | null,
 ): Promise<void> {
+  if (signal?.aborted) {
+    throw new RunAbortedError("folder walk aborted");
+  }
   if (out.length >= MAX_INDEX_FILES) {
     state.incomplete = true;
     state.truncateReason = "maxFiles";
@@ -322,6 +327,9 @@ async function walk(
     return;
   }
   for (const child of children) {
+    if (signal?.aborted) {
+      throw new RunAbortedError("folder walk aborted");
+    }
     if (out.length >= MAX_INDEX_FILES) {
       state.incomplete = true;
       state.truncateReason = "maxFiles";
@@ -330,7 +338,7 @@ async function walk(
     try {
       const info = await folderIO.stat(child);
       if (info.type === "directory") {
-        await walk(child, depth + 1, out, state);
+        await walk(child, depth + 1, out, state, signal);
       } else if (/\.pdf$/i.test(child)) {
         out.push({
           path: child,
@@ -338,7 +346,8 @@ async function walk(
           size: Number(info.size || 0) || undefined,
         });
       }
-    } catch {
+    } catch (e) {
+      if ((e as Error)?.name === "RunAbortedError") throw e;
       state.incomplete = true;
       if (!state.truncateReason) state.truncateReason = "ioError";
     }
@@ -353,13 +362,17 @@ async function walk(
 export async function buildIndex(
   force = false,
   rootsOverride?: string[],
+  signal?: AbortSignal | null,
 ): Promise<IndexedFile[]> {
-  return enqueueIndexMutation(() => buildIndexLocked(force, rootsOverride));
+  return enqueueIndexMutation(() =>
+    buildIndexLocked(force, rootsOverride, signal),
+  );
 }
 
 async function buildIndexLocked(
   force = false,
   rootsOverride?: string[],
+  signal?: AbortSignal | null,
 ): Promise<IndexedFile[]> {
   const now = Date.now();
   if (!force && memCache && now - memCacheAt < 60000) return memCache;
@@ -372,7 +385,7 @@ async function buildIndexLocked(
     truncateReason: IndexTruncateReason;
   } = { incomplete: false, truncateReason: null };
   for (const root of roots) {
-    if (root) await walk(root, 0, discovered, walkState);
+    if (root) await walk(root, 0, discovered, walkState, signal);
   }
 
   lastBuildMeta = {

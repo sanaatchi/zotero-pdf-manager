@@ -1,4 +1,4 @@
-// @ajan: cursor · @etiket: katman-2, p2-5, orphanProcessor, watch-folder
+// @ajan: cursor · @etiket: katman-2, p2, orphan, bounded-memory, p2-5
 import { IndexedFile } from "./folderIndex";
 import { appendAuditEvent } from "./automationAudit";
 import {
@@ -313,33 +313,37 @@ async function createItemForFile(
   }
 }
 
-async function knownSourcePaths(items: Zotero.Item[]) {
-  const paths = new Set<string>();
+export async function mergeKnownSourcePaths(
+  items: Zotero.Item[],
+  into: Set<string> = new Set(),
+): Promise<Set<string>> {
   for (const item of items) {
     try {
       const extra = String(item.getField("extra") || "");
       for (const line of extra.split(/\r?\n/)) {
         if (line.startsWith(SOURCE_PATH_PREFIX)) {
-          paths.add(
-            canonicalPath(line.slice(SOURCE_PATH_PREFIX.length).trim()),
-          );
+          into.add(canonicalPath(line.slice(SOURCE_PATH_PREFIX.length).trim()));
         }
       }
       for (const attachmentID of item.getAttachments()) {
         const attachment = Zotero.Items.get(attachmentID);
         const path = await attachment?.getFilePathAsync?.();
-        if (path) paths.add(canonicalPath(path));
+        if (path) into.add(canonicalPath(path));
       }
     } catch {
       // Ignore a malformed/deleted item and continue the audit.
     }
   }
-  return paths;
+  return into;
+}
+
+async function knownSourcePaths(items: Zotero.Item[]) {
+  return mergeKnownSourcePaths(items);
 }
 
 export async function processOrphanPDFs(
   files: IndexedFile[],
-  items: Zotero.Item[],
+  itemsOrKnown: Zotero.Item[] | Set<string>,
   libraryID: number,
   mode: string,
   limit: number,
@@ -357,7 +361,10 @@ export async function processOrphanPDFs(
   const orphanMode = normalizeOrphanMode(mode);
   if (orphanMode === "off") return stats;
 
-  const known = await knownSourcePaths(items);
+  const known =
+    itemsOrKnown instanceof Set
+      ? itemsOrKnown
+      : await knownSourcePaths(itemsOrKnown);
   const orphans = files.filter((file) => !known.has(canonicalPath(file.path)));
   stats.found = orphans.length;
 

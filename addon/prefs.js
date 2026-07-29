@@ -62,6 +62,8 @@ pref("extensions.zotero.__addonRef__.pdf.onlineAutoDownload", true);
 pref("extensions.zotero.__addonRef__.pdf.saveOaToDownloads", true);
 pref("extensions.zotero.__addonRef__.pdf.onlineOnReconcile", false);
 pref("extensions.zotero.__addonRef__.pdf.onlineMaxPerRun", 10);
+// Hidden: library scan page size (1–2000). Default 250; aligns with ~99k scale.
+pref("extensions.zotero.__addonRef__.pdf.libraryBatchSize", 250);
 pref("extensions.zotero.__addonRef__.pdf.orphanMode", "report");
 pref("extensions.zotero.__addonRef__.pdf.orphanMaxPerRun", 10);
 pref("extensions.zotero.__addonRef__.pdf.dryRun", false);
