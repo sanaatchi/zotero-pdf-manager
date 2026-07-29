@@ -2,26 +2,22 @@
 
 # Zotero PDF Manager — manuel kabul checklist
 
-**Sürüm:** 1.0.32 · **Kaynak:** `70679ccd`  
+**Sürüm:** 1.0.33 · **Kaynak:** `dd2f311e` · [CI](https://github.com/sanaatchi/zotero-pdf-manager/actions/runs/30496542222)  
 **XPI:** https://github.com/sanaatchi/zotero-pdf-manager-releases/releases/tag/v1.0.33
 
-| Alan          | Değer            |
-| ------------- | ---------------- |
-| Tarih         |                  |
-| Testçi        |                  |
-| OS            | Windows          |
-| Zotero sürümü | (7 / 8 / 9 / 10) |
-| XPI           | v1.0.33 public   |
+| Alan   | Değer          |
+| ------ | -------------- |
+| Tarih  |                |
+| Testçi |                |
+| Zotero | 7 / 8 / 9 / 10 |
 
-| #   | Senaryo                          | Beklenen                                             | Sonuç | Kanıt |
-| --- | -------------------------------- | ---------------------------------------------------- | ----- | ----- |
-| 1   | Eklenti yükle                    | Menü + tercihler                                     |       |       |
-| 2   | İkinci ana pencere               | Menü her ikisinde; tek reconciler                    |       |       |
-| 3   | İlk pencereyi kapat              | İkinci pencere menü/otomasyon çalışır                |       |       |
-| 4   | Son pencereyi kapat              | Shutdown’da sızıntı yok (log)                        |       |       |
-| 5   | Incomplete watch root (izin yok) | Audit `index-incomplete`; OA yok                     |       |       |
-| 6   | OA indirme                       | downloads/ altına yazar; üzerine yazmaz              |       |       |
-| 7   | Update kanalı                    | 1.0.32 + sha512 kabul                                |       |       |
-| 8   | Dispose sırasında OA iptal       | Abort; geç attach yok                                |       |       |
-| 9   | Unverifiable PDF                 | `#pdf-review` + `#pdf-quarantine`; ikinci kaynak yok |       |       |
-| 10  | Metadata check (DOI URL→bare)    | Pref açıkken DOI prefix temizlenir                   |       |       |
+| #   | Senaryo                | Beklenen               | Sonuç | Kanıt |
+| --- | ---------------------- | ---------------------- | ----- | ----- |
+| 1   | Eklenti yükle          | Menü + tercihler       |       |       |
+| 2   | İkinci ana pencere     | Menü her ikisinde      |       |       |
+| 3   | ISBN checksum          | Geçersiz ISBN eşleşmez |       |       |
+| 4   | Metadata DOI normalize | Prefix temiz           |       |       |
+| 5   | Update kanalı          | v1.0.33 + sha512       |       |       |
+| 6   | Quarantine / review    | `#pdf-quarantine`      |       |       |
+
+- [ ] Manuel matris tamam → rapor checklist `✅`
