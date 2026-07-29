@@ -15,15 +15,15 @@ iki-pencere kabulü; P2 (fail-open, ReDoS, CI, Sci-Hub politika).
 
 **Doğrulama:** **159/159 test** ✅ · lint:check ✅ · typecheck ✅
 
-| Madde                          | Durum | Not                                            |
-| ------------------------------ | ----- | ---------------------------------------------- |
-| Çoklu pencere lifecycle        | 🟡    | Kod ✅; gerçek Zotero iki-pencere kabulü açık  |
-| OA cleanup sahipliği           | ✅    | `finalCreatedByThisRun` + fail-closed exists   |
-| İndeks incomplete → otomasyon  | ✅    | OA suppress + audit `index-incomplete`         |
-| İndeks mutasyon kuyruğu        | ✅    | `enqueueIndexMutation` build+register          |
-| Atomik JSON crash testleri     | 🟡    | helper var; enjeksiyon testi sınırlı           |
-| Public `v1.0.27` + update_hash | 🟡    | publish.mjs güçlendirildi; yayın sıradaki adım |
-| Fail-open / ReDoS / CI         | ❌ P2 |                                                |
+| Madde                          | Durum | Not                                                                                               |
+| ------------------------------ | ----- | ------------------------------------------------------------------------------------------------- |
+| Çoklu pencere lifecycle        | 🟡    | Kod ✅; gerçek Zotero iki-pencere kabulü açık                                                     |
+| OA cleanup sahipliği           | ✅    | `finalCreatedByThisRun` + fail-closed exists                                                      |
+| İndeks incomplete → otomasyon  | ✅    | OA suppress + audit `index-incomplete`                                                            |
+| İndeks mutasyon kuyruğu        | ✅    | `enqueueIndexMutation` build+register                                                             |
+| Atomik JSON crash testleri     | 🟡    | helper var; enjeksiyon testi sınırlı                                                              |
+| Public `v1.0.27` + update_hash | ✅    | [v1.0.27](https://github.com/sanaatchi/zotero-pdf-manager-releases/releases/tag/v1.0.27) + sha512 |
+| Fail-open / ReDoS / CI         | ❌ P2 |                                                                                                   |
 
 ---
 
