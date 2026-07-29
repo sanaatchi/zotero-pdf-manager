@@ -428,6 +428,7 @@ test("dry-run and persistent automation audit are exposed to the user", () => {
   assert.match(prefs, /pdf\.dryRun", false/);
   assert.match(preferences, /preference="[^"]+\.pdf\.dryRun"/);
   assert.match(preferences, /id="pdf-run-reconcile"/);
+  assert.match(preferences, /id="pdf-cancel-reconcile"/);
   assert.match(preferences, /id="pdf-open-audit"/);
   assert.match(preferences, /id="pdf-clear-audit"/);
   assert.match(preferences, /data-l10n-id="pdf-audit-tags-help"/);
@@ -449,6 +450,7 @@ test("dry-run and persistent automation audit are exposed to the user", () => {
     );
     assert.match(source, /^pdf-dry-run\s*=/m);
     assert.match(source, /^pdf-run-reconcile\s*=/m);
+    assert.match(source, /^pdf-cancel-reconcile\s*=/m);
     assert.match(source, /^pdf-open-audit\s*=/m);
     assert.match(source, /^pdf-clear-audit\s*=/m);
     assert.match(source, /^pdf-audit-tags-help\s*=/m);

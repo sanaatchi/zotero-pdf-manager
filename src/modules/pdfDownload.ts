@@ -18,6 +18,10 @@ import {
 } from "./downloadReport";
 import { getLastIndexBuildMeta, isFolderIndexComplete } from "./folderIndex";
 import { throwIfRunAborted } from "../utils/cancelToken";
+import {
+  cascadeAutomaticSources,
+  type CascadeSourceLike,
+} from "../utils/oaCascade";
 
 export {
   resolveOaDownloadsDir,
@@ -30,6 +34,8 @@ export {
   shouldCleanupPersistedDownload,
 } from "./oaDownloadPath";
 
+export { cascadeAutomaticSources } from "../utils/oaCascade";
+
 export const AUTOMATIC_ONLINE_SOURCE_IDS = [
   "doi",
   "arxiv",
@@ -41,6 +47,32 @@ export const AUTOMATIC_ONLINE_SOURCE_IDS = [
 export type AutomaticOnlineResult =
   | { attachment: Zotero.Item; source: string; stopped?: undefined }
   | { stopped: "review" | "erase-failed"; attachment?: Zotero.Item | null };
+
+type OnlineSourceLike = {
+  id: string;
+  isEnabled: () => boolean;
+  supportsItem: (item: Zotero.Item) => boolean;
+  tryAttach: (item: Zotero.Item) => Promise<unknown | null>;
+};
+
+let automaticSourcesForTests: OnlineSourceLike[] | null = null;
+
+/** @internal */
+export function __setAutomaticOnlineSourcesForTests(
+  sources: OnlineSourceLike[] | null,
+) {
+  automaticSourcesForTests = sources;
+}
+
+function orderedAutomaticSources(): OnlineSourceLike[] {
+  if (automaticSourcesForTests) return automaticSourcesForTests;
+  const list: OnlineSourceLike[] = [];
+  for (const id of AUTOMATIC_ONLINE_SOURCE_IDS) {
+    const source = ALL_SOURCES[id];
+    if (source) list.push(source);
+  }
+  return list;
+}
 
 function orderedSources(): PDFSource[] {
   const order = ((getPref("pdf.sourceOrder") as string) || "")
@@ -86,32 +118,31 @@ export async function tryAutomaticOnlineSources(
   await ensureDOI(item);
   throwIfRunAborted();
 
-  for (const id of AUTOMATIC_ONLINE_SOURCE_IDS) {
-    throwIfRunAborted();
-    // Quarantine / prior attach may have landed mid-cascade.
-    if (hasPDFAttachment(item)) return null;
-    const source = ALL_SOURCES[id];
-    if (!source?.isEnabled() || !source.supportsItem(item)) continue;
-    try {
-      let attachment = (await source.tryAttach(item)) as Zotero.Item | null;
-      throwIfRunAborted();
-      if (!attachment) continue;
-      if (id === "doi") {
-        attachment =
-          (await relocateImportedPdfToDownloads(item, attachment, "doi")) ||
-          attachment;
-      }
-      await maybeEmbedMetadata(item, attachment);
-      return { attachment, source: id };
-    } catch (e) {
-      if ((e as Error)?.name === "RunAbortedError") throw e;
-      if (isAttachStoppedError(e)) {
-        return { stopped: e.reason, attachment: e.attachment };
-      }
-      ztoolkit.log(`Automatic OA source ${id} failed`, e);
-    }
-  }
-  return null;
+  const result = await cascadeAutomaticSources(
+    item,
+    orderedAutomaticSources() as CascadeSourceLike[],
+    {
+      hasPDF: hasPDFAttachment as (item: unknown) => boolean,
+      throwIfAborted: throwIfRunAborted,
+      afterAttach: async (parent, attachment, id) => {
+        let next = attachment as Zotero.Item;
+        if (id === "doi") {
+          next =
+            (await relocateImportedPdfToDownloads(
+              parent as Zotero.Item,
+              next,
+              "doi",
+            )) || next;
+        }
+        await maybeEmbedMetadata(parent as Zotero.Item, next);
+        return next;
+      },
+      onSourceError: (id, e) => {
+        ztoolkit.log(`Automatic OA source ${id} failed`, e);
+      },
+    },
+  );
+  return result as AutomaticOnlineResult | null;
 }
 
 function notify(

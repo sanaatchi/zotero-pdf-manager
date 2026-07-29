@@ -35,6 +35,7 @@ export const REVERSIBLE_AUTOMATION_TAGS = [
   "#auto-attached",
   "#auto-oa",
   "#pdf-review",
+  "#pdf-quarantine",
   "#auto-created",
   "#pdf-orphan",
 ] as const;

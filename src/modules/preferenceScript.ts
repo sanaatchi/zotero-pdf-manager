@@ -1,4 +1,4 @@
-// @ajan: cursor · @etiket: katman-2, p2-2, p2-6, prefs, thresholds, audit
+// @ajan: cursor · @etiket: katman-2, p2, prefs, reconcile-cancel, audit
 import { config } from "../../package.json";
 import { getString } from "../utils/locale";
 import { getPref, setPref } from "../utils/prefs";
@@ -10,6 +10,77 @@ import {
 } from "./pdfReconciler";
 import { clearAuditEvents, openAutomationAuditReport } from "./automationAudit";
 
+async function runManualReconcileWithProgress() {
+  const reconciler = addon.data.pdfReconciler;
+  if (!reconciler) return;
+  if (reconciler.isBusy()) {
+    new ztoolkit.ProgressWindow(config.addonName, { closeTime: 3000 })
+      .createLine({
+        text: getString("pdf-reconcile-busy"),
+        type: "default",
+      })
+      .show();
+    return;
+  }
+  const progress = new ztoolkit.ProgressWindow(config.addonName, {
+    closeOnClick: false,
+    closeTime: -1,
+  });
+  progress
+    .createLine({
+      text: getString("pdf-reconcile-running"),
+      type: "default",
+      progress: 20,
+    })
+    .show();
+  // Second line acts as cancel affordance (click closes + cancels).
+  progress.createLine({
+    text: getString("pdf-reconcile-cancel-hint"),
+    type: "default",
+    progress: 0,
+  });
+  const onClick = () => {
+    reconciler.cancel("prefs-progress");
+  };
+  try {
+    (progress as any).window?.addEventListener?.("click", onClick);
+  } catch {
+    /* ProgressWindow may not expose window in all builds */
+  }
+  try {
+    await reconciler.run("manual");
+    progress.changeLine({
+      text: getString("pdf-reconcile-done"),
+      type: "success",
+      progress: 100,
+      idx: 0,
+    });
+  } catch (e) {
+    if ((e as Error)?.name === "RunAbortedError") {
+      progress.changeLine({
+        text: getString("pdf-reconcile-cancelled"),
+        type: "default",
+        progress: 100,
+        idx: 0,
+      });
+    } else {
+      ztoolkit.log("Manual reconcile failed", e);
+      progress.changeLine({
+        text: getString("pdf-reconcile-failed"),
+        type: "fail",
+        progress: 100,
+        idx: 0,
+      });
+    }
+  } finally {
+    try {
+      (progress as any).window?.removeEventListener?.("click", onClick);
+    } catch {
+      /* ignore */
+    }
+    progress.startCloseTimer(4000);
+  }
+}
 export async function registerPrefsScripts(_window: Window) {
   if (!addon.data.prefs) {
     addon.data.prefs = {
@@ -296,8 +367,19 @@ function bindPrefEvents(_window: Window) {
     .querySelector('[preference$=".pdf.autoOnAdd"]')
     ?.addEventListener("command", () => addon.data.pdfReconciler?.start());
   doc.querySelector("#pdf-run-reconcile")?.addEventListener("command", () => {
-    void addon.data.pdfReconciler?.run("manual");
+    void runManualReconcileWithProgress();
   });
+  doc
+    .querySelector("#pdf-cancel-reconcile")
+    ?.addEventListener("command", () => {
+      addon.data.pdfReconciler?.cancel("prefs-button");
+      new ztoolkit.ProgressWindow(config.addonName, { closeTime: 2500 })
+        .createLine({
+          text: getString("pdf-reconcile-cancel-requested"),
+          type: "default",
+        })
+        .show();
+    });
   doc.querySelector("#pdf-open-audit")?.addEventListener("command", () => {
     void openAutomationAuditReport();
   });

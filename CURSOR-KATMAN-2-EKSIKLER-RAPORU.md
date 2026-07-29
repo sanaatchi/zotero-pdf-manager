@@ -1,4 +1,4 @@
-<!-- @ajan: cursor · @etiket: katman-2, eksik-raporu, p2-cascade-abort -->
+<!-- @ajan: cursor · @etiket: katman-2, eksik-raporu, v1.0.31 -->
 
 # Cursor — Katman 2 Eksikler Raporu
 
@@ -7,24 +7,27 @@
 > Rule: `.cursor/rules/katman-eksik-raporu.mdc`
 
 **Tarih:** 2026-07-29  
-**Kapsam:** `zotero-pdf-manager` · **v1.0.30** public  
-**Durum:** Cascade stop + add abort yayınlandı. Açık: manuel Zotero checklist.
+**Kapsam:** `zotero-pdf-manager` · **v1.0.31** public  
+**Durum:** Cancel UI + `#pdf-quarantine` + cascade davranış testi. Açık: manuel Zotero checklist.
 
-## Güncel durum — 2026-07-29 (v1.0.30)
+## Güncel durum — 2026-07-29 (v1.0.31)
 
-**Doğrulama:** **177/177** · lint · typecheck ·  
-[v1.0.30](https://github.com/sanaatchi/zotero-pdf-manager-releases/releases/tag/v1.0.30) ✅
+**Doğrulama:** **180/180** · lint · typecheck · (release sonrası URL)
 
-| Madde                     | Durum | Not                                                                                                   |
-| ------------------------- | ----- | ----------------------------------------------------------------------------------------------------- |
-| Review-source cascade     | ✅    | `AttachStoppedError` — unverifiable/erase-failed zinciri durdurur                                     |
-| Add-notifier cancellation | ✅    | flush → `runAbort` + `performItems(..., signal)` + signal’lı index                                    |
-| Public patch              | ✅    | [v1.0.30](https://github.com/sanaatchi/zotero-pdf-manager-releases/releases/tag/v1.0.30) · `3c97ed96` |
-| Çoklu pencere checklist   | 🟡    | [`ZOTERO-KABUL-CHECKLIST.md`](ZOTERO-KABUL-CHECKLIST.md)                                              |
+| Madde                     | Durum | Not                                                                                      |
+| ------------------------- | ----- | ---------------------------------------------------------------------------------------- |
+| Review-source cascade     | ✅    | `oaCascade` + `AttachStoppedError` — zincir durur                                        |
+| Cascade davranış testi    | ✅    | `tests/pdfCascade.test.cjs`                                                              |
+| `#pdf-quarantine` etiketi | ✅    | unverifiable/erase-failed; match temizler; reversible audit listesinde                   |
+| Manuel Cancel UI          | ✅    | prefs ProgressWindow + `#pdf-cancel-reconcile` → `reconciler.cancel()`                   |
+| Add-notifier cancellation | ✅    | flush → `runAbort` + signal’lı performItems/index                                        |
+| Public patch              | 🟡    | v1.0.31 yayın sırada                                                                     |
+| Çoklu pencere checklist   | 🟡    | [`ZOTERO-KABUL-CHECKLIST.md`](ZOTERO-KABUL-CHECKLIST.md)                                 |
 
 ---
 
 ## Codex derin P2 kapanış doğrulaması — 2026-07-29 (arşiv)
+
 
 **Karar:** `request changes`
 

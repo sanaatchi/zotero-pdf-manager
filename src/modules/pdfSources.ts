@@ -511,6 +511,7 @@ export async function downloadAndAttach(
     const verdict = await validateAttachmentContent(item, attachment.id);
     if (verdict === "match" || verdict === "skipped") {
       await removeAutomationTag(item, "#pdf-review");
+      await removeAutomationTag(item, "#pdf-quarantine");
       return attachment;
     }
     if (verdict === "unverifiable") {
@@ -518,6 +519,7 @@ export async function downloadAndAttach(
         `Unverifiable PDF content for ${item.id} — quarantine + #pdf-review`,
       );
       await tagItem(item, "#pdf-review");
+      await tagItem(item, "#pdf-quarantine");
       // Keep attachment for review; stop all further source/URL cascade.
       throw new AttachStoppedError("review", attachment);
     }
@@ -530,6 +532,7 @@ export async function downloadAndAttach(
     });
     if (cleaned === "erase-failed") {
       await tagItem(item, "#pdf-review");
+      await tagItem(item, "#pdf-quarantine");
       throw new AttachStoppedError("erase-failed", attachment);
     }
     return null;

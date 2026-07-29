@@ -173,6 +173,20 @@ export class PDFReconciler {
     return this.activeRun;
   }
 
+  /** Abort in-flight reconcile / add flush / orphan scan (manual Cancel). */
+  cancel(reason = "user-cancel") {
+    ztoolkit.log(`PDF reconcile cancel requested (${reason})`);
+    try {
+      this.runAbort?.abort();
+    } catch {
+      /* ignore */
+    }
+  }
+
+  isBusy() {
+    return !!this.activeRun || this.addFlushRunning;
+  }
+
   async processOrphansNow() {
     if (this.activeRun) await this.activeRun;
     if (this.disposed) return null;

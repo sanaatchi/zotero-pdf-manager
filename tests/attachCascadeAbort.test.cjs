@@ -65,7 +65,8 @@ test("validation + cascade: AttachStoppedError stops further sources", () => {
     "utf8",
   );
   assert.match(download, /isAttachStoppedError/);
-  assert.match(download, /stopped: e\.reason/);
+  assert.match(download, /cascadeAutomaticSources/);
+  assert.match(download, /stopped:/);
   assert.match(download, /hasPDFAttachment\(item\)/);
 
   const { AttachStoppedError, isAttachStoppedError, rethrowAttachControlFlow } =

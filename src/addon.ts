@@ -25,6 +25,8 @@ class Addon {
     pdfReconciler?: {
       start: () => void;
       dispose: () => void;
+      cancel: (reason?: string) => void;
+      isBusy: () => boolean;
       run: (reason?: "startup" | "periodic" | "manual") => Promise<unknown>;
       processOrphansNow: () => Promise<unknown>;
     };
