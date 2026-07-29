@@ -9,34 +9,36 @@
 **Tarih:** 2026-07-29  
 **Kapsam:** `zotero-pdf-manager` · v1.0.28 + P2 kapanış düzeltmeleri (CI/ReDoS/validation/abort/orphan)  
 **Durum:** Codex P2 `request changes` maddeleri kodlandı. Yerel **175/175** · lint ·
-typecheck yeşil. Public CI / patch release / manuel Zotero checklist sırada.
+typecheck yeşil. Public CI success. Manuel Zotero checklist + isteğe bağlı patch
+release açık.
 
 ## Güncel durum — 2026-07-29 (P2 kapanış uygulaması)
 
-**Doğrulama:** **175/175 test** ✅ · lint:check ✅ · typecheck ✅
+**Doğrulama:** **175/175 test** ✅ · lint:check ✅ · typecheck ✅ · CI ✅
+[30480928845](https://github.com/sanaatchi/zotero-pdf-manager/actions/runs/30480928845)
 
-| Madde                       | Durum | Not                                                                     |
-| --------------------------- | ----- | ----------------------------------------------------------------------- |
-| CI lockfile / Node 22 / pin | ✅    | `package-lock.json` izlenir; actions SHA; `permissions: contents: read` |
-| ReDoS / safeRegex           | ✅    | `(a\|aa)+`, `(a\|a?)+`, backref, lookaround reddedilir                  |
-| Validation cleanup          | ✅    | erase-gates file; unverifiable quarantine; match clears `#pdf-review`   |
-| Orphan bounded memory       | ✅    | `mergeKnownSourcePaths` — item birikimi yok                             |
-| XHR / index abort           | ✅    | `cancellerReceiver` + walker `signal`                                   |
-| Vendor SHA                  | ✅    | pinned + notices testi                                                  |
-| Sci-Hub/LibGen politika     | ✅    | bilerek manuel opt-in; README risk notu                                 |
-| Public CI yeşil run         | 🟡    | push sonrası doğrulanacak                                               |
-| Çoklu pencere checklist     | 🟡    | [`ZOTERO-KABUL-CHECKLIST.md`](ZOTERO-KABUL-CHECKLIST.md)                |
-| Patch release               | 🟡    | CI yeşil + checklist sonrası                                            |
+| Madde                       | Durum | Not                                                                                                  |
+| --------------------------- | ----- | ---------------------------------------------------------------------------------------------------- |
+| CI lockfile / Node 22 / pin | ✅    | `package-lock.json` izlenir; actions SHA; `permissions: contents: read`                              |
+| ReDoS / safeRegex           | ✅    | `(a\|aa)+`, `(a\|a?)+`, backref, lookaround reddedilir                                               |
+| Validation cleanup          | ✅    | erase-gates file; unverifiable quarantine; match clears `#pdf-review`                                |
+| Orphan bounded memory       | ✅    | `mergeKnownSourcePaths` — item birikimi yok                                                          |
+| XHR / index abort           | ✅    | `cancellerReceiver` + walker `signal`                                                                |
+| Vendor SHA                  | ✅    | pinned + notices testi                                                                               |
+| Sci-Hub/LibGen politika     | ✅    | bilerek manuel opt-in; README risk notu                                                              |
+| Public CI yeşil run         | ✅    | [30480928845](https://github.com/sanaatchi/zotero-pdf-manager/actions/runs/30480928845) (`7591712e`) |
+| Çoklu pencere checklist     | 🟡    | [`ZOTERO-KABUL-CHECKLIST.md`](ZOTERO-KABUL-CHECKLIST.md)                                             |
+| Patch release               | 🟡    | checklist sonrası isteğe bağlı **v1.0.29**                                                           |
 
 ### Cursor için zorunlu P2 kapanış sırası
 
-1. CI lockfile/Node/action pin — ✅ kod; 🟡 public run
+1. CI lockfile/Node/action pin — ✅ + public success
 2. ReDoS — ✅
 3. Validation cleanup — ✅
 4. Orphan bounded-memory — ✅
 5. XHR/index cancellation — ✅ (progress/Cancel UI sonra)
 6. Vendor + Sci-Hub politika — ✅
-7. Commit + CI + checklist + patch release — sırada
+7. Commit + CI — ✅; checklist + patch release — sırada
 
 ---
 
