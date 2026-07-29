@@ -12,15 +12,16 @@
 
 ## Güncel durum — 2026-07-30 (v1.0.32)
 
-**Doğrulama:** **186/186** · lint · typecheck · (release sonrası)
+**Doğrulama:** **186/186** · lint · typecheck ·  
+[v1.0.32](https://github.com/sanaatchi/zotero-pdf-manager-releases/releases/tag/v1.0.32) ✅
 
-| Madde                         | Durum | Not                                                              |
-| ----------------------------- | ----- | ---------------------------------------------------------------- |
-| P2-1…P2-6                     | ✅    | otomasyon                                                        |
-| format-metadata → Check       | ✅    | `metadataNormalize` + ISBN 10↔13 + DOI/pages/title + validation  |
-| Cascade / quarantine / cancel | ✅    | v1.0.31                                                          |
-| Public patch                  | 🟡    | v1.0.32 yayın sırada                                             |
-| Gerçek Zotero checklist       | 🟡    | [`ZOTERO-KABUL-CHECKLIST.md`](ZOTERO-KABUL-CHECKLIST.md) v1.0.32 |
+| Madde                         | Durum | Not                                                                                                   |
+| ----------------------------- | ----- | ----------------------------------------------------------------------------------------------------- |
+| P2-1…P2-6                     | ✅    | otomasyon                                                                                             |
+| format-metadata → Check       | ✅    | `metadataNormalize` + ISBN 10↔13 + DOI/pages/title + validation                                       |
+| Cascade / quarantine / cancel | ✅    | v1.0.31                                                                                               |
+| Public patch                  | ✅    | [v1.0.32](https://github.com/sanaatchi/zotero-pdf-manager-releases/releases/tag/v1.0.32) · `70679ccd` |
+| Gerçek Zotero checklist       | 🟡    | [`ZOTERO-KABUL-CHECKLIST.md`](ZOTERO-KABUL-CHECKLIST.md) v1.0.32                                      |
 
 ---
 

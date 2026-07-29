@@ -2,7 +2,7 @@
 
 # Zotero PDF Manager — manuel kabul checklist
 
-**Sürüm:** 1.0.32 · **Kaynak:** (release sonrası)  
+**Sürüm:** 1.0.32 · **Kaynak:** `70679ccd`  
 **XPI:** https://github.com/sanaatchi/zotero-pdf-manager-releases/releases/tag/v1.0.32
 
 | Alan          | Değer            |
