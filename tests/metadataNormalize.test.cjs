@@ -59,6 +59,25 @@ test("ISBN-10 and ISBN-13 for the same work are equivalent", () => {
   assert.equal(isbnsEquivalent("0306406152", "9780306406158"), false);
 });
 
+test("invalid ISBN checksums never convert or equate", () => {
+  const {
+    isbn10To13,
+    isbn13To10,
+    isbnsEquivalent,
+    isValidIsbn10,
+    isValidIsbn13,
+  } = loadNormalize();
+  // Bad check digit (valid would be …2)
+  assert.equal(isValidIsbn10("0306406153"), false);
+  assert.equal(isbn10To13("0306406153"), "");
+  assert.equal(isbnsEquivalent("0306406153", "9780306406157"), false);
+  // Bad ISBN-13 check digit
+  assert.equal(isValidIsbn13("9780306406158"), false);
+  assert.equal(isbn13To10("9780306406158"), "");
+  // 979 cannot convert to ISBN-10
+  assert.equal(isbn13To10("9791234567896"), "");
+});
+
 test("pages connector and title trailing-dot helpers", () => {
   const { normalizePagesConnector, stripTitleTrailingDot } = loadNormalize();
   assert.equal(normalizePagesConnector("12~34+56"), "12-34, 56");

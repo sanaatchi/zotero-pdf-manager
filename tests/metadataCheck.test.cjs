@@ -29,14 +29,14 @@ test("metadata check accepts normalized matching fields", () => {
       creators: ["John Berger"],
       year: "2011",
       doi: "https://doi.org/10.1000/ABC.12",
-      isbn: "978-975-00-0000-1",
+      isbn: "978-975-00-0000-3",
     },
     {
       title: "Yedinci Adam Avrupa’daki Göçmen İşçiler",
       creators: ["Berger, John"],
       year: "2011",
       doi: "DOI: 10.1000/abc.12",
-      isbn: "ISBN 9789750000001",
+      isbn: "ISBN 9789750000003",
     },
   );
 
@@ -84,12 +84,12 @@ test("PDF page text can verify metadata when embedded fields are empty", () => {
       title: "Ailenin Özel Mülkiyetin ve Devletin Kökeni",
       creators: ["Friedrich Engels"],
       year: "1884",
-      isbn: "9789757399141",
+      isbn: "9789757399148",
     },
     {
       evidence:
         "FRIEDRICH ENGELS\nAilenin, Özel Mülkiyetin ve Devletin Kökeni\n" +
-        "İlk basım 1884\nISBN 978-975-7399-14-1",
+        "İlk basım 1884\nISBN 978-975-7399-14-8",
     },
   );
 
