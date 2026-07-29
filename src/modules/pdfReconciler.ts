@@ -1,4 +1,4 @@
-// @ajan: cursor · @etiket: katman-2, p2, p2-3, p2-5, p2-6, reconciler, cancel, batch
+// @ajan: cursor · @etiket: katman-2, p2, reconciler, add-abort, cascade-stop
 import { getPref } from "../utils/prefs";
 import {
   buildIndex,
@@ -336,9 +336,31 @@ export class PDFReconciler {
           detail: `flush ${items.length} item(s) from ${rawIDs.length} notifier id(s)`,
         });
 
-        this.activeRun = this.performItems(items, "add", false).finally(() => {
-          this.activeRun = null;
-        });
+        const controller = new AbortController();
+        this.runAbort?.abort();
+        this.runAbort = controller;
+        this.activeRun = runWithAbortSignal(controller.signal, () =>
+          this.performItems(items, "add", false, controller.signal),
+        )
+          .catch((e) => {
+            if ((e as Error)?.name === "RunAbortedError") {
+              ztoolkit.log("PDF reconcile aborted (add)");
+              return {
+                scanned: 0,
+                attached: 0,
+                review: 0,
+                skipped: 0,
+                errors: 0,
+                created: 0,
+                planned: 0,
+              } satisfies ReconcileStats;
+            }
+            throw e;
+          })
+          .finally(() => {
+            if (this.runAbort === controller) this.runAbort = null;
+            this.activeRun = null;
+          });
         await this.activeRun;
       }
     } finally {
@@ -513,7 +535,7 @@ export class PDFReconciler {
       outcome: "info",
       detail: dryRun ? "Dry-run enabled" : reason,
     });
-    const index = await buildIndex(forceIndex);
+    const index = await buildIndex(forceIndex, undefined, signal);
     if (this.disposed || isRunAborted(signal)) return stats;
     const indexComplete = isFolderIndexComplete();
     if (!indexComplete) {
@@ -714,7 +736,19 @@ export class PDFReconciler {
             continue;
           }
           const online = await tryAutomaticOnlineSources(item);
-          if (online) {
+          if (online && "stopped" in online) {
+            stats.review++;
+            await appendAuditEvent({
+              run: runID,
+              action: "online-attach",
+              outcome: "review",
+              itemID: item.id,
+              title: item.getDisplayTitle(),
+              detail: `Cascade stopped (${online.stopped}); quarantine kept`,
+            });
+            continue;
+          }
+          if (online && "source" in online && online.attachment) {
             await addAutomationTag(item, "#auto-attached");
             await addAutomationTag(item, "#auto-oa");
             stats.attached++;

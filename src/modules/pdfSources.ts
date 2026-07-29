@@ -1,4 +1,4 @@
-// @ajan: cursor · @etiket: katman-2, p1, p2-2, p2-4, pdfSources, oa-no-overwrite, validation-cleanup
+// @ajan: cursor · @etiket: katman-2, p1, p2-2, p2-4, pdfSources, validation-cleanup, cascade-stop
 import { getString } from "../utils/locale";
 import { getPref } from "../utils/prefs";
 import {
@@ -22,6 +22,31 @@ import {
   throwIfRunAborted,
 } from "../utils/cancelToken";
 
+/** Stops further URL/source cascade after quarantine or erase-failed keep. */
+export class AttachStoppedError extends Error {
+  readonly name = "AttachStoppedError";
+  constructor(
+    readonly reason: "review" | "erase-failed",
+    readonly attachment?: Zotero.Item | null,
+  ) {
+    super(`PDF attach stopped (${reason})`);
+  }
+}
+
+export function isAttachStoppedError(e: unknown): e is AttachStoppedError {
+  return (
+    !!e &&
+    typeof e === "object" &&
+    ((e as Error).name === "AttachStoppedError" ||
+      e instanceof AttachStoppedError)
+  );
+}
+
+/** Re-throw cascade-stop / abort so URL/source loops do not swallow them. */
+export function rethrowAttachControlFlow(e: unknown): void {
+  if (isAttachStoppedError(e)) throw e;
+  if ((e as Error)?.name === "RunAbortedError") throw e;
+}
 // Gecko globals available in the Zotero sandbox but not in the type defs.
 declare const IOUtils: any;
 declare const PathUtils: any;
@@ -493,9 +518,8 @@ export async function downloadAndAttach(
         `Unverifiable PDF content for ${item.id} — quarantine + #pdf-review`,
       );
       await tagItem(item, "#pdf-review");
-      // Keep the attachment for human review; do not erase/delete so the
-      // artefact remains and the link cannot go stale from a failed erase.
-      return null;
+      // Keep attachment for review; stop all further source/URL cascade.
+      throw new AttachStoppedError("review", attachment);
     }
     // mismatch — must erase before deleting the linked file
     ztoolkit.log(`Rejected PDF (metadata mismatch) for ${item.id}`);
@@ -506,6 +530,7 @@ export async function downloadAndAttach(
     });
     if (cleaned === "erase-failed") {
       await tagItem(item, "#pdf-review");
+      throw new AttachStoppedError("erase-failed", attachment);
     }
     return null;
   }
@@ -911,6 +936,7 @@ export class SemanticScholarSource implements PDFSource {
       if (!pdf) return null;
       return await downloadAndAttach(item, pdf);
     } catch (e) {
+      rethrowAttachControlFlow(e);
       ztoolkit.log("Semantic Scholar failed", e);
       return null;
     }
@@ -943,6 +969,7 @@ export class DergiParkSource implements PDFSource {
           if (att) return att;
         }
       } catch (e) {
+        rethrowAttachControlFlow(e);
         ztoolkit.log("DergiPark page scrape failed", e);
       }
     }
@@ -953,6 +980,7 @@ export class DergiParkSource implements PDFSource {
       try {
         return await searchDergiParkByTitle(item, title);
       } catch (e) {
+        rethrowAttachControlFlow(e);
         ztoolkit.log("DergiPark search failed", e);
       }
     }
@@ -1155,6 +1183,7 @@ export class SciHubSource implements PDFSource {
         const att = await downloadAndAttach(item, pdfURL);
         if (att) return att;
       } catch (e) {
+        rethrowAttachControlFlow(e);
         ztoolkit.log(`Sci-Hub mirror ${base} failed`, e);
       }
     }
@@ -1196,6 +1225,7 @@ export class LibGenSource implements PDFSource {
           completedSearches++;
           if (att) return att;
         } catch (e) {
+          rethrowAttachControlFlow(e);
           ztoolkit.log(`LibGen mirror ${base} failed`, e);
           mirrorErrors.push(
             `${base}: ${e instanceof Error ? e.message : String(e)}`,
@@ -1306,6 +1336,7 @@ export class YokTezSource implements PDFSource {
           }
         }
       } catch (e) {
+        rethrowAttachControlFlow(e);
         ztoolkit.log("YÖKTEZ fetch failed", e);
       }
     }
@@ -1317,6 +1348,7 @@ export class YokTezSource implements PDFSource {
       try {
         return await searchYokTezByTitle(item, title);
       } catch (e) {
+        rethrowAttachControlFlow(e);
         ztoolkit.log("YÖKTEZ search failed", e);
       }
     }
@@ -1401,6 +1433,7 @@ export class ProQuestSource implements PDFSource {
       if (!m) return null;
       return await downloadAndAttach(item, absoluteURL(url, m[1]));
     } catch (e) {
+      rethrowAttachControlFlow(e);
       ztoolkit.log("ProQuest fetch failed", e);
       return null;
     }

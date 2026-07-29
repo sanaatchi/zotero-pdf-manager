@@ -1,4 +1,4 @@
-// @ajan: cursor · @etiket: katman-2, p1, p2-4, p2, pdfDownload, oa-downloads, cancel
+// @ajan: cursor · @etiket: katman-2, p2, pdfDownload, cascade-stop, cancel
 import { getString } from "../utils/locale";
 import { getPref } from "../utils/prefs";
 import { config } from "../../package.json";
@@ -6,6 +6,7 @@ import {
   ALL_SOURCES,
   downloadAndAttach,
   ensureDOI,
+  isAttachStoppedError,
   PDFSource,
   relocateImportedPdfToDownloads,
 } from "./pdfSources";
@@ -37,6 +38,10 @@ export const AUTOMATIC_ONLINE_SOURCE_IDS = [
   "dergipark",
 ] as const;
 
+export type AutomaticOnlineResult =
+  | { attachment: Zotero.Item; source: string; stopped?: undefined }
+  | { stopped: "review" | "erase-failed"; attachment?: Zotero.Item | null };
+
 function orderedSources(): PDFSource[] {
   const order = ((getPref("pdf.sourceOrder") as string) || "")
     .split(",")
@@ -66,7 +71,9 @@ function hasPDFAttachment(item: Zotero.Item): boolean {
  * institutional proxies, YÖKTEZ and ProQuest even when those manual sources
  * are enabled. P2-4: successful downloads land under watch-root/downloads/.
  */
-export async function tryAutomaticOnlineSources(item: Zotero.Item) {
+export async function tryAutomaticOnlineSources(
+  item: Zotero.Item,
+): Promise<AutomaticOnlineResult | null> {
   throwIfRunAborted();
   if (hasPDFAttachment(item)) return null;
   if (!isFolderIndexComplete()) {
@@ -81,6 +88,8 @@ export async function tryAutomaticOnlineSources(item: Zotero.Item) {
 
   for (const id of AUTOMATIC_ONLINE_SOURCE_IDS) {
     throwIfRunAborted();
+    // Quarantine / prior attach may have landed mid-cascade.
+    if (hasPDFAttachment(item)) return null;
     const source = ALL_SOURCES[id];
     if (!source?.isEnabled() || !source.supportsItem(item)) continue;
     try {
@@ -96,6 +105,9 @@ export async function tryAutomaticOnlineSources(item: Zotero.Item) {
       return { attachment, source: id };
     } catch (e) {
       if ((e as Error)?.name === "RunAbortedError") throw e;
+      if (isAttachStoppedError(e)) {
+        return { stopped: e.reason, attachment: e.attachment };
+      }
       ztoolkit.log(`Automatic OA source ${id} failed`, e);
     }
   }
@@ -187,6 +199,26 @@ export async function downloadPdfForSelectedItems() {
         }
         attempts.push({ source: src.id, outcome: "no-match" });
       } catch (e) {
+        if (isAttachStoppedError(e)) {
+          attempts.push({
+            source: src.id,
+            outcome: "error",
+            reason: e.reason,
+          });
+          failed++;
+          reports.push({
+            itemID: item.id,
+            title,
+            result: "failed",
+            note:
+              e.reason === "review"
+                ? "PDF review quarantine — cascade stopped"
+                : "Erase failed — cascade stopped; file kept",
+            attempts,
+          });
+          attached = "stopped";
+          break;
+        }
         attempts.push({
           source: src.id,
           outcome: "error",
@@ -196,7 +228,9 @@ export async function downloadPdfForSelectedItems() {
       }
     }
 
-    if (attached) {
+    if (attached === "stopped") {
+      // already counted in failed + reports
+    } else if (attached) {
       await maybeEmbedMetadata(item, attached as Zotero.Item);
       success++;
       reports.push({

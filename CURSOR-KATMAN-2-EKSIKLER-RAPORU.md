@@ -1,4 +1,4 @@
-<!-- @ajan: cursor · @etiket: katman-2, eksik-raporu, p2-close -->
+<!-- @ajan: cursor · @etiket: katman-2, eksik-raporu, p2-cascade-abort -->
 
 # Cursor — Katman 2 Eksikler Raporu
 
@@ -7,10 +7,135 @@
 > Rule: `.cursor/rules/katman-eksik-raporu.mdc`
 
 **Tarih:** 2026-07-29  
-**Kapsam:** `zotero-pdf-manager` · **v1.0.29** public  
-**Durum:** P2 kapanış kodu + public release. Açık: manuel Zotero checklist doldurma.
+**Kapsam:** `zotero-pdf-manager` · v1.0.29 + cascade/add-abort düzeltmeleri  
+**Durum:** Codex P2 runtime `request changes` maddeleri kodlandı (AttachStoppedError
+cascade stop + add-notifier AbortController). Manuel checklist hâlâ açık.
 
-## Güncel durum — 2026-07-29 (v1.0.29)
+## Güncel durum — 2026-07-29 (cascade + add abort)
+
+**Doğrulama:** **177/177 test** ✅ · lint:check ✅ · typecheck ✅
+
+| Madde                     | Durum | Not                                                                |
+| ------------------------- | ----- | ------------------------------------------------------------------ |
+| Review-source cascade     | ✅    | `AttachStoppedError` — unverifiable/erase-failed zinciri durdurur  |
+| Add-notifier cancellation | ✅    | flush → `runAbort` + `performItems(..., signal)` + signal’lı index |
+| Public `v1.0.29`          | ✅    | önceki artefact; yeni patch sırada                                 |
+| Çoklu pencere checklist   | 🟡    | [`ZOTERO-KABUL-CHECKLIST.md`](ZOTERO-KABUL-CHECKLIST.md)           |
+
+---
+
+## Codex derin P2 kapanış doğrulaması — 2026-07-29 (arşiv)
+
+**Karar:** `request changes`
+
+**Bağımsız doğrulama:** HEAD/origin `06d581e7`, çalışma ağacı temiz.
+**175/175 test** ✅ · TypeScript ✅ · ESLint ✅ · Prettier ✅. Release kaynak
+commit’i `57ad9026` için canlı CI
+[`30481394263`](https://github.com/sanaatchi/zotero-pdf-manager/actions/runs/30481394263)
+başarılı; güncel HEAD CI
+[`30481470138`](https://github.com/sanaatchi/zotero-pdf-manager/actions/runs/30481470138)
+başarılı. Public
+[`v1.0.29`](https://github.com/sanaatchi/zotero-pdf-manager-releases/releases/tag/v1.0.29)
+XPI **648.434 bayt**; indirilen XPI SHA-512 değeri update manifesti ve
+provenance ile eşleşti; source SHA
+`57ad9026ff7e62f25bcf7c25e3d33517f8d802cd`.
+
+| Madde                          | Durum | Derin doğrulama sonucu                                            |
+| ------------------------------ | ----- | ----------------------------------------------------------------- |
+| CI lockfile / Node 22 / pin    | ✅    | Exact release commit ve HEAD CI yeşil                             |
+| Release hash / provenance      | ✅    | Public XPI, manifest, source SHA bağı doğrulandı                  |
+| ReDoS hardening                | ✅    | Bildirilen alternation/backref/lookaround desenleri reddediliyor  |
+| Orphan bounded memory          | ✅    | Item nesnesi yerine `knownPaths` tutuluyor                        |
+| Folder walk / main-run XHR     | ✅    | Signal ve `cancellerReceiver` zinciri mevcut                      |
+| Validation erase-gate          | ✅    | Erase başarısızsa linked dosya korunuyor                          |
+| Review-source cascade          | ❌ P2 | Korunan unverifiable attachment sonrası diğer kaynaklar deneniyor |
+| Add-notifier cancellation      | ❌ P2 | `performItems(..., "add")` controller/signal olmadan çalışıyor    |
+| Davranış testlerinin derinliği | 🟡    | Kritik testlerin bir bölümü source-regex / kopya helper           |
+| Gerçek Zotero checklist        | 🟡 P1 | Sonuç ve kanıt hücreleri boş                                      |
+
+### P2 yüksek — unverifiable “karantina” kaynak zincirini durdurmuyor
+
+`src/modules/pdfSources.ts:491-498`, doğrulanamayan PDF attachment’ını insan
+incelemesi için öğeye bağlı şekilde koruyor, `#pdf-review` ekliyor ve `null`
+döndürüyor. Ancak `src/modules/pdfDownload.ts:79-96` otomatik kaynak döngüsü,
+`null` sonucunu “kaynak başarısız” sayıp sıradaki kaynağa geçiyor;
+`hasPDFAttachment()` yalnız döngü başlamadan önce bir kez kontrol ediliyor.
+Birçok source içi alternatif URL döngüsü de `if (att) return att` sonrasında
+devam ediyor.
+
+Sonuç: ilk kaynağın unverifiable PDF’si öğede kalırken ikinci kaynak başka bir
+PDF ekleyebilir. İkinci PDF `match` olursa `#pdf-review` etiketi kaldırılır;
+ilk, doğrulanmamış attachment ise etiketsiz biçimde kalır. Aynı problem mismatch
+cleanup `erase-failed` olduğunda da oluşabilir: attachment/dosya bilinçli
+korunur fakat `null` sonucu cascade’i sürdürür.
+
+“Quarantine” ayrıca ayrı bir koleksiyon/klasör/durum değil; normal parent
+attachment olarak kalır. Mevcut validation testi gerçek `downloadAndAttach`
+işlevini çalıştırmıyor: kaynak metnini regex ile kontrol ediyor ve
+`cleanupRejectedAttachment` mantığını test dosyasında yeniden yazıyor.
+
+**Cursor görevi:** dönüş sözleşmesini `attached | review | rejected | failed`
+gibi ayrık sonuç yap. `review` veya `erase-failed`, hem source içi URL
+denemelerini hem kaynaklar arası cascade’i durdurmalı. Review attachment’ı açık
+bir quarantine durumu/collection/audit kaydıyla işaretle; başarı etiketi yalnız
+ilgili review artefact çözüldüğünde temizlenmeli.
+
+**Kabul:** gerçek işlevlerle `unverifiable→match` ve
+`mismatch+erase-failed→match` zincir testleri; ikinci attachment oluşmaz,
+review etiketi/artefact tutarlı kalır ve kullanıcı hangi PDF’yi inceleyeceğini
+görebilir.
+
+### P2 yüksek — add-notifier OA çalışması dispose ile iptal edilmiyor
+
+Startup/periodic/manual tam tarama `performRun()` içinde `AbortController`,
+`runWithAbortSignal()` ve signal’lı `buildIndex()` kullanıyor. Fakat
+`src/modules/pdfReconciler.ts:305-342` add-notifier flush yolu doğrudan
+`performItems(items, "add", false)` çağırıyor; controller oluşturmuyor,
+`this.runAbort`a bağlanmıyor ve signal geçmiyor.
+
+Bu nedenle add sırasında:
+
+- `buildIndex(forceIndex)` signal almıyor;
+- `processItemBatch()` içindeki OA çağrıları global `activeSignal` yoksa
+  iptalsiz;
+- `dispose()` yalnız `this.runAbort`u abort ettiği için aktif add isteğini
+  durduramıyor.
+
+Global `activeSignal` fallback’i de gerçek run context değildir; eşzamanlı
+manuel indirme, aktif reconciler sinyalini yanlışlıkla devralabilir. Mevcut
+testler canceller helper’ını çalıştırıyor fakat add-notifier→HTTP→dispose
+zincirini gerçek davranışla kurmuyor; HTTP wiring testi yalnız kaynak metninde
+sembol arıyor.
+
+**Cursor görevi:** add flush için de controller/run context kur ve
+`performItems`e açık signal geçir; `buildIndex(forceIndex, ..., signal)`
+kullan. Global signal fallback’ini kaldırıp source/download API’lerine context
+aktar. Dispose sırasında sahte geciken HTTP canceller’ının çağrıldığını, geç
+attachment/index/audit yan etkisi oluşmadığını entegrasyon testiyle kanıtla.
+
+### Kabul boşlukları / sonraki öncelik
+
+- `ZOTERO-KABUL-CHECKLIST.md` hâlâ doldurulmamış; iki pencere ve gerçek dispose
+  davranışı yalnız kaynak/test doubles ile kanıtlı.
+- 99.999 smoke ID parçalamayı doğruluyor; gerçek Zotero peak-memory/latency
+  benchmarkı yok. `knownPaths` değişikliği önceki item-object birikimini
+  kapattığı için bunu P2 blocker değil, performans kabul borcu olarak tutuyorum.
+- Sci-Hub/LibGen’in manual opt-in olarak public XPI içinde kalması artık
+  belgelenmiş bilinçli politika kararı; teknik açık değil, kabul edilmiş ürün
+  riski.
+
+### Cursor için zorunlu kapanış sırası
+
+1. Review/rejected/failed dönüş sözleşmesiyle source cascade’i durdur.
+2. Add-notifier yolunu açık run context + gerçek XHR/index cancellation’a bağla.
+3. Kopya/source-regex testler yerine iki zincirin entegrasyon testlerini ekle.
+4. Yeni patch release öncesi gerçek Zotero checklist’ini doldur.
+5. Test/lint/typecheck/build + exact-commit CI + public hash/provenance yeniden
+   doğrulandıktan sonra P2 runtime kabulünü kapat.
+
+---
+
+## Cursor v1.0.29 kapanış kaydı — 2026-07-29 (arşiv)
 
 **Doğrulama:** **175/175 test** ✅ · lint:check ✅ · typecheck ✅ · CI ✅ ·  
 public [v1.0.29](https://github.com/sanaatchi/zotero-pdf-manager-releases/releases/tag/v1.0.29) ✅

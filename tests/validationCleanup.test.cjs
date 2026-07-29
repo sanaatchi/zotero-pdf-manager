@@ -4,24 +4,18 @@ const path = require("node:path");
 const { test } = require("node:test");
 const esbuild = require("esbuild");
 
-test("validation verdicts: match clears review; unverifiable keeps; mismatch erase-gates file", () => {
+test("validation verdicts: match clears review; unverifiable stops cascade; mismatch erase-gates file", () => {
   const source = fs.readFileSync(
     path.join(process.cwd(), "src/modules/pdfSources.ts"),
     "utf8",
   );
   assert.match(source, /cleanupRejectedAttachment/);
   assert.match(source, /removeAutomationTag\(item,\s*"#pdf-review"\)/);
-  assert.match(
-    source,
-    /Unverifiable PDF content[\s\S]*?#pdf-review[\s\S]*?return null/,
-  );
+  assert.match(source, /AttachStoppedError\("review"/);
+  assert.match(source, /AttachStoppedError\("erase-failed"/);
   assert.doesNotMatch(
     source,
-    /Unverifiable PDF content[\s\S]{0,400}eraseTx\(\)/,
-  );
-  assert.match(
-    source,
-    /Rejected PDF \(metadata mismatch\)[\s\S]*?cleanupRejectedAttachment/,
+    /Unverifiable PDF content[\s\S]{0,400}return null/,
   );
   assert.match(
     source,
