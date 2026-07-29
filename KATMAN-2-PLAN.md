@@ -10,7 +10,7 @@
 | Alan    | Değer                                                   |
 | ------- | ------------------------------------------------------- |
 | addonID | `zotero-pdf-manager@ibrahimyildiz.art`                  |
-| Sürüm   | 1.0.27 (`package.json`)                                 |
+| Sürüm   | 1.0.29 (`package.json`)                                 |
 | Girdi   | Katman 1’den organize PDF’ler + mevcut Zotero kayıtları |
 | Çıktı   | Tutarlı ek + metadata → Katman 3 (LibRart)              |
 
