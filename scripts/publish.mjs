@@ -64,13 +64,16 @@ export function buildGhReleaseCreateArgs({
 
 function run(bin, args) {
   console.log(`> ${bin} ${args.join(" ")}`);
-  execFileSync(bin, args, { stdio: "inherit", shell: false });
+  // .cmd/.bat on Windows require a shell to spawn; git/gh stay shell-free.
+  const needsCmdShell = isWin && /\.(cmd|bat)$/i.test(bin);
+  execFileSync(bin, args, { stdio: "inherit", shell: needsCmdShell });
 }
 
 function capture(bin, args) {
+  const needsCmdShell = isWin && /\.(cmd|bat)$/i.test(bin);
   return execFileSync(bin, args, {
     encoding: "utf8",
-    shell: false,
+    shell: needsCmdShell,
   }).trim();
 }
 
