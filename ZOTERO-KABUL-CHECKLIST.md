@@ -2,16 +2,17 @@
 
 # Zotero PDF Manager — manuel kabul checklist
 
-**Sürüm:** 1.0.29 · **Kaynak:** (release commit SHA — yayın sonrası doldur)  
-**Rule:** [`CURSOR-KATMAN-2-EKSIKLER-RAPORU.md`](CURSOR-KATMAN-2-EKSIKLER-RAPORU.md)
+**Sürüm:** 1.0.29 · **Kaynak:** `57ad9026`  
+**Rule:** [`CURSOR-KATMAN-2-EKSIKLER-RAPORU.md`](CURSOR-KATMAN-2-EKSIKLER-RAPORU.md)  
+**XPI:** https://github.com/sanaatchi/zotero-pdf-manager-releases/releases/tag/v1.0.29
 
-| Alan          | Değer                 |
-| ------------- | --------------------- |
-| Tarih         |                       |
-| Testçi        |                       |
-| OS            | Windows               |
-| Zotero sürümü | (7 / 8 / 9 / 10)      |
-| XPI           | v1.0.29 / yerel build |
+| Alan          | Değer            |
+| ------------- | ---------------- |
+| Tarih         |                  |
+| Testçi        |                  |
+| OS            | Windows          |
+| Zotero sürümü | (7 / 8 / 9 / 10) |
+| XPI           | v1.0.29 public   |
 
 | #   | Senaryo                          | Beklenen                                | Sonuç | Kanıt |
 | --- | -------------------------------- | --------------------------------------- | ----- | ----- |
