@@ -1,5 +1,14 @@
+// @ajan: cursor · @etiket: katman-2, format-metadata, metadataCheck
 import { PDFDocument } from "pdf-lib";
 import { config } from "../../package.json";
+import {
+  isbnsEquivalent,
+  normalizeDOI,
+  normalizeISBNDigits,
+  normalizePagesConnector,
+  stripTitleTrailingDot,
+} from "../utils/metadataNormalize";
+import { getPref } from "../utils/prefs";
 
 declare const IOUtils: any;
 
@@ -54,18 +63,15 @@ function containment(needle: string, haystack: string) {
 }
 
 function cleanDOI(value: string) {
-  return (value.match(/10\.\d{4,9}\/[-._;()/:a-z0-9]+/i)?.[0] || "")
-    .replace(/[),.;]+$/g, "")
-    .toLowerCase();
+  return normalizeDOI(value);
 }
 
 function cleanISBN(value: string) {
-  // Only accept candidates that normalize to a valid ISBN-10 or ISBN-13
-  // length, so a stray long digit run in the text is not mistaken for an ISBN.
+  // Prefer a checksum-valid candidate when several digit runs appear.
   const candidates =
     value.match(/(?:97[89][\d -]{10,16}|\d[\d xX-]{8,16})/g) || [];
   for (const candidate of candidates) {
-    const normalized = candidate.replace(/[^\dX]/gi, "").toUpperCase();
+    const normalized = normalizeISBNDigits(candidate);
     if (normalized.length === 10 || normalized.length === 13) return normalized;
   }
   return "";
@@ -99,22 +105,25 @@ export function compareMetadata(
   const pdfISBN = cleanISBN(`${pdf.isbn || ""}\n${contentEvidence}`);
   if (zoteroISBN && pdfISBN) {
     possible += 4;
-    if (zoteroISBN === pdfISBN) {
+    if (isbnsEquivalent(zoteroISBN, pdfISBN)) {
       points += 4;
-      details.push("ISBN eşleşiyor");
+      details.push(
+        zoteroISBN === pdfISBN ? "ISBN eşleşiyor" : "ISBN eşleşiyor (10↔13)",
+      );
     } else {
       criticalMismatch = true;
       details.push(`ISBN uyuşmuyor: Zotero=${zoteroISBN}, PDF=${pdfISBN}`);
     }
   }
 
-  if (zotero.title && (pdf.title || contentEvidence)) {
+  const zoteroTitle = stripTitleTrailingDot(zotero.title || "");
+  if (zoteroTitle && (pdf.title || contentEvidence)) {
     possible += 3;
     const metadataTitleScore = pdf.title
-      ? similarity(zotero.title, pdf.title)
+      ? similarity(zoteroTitle, stripTitleTrailingDot(pdf.title))
       : 0;
     const contentTitleScore = contentEvidence
-      ? containment(zotero.title, contentEvidence)
+      ? containment(zoteroTitle, contentEvidence)
       : 0;
     const titleScore = Math.max(metadataTitleScore, contentTitleScore);
     points += 3 * titleScore;
@@ -176,7 +185,7 @@ export function compareMetadata(
   };
 }
 
-function itemMetadata(item: Zotero.Item): CheckMetadata {
+export function itemCheckMetadata(item: Zotero.Item): CheckMetadata {
   const creators = (((item as any).getCreators?.() || []) as any[])
     .map(
       (creator) =>
@@ -191,6 +200,75 @@ function itemMetadata(item: Zotero.Item): CheckMetadata {
     doi: String(item.getField("DOI") || ""),
     isbn: String(item.getField("ISBN") || ""),
   };
+}
+
+/** Compare a Zotero item against raw PDF / fulltext evidence. */
+export function compareItemAgainstText(
+  item: Zotero.Item,
+  text: string,
+): MetadataCheckResult {
+  return compareMetadata(itemCheckMetadata(item), { evidence: text });
+}
+
+export function hasIdentifierConflict(result: MetadataCheckResult): boolean {
+  return result.details.some(
+    (d) => d.includes("DOI uyuşmuyor") || d.includes("ISBN uyuşmuyor"),
+  );
+}
+
+export function hasIdentifierMatch(result: MetadataCheckResult): boolean {
+  return result.details.some(
+    (d) => d.startsWith("DOI eşleşiyor") || d.startsWith("ISBN eşleşiyor"),
+  );
+}
+
+/**
+ * Light in-place fixes from format-metadata (DOI prefix, pages connector,
+ * title trailing dot). Gated by pdf.metadataCheck.
+ */
+export async function normalizeItemIdentifiers(
+  item: Zotero.Item,
+): Promise<string[]> {
+  if (!getPref("pdf.metadataCheck")) return [];
+  const applied: string[] = [];
+  let dirty = false;
+
+  const rawDoi = String(item.getField("DOI") || "");
+  const cleaned = normalizeDOI(rawDoi);
+  if (cleaned && cleaned !== rawDoi.trim()) {
+    item.setField("DOI", cleaned);
+    applied.push("doi-prefix");
+    dirty = true;
+  }
+
+  try {
+    const pages = String(item.getField("pages") || "");
+    const fixedPages = normalizePagesConnector(pages);
+    if (pages && fixedPages !== pages) {
+      item.setField("pages", fixedPages);
+      applied.push("pages-connector");
+      dirty = true;
+    }
+  } catch {
+    /* item type may lack pages */
+  }
+
+  const title = String(item.getField("title") || "");
+  const fixedTitle = stripTitleTrailingDot(title);
+  if (title && fixedTitle !== title) {
+    item.setField("title", fixedTitle);
+    applied.push("title-trailing-dot");
+    dirty = true;
+  }
+
+  if (dirty) {
+    try {
+      await item.saveTx();
+    } catch (e) {
+      ztoolkit.log("normalizeItemIdentifiers save failed", e);
+    }
+  }
+  return applied;
 }
 
 /** Pure so the encrypted-PDF branch below is unit-testable without a real encrypted file. */
@@ -307,8 +385,12 @@ export async function checkMetadataForSelectedItems() {
   const reports: string[] = [];
   for (const { item, attachment } of pairs.values()) {
     try {
+      const normalized = await normalizeItemIdentifiers(item);
       const extracted = await pdfMetadata(attachment);
-      const result = compareMetadata(itemMetadata(item), extracted);
+      const result = compareMetadata(itemCheckMetadata(item), extracted);
+      if (normalized.length) {
+        result.details.unshift(`Normalize: ${normalized.join(", ")}`);
+      }
       if (!extracted.evidence) {
         result.details.unshift(
           "PDF metin katmanı bulunamadı; taranmış belge için OCR gerekli olabilir",

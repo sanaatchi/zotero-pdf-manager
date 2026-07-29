@@ -10,7 +10,7 @@
 | Alan    | Değer                                                   |
 | ------- | ------------------------------------------------------- |
 | addonID | `zotero-pdf-manager@ibrahimyildiz.art`                  |
-| Sürüm   | 1.0.30 (`package.json`)                                 |
+| Sürüm   | 1.0.32 (`package.json`)                                 |
 | Girdi   | Katman 1’den organize PDF’ler + mevcut Zotero kayıtları |
 | Çıktı   | Tutarlı ek + metadata → Katman 3 (LibRart)              |
 
@@ -55,9 +55,10 @@
 | `folderIndex`               | ✅ P2-1   | Çok-kök kalıcı indeks + linked-base + doi/isbn/title |
 | `pdfReconciler`             | ✅ P2-2/3 | Reconcile + eşikler + add coalesce                   |
 | `orphanProcessor`           | ✅ P2-5   | Öksüz PDF (mode + güvenli autoCreate)                |
-| `pdfContentMetadata`        | kısmi     | pdf-lib gömülü alanlar                               |
+| `pdfContentMetadata`        | ✅        | pdf-lib gömülü alanlar + Crossref                    |
 | `automationAudit`           | ✅ P2-6   | Denetim raporu + dry-run                             |
 | `duplicateAttachmentMerger` | ✅        | Yinelenen ek                                         |
+| `metadataNormalize`         | ✅        | format-metadata selective (DOI/ISBN/pages/title)     |
 
 ---
 
@@ -89,8 +90,9 @@ Port kaynağı: [`PDFMANAGER-REFERANS-PORT.md`](PDFMANAGER-REFERANS-PORT.md).
 ## Sonraki adım (Katman 2)
 
 1. **P2-1…P2-6 tamam** — günlük kullanım + dry-run doğrulama
-2. İsteğe bağlı: `format-metadata` → `metadataCheck` güçlendirme
-3. Katman 1 handoff: linked base = Kütüphane `Kitaplar/` veya OneDrive kök
+2. **format-metadata → metadataCheck** — ✅ selective port (`metadataNormalize`)
+3. Manuel Zotero kabul: [`ZOTERO-KABUL-CHECKLIST.md`](ZOTERO-KABUL-CHECKLIST.md)
+4. Katman 1 handoff: linked base = Kütüphane `Kitaplar/` veya OneDrive kök
 
 ---
 
@@ -98,6 +100,7 @@ Port kaynağı: [`PDFMANAGER-REFERANS-PORT.md`](PDFMANAGER-REFERANS-PORT.md).
 
 | Tarih      | Ajan   | Özet                                                       |
 | ---------- | ------ | ---------------------------------------------------------- |
+| 2026-07-30 | cursor | format-metadata selective → metadataNormalize/Check        |
 | 2026-07-29 | cursor | P2-6 audit UI / dry-run polish                             |
 | 2026-07-29 | cursor | P2-5 orphanMode + gated autoCreate                         |
 | 2026-07-29 | cursor | P2-4 OA → downloads/ + indeks                              |

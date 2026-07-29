@@ -31,6 +31,11 @@ const PINNED = [
     sha: "ad1a8143ae48ea2750fa5bd647921c529a4b17a7",
     spdx: "AGPL",
   },
+  {
+    name: "format-metadata",
+    sha: "39db0a31f5848329d2c34ffe3470bbcabb3ffc34",
+    spdx: "AGPL",
+  },
 ];
 
 test("vendor table pins full SHAs and notices echo them", () => {
@@ -65,6 +70,7 @@ test("vendor table pins full SHAs and notices echo them", () => {
   assert.match(vendor, /folderIndex\.ts/);
   assert.match(vendor, /pdfReconciler\.ts/);
   assert.match(vendor, /oaDownloadPath\.ts/);
+  assert.match(vendor, /metadataNormalize\.ts/);
 });
 
 test("prefs expose libraryBatchSize for scale scans", () => {

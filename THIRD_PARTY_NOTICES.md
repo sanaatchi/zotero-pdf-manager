@@ -77,3 +77,14 @@ the automatic cascade:
 
 Attribution: `src/modules/oaDownloadPath.ts`, `pdfDownload.ts`, `pdfSources.ts`,
 `PDFMANAGER-VENDOR.md`. Treat as AGPL-compatible combined work.
+
+## Zotero Format Metadata (selective)
+
+Identifier / light field normalization in `metadataNormalize.ts` and
+`metadataCheck.ts` adapts ideas from:
+
+https://github.com/northword/zotero-format-metadata  
+Pinned review SHA: `39db0a31f5848329d2c34ffe3470bbcabb3ffc34`
+
+AGPL-3.0. Only DOI prefix strip, pages connector, title trailing-dot, and
+ISBN-10↔13 equivalence were ported — not the full rule engine.

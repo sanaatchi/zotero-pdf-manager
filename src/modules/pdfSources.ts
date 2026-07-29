@@ -21,6 +21,13 @@ import {
   getActiveAbortSignal,
   throwIfRunAborted,
 } from "../utils/cancelToken";
+import { normalizeDOI } from "../utils/metadataNormalize";
+import {
+  compareItemAgainstText,
+  hasIdentifierConflict,
+  hasIdentifierMatch,
+  normalizeItemIdentifiers,
+} from "./metadataCheck";
 
 /** Stops further URL/source cascade after quarantine or erase-failed keep. */
 export class AttachStoppedError extends Error {
@@ -317,7 +324,17 @@ export async function validateAttachmentContent(
     const res = await (Zotero as any).PDFWorker.getFullText(attachmentID, 5);
     const text: string = res?.text || "";
     if (text.replace(/\s/g, "").length < 50) return "unverifiable";
-    return scoreText(item, text) >= 0.6 ? "match" : "mismatch";
+
+    // format-metadata-aligned identifier compare (DOI/ISBN) — critical mismatch
+    // wins even when token score would pass.
+    const structured = compareItemAgainstText(item, text);
+    if (hasIdentifierConflict(structured)) return "mismatch";
+
+    const score = scoreText(item, text);
+    if (score >= 0.6) return "match";
+    // Strong DOI/ISBN hit can rescue a weak title-token score.
+    if (hasIdentifierMatch(structured) && score >= 0.3) return "match";
+    return "mismatch";
   } catch (e) {
     ztoolkit.log("content validation error", e);
     return "unverifiable";
@@ -636,7 +653,7 @@ export function getDOI(item: Zotero.Item): string {
     const m = extra.match(/^\s*DOI:\s*(\S+)/im);
     if (m) doi = m[1];
   }
-  return doi.replace(/^https?:\/\/(dx\.)?doi\.org\//i, "").trim();
+  return normalizeDOI(doi);
 }
 
 // --------------------------------------------------------------------------
@@ -644,6 +661,7 @@ export function getDOI(item: Zotero.Item): string {
 // --------------------------------------------------------------------------
 
 export async function ensureDOI(item: Zotero.Item): Promise<string> {
+  await normalizeItemIdentifiers(item);
   const existing = getDOI(item);
   if (existing) return existing;
   if (!getPref("pdf.metadataCheck")) return "";
@@ -658,7 +676,7 @@ export async function ensureDOI(item: Zotero.Item): Promise<string> {
     const xhr = await httpGet(url, "text");
     const data = JSON.parse(xhr.responseText);
     const found = data?.message?.items?.[0];
-    const foundDOI: string = found?.DOI || "";
+    const foundDOI: string = normalizeDOI(found?.DOI || "");
     const foundTitle: string = found?.title?.[0] || "";
     if (foundDOI && titleSimilar(title, foundTitle)) {
       try {

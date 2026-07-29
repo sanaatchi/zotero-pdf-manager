@@ -150,5 +150,6 @@ DOI/ISBN/tez kapısı; manuel düğme serbest; v1.0.26.
 **Tamamlandı (P2-6):** denetim raporu filtre/özet/dry-run banner; geri alınabilir
 etiket listesi; clear audit; manuel dry-run sonrası audit açılır; v1.0.27.
 
-**Katman 2 otomasyon P2-1…P2-6 tamam.** Sonraki: format-metadata (metadataCheck)
-veya Katman 1 handoff / LibRart F7.
+**Katman 2 otomasyon P2-1…P2-6 tamam.** format-metadata selective port tamam
+(`metadataNormalize` + `metadataCheck` + validation). Sonraki: manuel Zotero
+checklist / Katman 1 handoff.

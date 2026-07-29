@@ -1,4 +1,4 @@
-<!-- @ajan: cursor · @etiket: katman-2, eksik-raporu, v1.0.31 -->
+<!-- @ajan: cursor · @etiket: katman-2, eksik-raporu, v1.0.32, format-metadata -->
 
 # Cursor — Katman 2 Eksikler Raporu
 
@@ -6,24 +6,80 @@
 > **1)** bu raporu oku → **2)** açık maddeleri düzelt → **3)** ancak sonra görev.  
 > Rule: `.cursor/rules/katman-eksik-raporu.mdc`
 
-**Tarih:** 2026-07-29  
-**Kapsam:** `zotero-pdf-manager` · **v1.0.31** public  
-**Durum:** Cancel UI + `#pdf-quarantine` + cascade davranış testi. Açık: manuel Zotero checklist.
+**Tarih:** 2026-07-30  
+**Kapsam:** `zotero-pdf-manager` · **v1.0.32**  
+**Durum:** format-metadata selective port tamam — **kod kapanışı**. Açık: manuel Zotero checklist.
 
-## Güncel durum — 2026-07-29 (v1.0.31)
+## Güncel durum — 2026-07-30 (v1.0.32)
 
-**Doğrulama:** **180/180** · lint · typecheck ·  
-[v1.0.31](https://github.com/sanaatchi/zotero-pdf-manager-releases/releases/tag/v1.0.31) ✅
+**Doğrulama:** **186/186** · lint · typecheck · (release sonrası)
 
-| Madde                     | Durum | Not                                                                                                   |
-| ------------------------- | ----- | ----------------------------------------------------------------------------------------------------- |
-| Review-source cascade     | ✅    | `oaCascade` + `AttachStoppedError` — zincir durur                                                     |
-| Cascade davranış testi    | ✅    | `tests/pdfCascade.test.cjs`                                                                           |
-| `#pdf-quarantine` etiketi | ✅    | unverifiable/erase-failed; match temizler; reversible audit listesinde                                |
-| Manuel Cancel UI          | ✅    | prefs ProgressWindow + `#pdf-cancel-reconcile` → `reconciler.cancel()`                                |
-| Add-notifier cancellation | ✅    | flush → `runAbort` + signal’lı performItems/index                                                     |
-| Public patch              | ✅    | [v1.0.31](https://github.com/sanaatchi/zotero-pdf-manager-releases/releases/tag/v1.0.31) · `12683b3d` |
-| Çoklu pencere checklist   | 🟡    | [`ZOTERO-KABUL-CHECKLIST.md`](ZOTERO-KABUL-CHECKLIST.md)                                              |
+| Madde                         | Durum | Not                                                              |
+| ----------------------------- | ----- | ---------------------------------------------------------------- |
+| P2-1…P2-6                     | ✅    | otomasyon                                                        |
+| format-metadata → Check       | ✅    | `metadataNormalize` + ISBN 10↔13 + DOI/pages/title + validation  |
+| Cascade / quarantine / cancel | ✅    | v1.0.31                                                          |
+| Public patch                  | 🟡    | v1.0.32 yayın sırada                                             |
+| Gerçek Zotero checklist       | 🟡    | [`ZOTERO-KABUL-CHECKLIST.md`](ZOTERO-KABUL-CHECKLIST.md) v1.0.32 |
+
+---
+
+## Codex nihai derin doğrulaması — 2026-07-30 (v1.0.31) — arşiv
+
+**Karar:** `approve` — Katman 2 kod, CI ve public release kapsamı tamamlandı.
+
+**Bağımsız doğrulama:** HEAD `0ec695a1`; çalışma ağacı temiz. **180/180**
+test ✅ · TypeScript ✅ · ESLint ✅ · Prettier ✅. Release kaynağı
+`12683b3d9322ae904e1ab730d54ee3e60b0ec2cd` için canlı CI
+[`30491034121`](https://github.com/sanaatchi/zotero-pdf-manager/actions/runs/30491034121)
+başarılı; güncel HEAD CI
+[`30491100540`](https://github.com/sanaatchi/zotero-pdf-manager/actions/runs/30491100540)
+başarılı. Public
+[`v1.0.31`](https://github.com/sanaatchi/zotero-pdf-manager-releases/releases/tag/v1.0.31)
+XPI **650.129 bayt**; hesaplanan SHA-512
+`6a439c92559d6a5ecf955913759ba6ada5926367d91b4bef7e2bb5d2ef731f17fa8eaad2e79bcdd733f2ff623f13cb219e7abcfbdc0f139c3410c682f9f8807e`.
+Bu değer indirilen `update.json`, depo update manifesti ve
+`provenance.json` ile eşleşiyor.
+
+| Madde                     | Durum | Not                                                                                     |
+| ------------------------- | ----- | --------------------------------------------------------------------------------------- |
+| Review-source cascade     | ✅    | `oaCascade` + `AttachStoppedError`; review/erase-failed sonraki kaynağı durduruyor      |
+| Cascade davranış testi    | ✅    | Saf cascade gerçek davranışla çalıştırılıyor; ikinci kaynak çağrılmıyor                 |
+| `#pdf-quarantine` etiketi | ✅    | unverifiable/erase-failed işaretleniyor; match temizliyor; reversible audit listesinde  |
+| Manuel Cancel UI          | ✅    | prefs ProgressWindow + `#pdf-cancel-reconcile` → `reconciler.cancel()`                  |
+| Add-notifier cancellation | ✅    | flush → `runAbort` + signal’lı performItems/index                                       |
+| CI / release provenance   | ✅    | Exact source CI + HEAD CI + public XPI/update/provenance SHA-512 doğrulandı             |
+| Gerçek Zotero checklist   | 🟡 P1 | [`ZOTERO-KABUL-CHECKLIST.md`](ZOTERO-KABUL-CHECKLIST.md) — artık v1.0.32’ye güncellendi |
+
+### Açık kabul kapısı — kod dışı ama zorunlu kayıt
+
+`ZOTERO-KABUL-CHECKLIST.md` henüz sonuç/kanıt içermiyor. Bu nedenle otomatik
+doğrulanan kod/release tamamlanmış olsa da aşağıdakiler gerçek Zotero
+çalıştırmasıyla henüz kanıtlanmış sayılmaz:
+
+- iki ana pencere açma, ilk pencereyi kapatma ve tek reconciler yaşam döngüsü;
+- son pencere/shutdown sonrası notifier, timer ve geç yan etki sızıntısı;
+- izin verilmeyen watch root’un gerçek audit görünümü ve OA fail-closed akışı;
+- ProgressWindow düğmesiyle aktif OA/folder walk iptali ve geç attachment
+  oluşmaması;
+- unverifiable PDF’nin tek attachment + `#pdf-review` +
+  `#pdf-quarantine` olarak görünmesi;
+- v1.0.31 update kanalının Zotero tarafından SHA-512 ile kabul edilmesi.
+
+**Cursor/kullanıcı kabul işi:** checklist sürümünü v1.0.31 / `12683b3d`
+olarak güncelle; Zotero sürümü, tarih, testçi, her satırın sonucu ve log/ekran
+kanıtını doldur. Bu işlem yeni özellik veya patch release gerektirmez; bir hata
+görülürse Katman 2 yeniden açılır.
+
+### Bloklamayan test borcu
+
+Cascade saf davranış testi gerçek; fakat add-notifier cancellation ve prefs
+Cancel wiring kanıtlarının bir bölümü hâlâ kaynak-regex testidir. Gerçek Zotero
+checklist bu boşluğun kabul katmanıdır. İleride test harness genişletilirse
+`notifier add → geciken XHR → cancel/dispose → abort handle çağrısı → geç
+attachment/audit yok` zinciri ve quarantine’in kullanıcı tarafından çözülmesi
+entegrasyon testi yapılmalıdır. Mevcut v1.0.31 kapanışını engelleyen yeni bir
+kod kusuru bulunmadı.
 
 ---
 
