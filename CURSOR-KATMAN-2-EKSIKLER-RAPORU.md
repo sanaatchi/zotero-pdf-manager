@@ -2,15 +2,16 @@
 
 ## 2026-07-30 — Cursor düzeltmesi (ISBN checksum)
 
-| Madde | Durum | Not |
-| ----- | ----- | --- |
-| ISBN 10↔13 checksum | ✅ | `isValidIsbn10/13`; dönüşüm/eşdeğerlik yalnız geçerli checksum |
-| Testler | ✅ | 187/187 |
-| Gerçek Zotero checklist | 🟡 | Manuel |
+| Madde                   | Durum | Not                                                            |
+| ----------------------- | ----- | -------------------------------------------------------------- |
+| ISBN 10↔13 checksum     | ✅    | `isValidIsbn10/13`; dönüşüm/eşdeğerlik yalnız geçerli checksum |
+| Testler                 | ✅    | 187/187                                                        |
+| Gerçek Zotero checklist | 🟡    | Manuel                                                         |
 
 **Durum:** ISBN P1 kodda kapandı; checklist/P2 açık. Aşağıdaki Codex arşivi tarihsel.
 
 ---
+
 # Cursor — Katman 2 Eksikler Raporu
 
 > **Çalışma kuralı:** Bu katmanda düzenleme öncesi  
