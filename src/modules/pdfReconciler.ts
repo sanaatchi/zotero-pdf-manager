@@ -1,6 +1,10 @@
 // @ajan: cursor · @etiket: katman-2, p2-3, p2-5, p2-6, reconciler, notifier, orphan, audit
 import { getPref } from "../utils/prefs";
-import { buildIndex } from "./folderIndex";
+import {
+  buildIndex,
+  getLastIndexBuildMeta,
+  isFolderIndexComplete,
+} from "./folderIndex";
 import { LocalFolderSource } from "./pdfSources";
 import { tryAutomaticOnlineSources } from "./pdfDownload";
 import { processOrphanPDFs, normalizeOrphanMode } from "./orphanProcessor";
@@ -351,7 +355,21 @@ export class PDFReconciler {
     });
     const index = await buildIndex(forceIndex);
     if (this.disposed) return stats;
+    const indexComplete = isFolderIndexComplete();
+    if (!indexComplete) {
+      const meta = getLastIndexBuildMeta();
+      await appendAuditEvent({
+        run: runID,
+        action: "index-incomplete",
+        outcome: "review",
+        detail: `Folder index incomplete (${meta.truncateReason || "unknown"}); OA auto-download suppressed`,
+      });
+      ztoolkit.log(
+        `PDF reconcile: incomplete index — OA suppressed (reason=${meta.truncateReason})`,
+      );
+    }
     const allowOnline =
+      indexComplete &&
       getPref("pdf.onlineAutoDownload") !== false &&
       (reason === "add" || getPref("pdf.onlineOnReconcile") === true);
     // Cap the number of online lookups per run — on EVERY path, including

@@ -270,6 +270,8 @@ test("automatic online fallback is configurable and bulk-limited", () => {
   assert.match(preferences, /preference="[^"]+\.pdf\.onlineOnReconcile"/);
   assert.match(preferences, /preference="[^"]+\.pdf\.onlineMaxPerRun"/);
   assert.match(reconciler, /tryAutomaticOnlineSources\(item\)/);
+  assert.match(reconciler, /isFolderIndexComplete/);
+  assert.match(reconciler, /index-incomplete/);
   assert.match(reconciler, /"#auto-oa"/);
 
   for (const locale of ["de", "en-US", "it-IT"]) {

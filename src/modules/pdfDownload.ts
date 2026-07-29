@@ -1,4 +1,4 @@
-// @ajan: cursor · @etiket: katman-2, p2-4, pdfDownload, oa-downloads
+// @ajan: cursor · @etiket: katman-2, p1, p2-4, pdfDownload, oa-downloads
 import { getString } from "../utils/locale";
 import { getPref } from "../utils/prefs";
 import { config } from "../../package.json";
@@ -15,6 +15,7 @@ import {
   ItemReport,
   SourceAttempt,
 } from "./downloadReport";
+import { getLastIndexBuildMeta, isFolderIndexComplete } from "./folderIndex";
 
 export {
   resolveOaDownloadsDir,
@@ -24,6 +25,7 @@ export {
   reserveUniqueDownloadPath,
   releaseDownloadPathReservation,
   oaPartialTempPath,
+  shouldCleanupPersistedDownload,
 } from "./oaDownloadPath";
 
 export const AUTOMATIC_ONLINE_SOURCE_IDS = [
@@ -65,6 +67,13 @@ function hasPDFAttachment(item: Zotero.Item): boolean {
  */
 export async function tryAutomaticOnlineSources(item: Zotero.Item) {
   if (hasPDFAttachment(item)) return null;
+  if (!isFolderIndexComplete()) {
+    const meta = getLastIndexBuildMeta();
+    ztoolkit.log(
+      `Skipping automatic OA: folder index incomplete (${meta.truncateReason})`,
+    );
+    return null;
+  }
   await ensureDOI(item);
 
   for (const id of AUTOMATIC_ONLINE_SOURCE_IDS) {

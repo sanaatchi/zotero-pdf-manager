@@ -81,7 +81,8 @@ export function reserveUniqueDownloadPath(
       try {
         if (await existsAsync(path)) return false;
       } catch {
-        /* treat as free if exists probe fails */
+        // Fail-closed: unknown existence → treat as occupied.
+        return false;
       }
       reservedPaths.add(path);
       return true;
@@ -109,4 +110,14 @@ export function reserveUniqueDownloadPath(
 export function oaPartialTempPath(finalPath: string): string {
   const stamp = `${Date.now()}-${Math.random().toString(36).slice(2, 10)}`;
   return `${finalPath}.partial-${stamp}`;
+}
+
+/**
+ * Only delete a downloads/ final PDF if this run successfully created it.
+ * Prevents cleaning up a peer process's file after a noOverwrite move failure.
+ */
+export function shouldCleanupPersistedDownload(
+  finalCreatedByThisRun: boolean,
+): boolean {
+  return finalCreatedByThisRun;
 }

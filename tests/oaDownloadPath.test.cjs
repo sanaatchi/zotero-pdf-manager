@@ -73,6 +73,29 @@ test("parallel reserveUniqueDownloadPath never returns the same path", async () 
   for (const p of [a, b, c]) releaseDownloadPathReservation(p);
 });
 
+test("exists probe failure is fail-closed (path not reserved as free)", async () => {
+  const { reserveUniqueDownloadPath, releaseDownloadPathReservation } =
+    loadModule();
+  const path = await reserveUniqueDownloadPath(
+    "D:\\d",
+    "probe",
+    async (p) => {
+      if (p.endsWith("probe.pdf")) throw new Error("exists broken");
+      return false;
+    },
+    1,
+  );
+  assert.notEqual(path, "D:\\d\\probe.pdf");
+  assert.match(path, /probe-1\.pdf$/);
+  releaseDownloadPathReservation(path);
+});
+
+test("shouldCleanupPersistedDownload only when this run created the final file", () => {
+  const { shouldCleanupPersistedDownload } = loadModule();
+  assert.equal(shouldCleanupPersistedDownload(false), false);
+  assert.equal(shouldCleanupPersistedDownload(true), true);
+});
+
 test("automatic OA source list still excludes Sci-Hub and LibGen", () => {
   const result = esbuild.buildSync({
     entryPoints: [path.join(process.cwd(), "src/modules/pdfDownload.ts")],

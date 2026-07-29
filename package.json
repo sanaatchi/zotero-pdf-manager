@@ -9,7 +9,7 @@
     "addonInstance": "ZPdfManager",
     "prefsPrefix": "extensions.zotero.zpdfmanager",
     "releasePage": "https://github.com/sanaatchi/zotero-pdf-manager-releases/releases",
-    "updateJSON": "https://github.com/sanaatchi/zotero-pdf-manager-releases/releases/latest/download/update.json"
+    "updateJSON": "https://github.com/sanaatchi/zotero-pdf-manager-releases/releases/download/update/update.json"
   },
   "main": "src/index.ts",
   "scripts": {

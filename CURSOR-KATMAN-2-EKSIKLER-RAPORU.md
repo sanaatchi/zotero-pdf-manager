@@ -8,28 +8,140 @@
 
 **Tarih:** 2026-07-29  
 **Kapsam:** `zotero-pdf-manager` · v1.0.27  
-**Durum:** P1 kod kapıları büyük ölçüde kapandı; public `v1.0.27` yayını hâlâ açık.
+**Durum:** P1 kod düzeltmeleri (cleanup / incomplete gate / index queue /
+publish hash) uygulandı; public release bu oturumda hedefleniyor.
 
-## Güncel durum — 2026-07-29 (P1 kod)
+## Güncel durum — 2026-07-29 (P1 follow-up)
 
-**Doğrulama:** **157/157 test** ✅ · TypeScript ✅ · Prettier ✅ · ESLint ✅ · XPI build ✅  
-**Public kanal:** hâlâ `v1.0.21` (yayın P1 kalanı)
+**Doğrulama:** **159/159 test** ✅ · lint:check ✅ · typecheck ✅
 
-| Madde                         | Durum | Not                                                                |
-| ----------------------------- | ----- | ------------------------------------------------------------------ |
-| Çoklu pencere lifecycle       | ✅    | `hooks.ts`: reconciler süreç başına; unload’da `unregisterAll` yok |
-| OA no-overwrite / rezervasyon | ✅    | `reserveUniqueDownloadPath` + partial + `move(noOverwrite)`        |
-| İndeks 50k sessiz kesim       | ✅    | cap **99999**; `incomplete` / `truncateReason` meta                |
-| Atomik indeks/audit JSON      | ✅    | `atomicJson.ts` tmp+move; corrupt quarantine                       |
-| Kalite kapısı lint/prettier   | ✅    | `lint:check` / `format:check` / `typecheck`                        |
-| README ürün kimliği           | ✅    | Zotero PDF Manager + releases URL                                  |
-| Dirty → commit tabanı         | ✅    | `d9b986cf` on `main`                                               |
-| Public `v1.0.27` release      | ❌    | `gh-release` + update hash                                         |
-| Fail-open PDF doğrulama       | ❌ P2 |                                                                    |
-| ReDoS / Sci-Hub politika      | ❌ P2 |                                                                    |
-| CI workflow                   | ❌ P2 |                                                                    |
+| Madde                          | Durum | Not                                            |
+| ------------------------------ | ----- | ---------------------------------------------- |
+| Çoklu pencere lifecycle        | 🟡    | Kod ✅; gerçek Zotero iki-pencere kabulü açık  |
+| OA cleanup sahipliği           | ✅    | `finalCreatedByThisRun` + fail-closed exists   |
+| İndeks incomplete → otomasyon  | ✅    | OA suppress + audit `index-incomplete`         |
+| İndeks mutasyon kuyruğu        | ✅    | `enqueueIndexMutation` build+register          |
+| Atomik JSON crash testleri     | 🟡    | helper var; enjeksiyon testi sınırlı           |
+| Public `v1.0.27` + update_hash | 🟡    | publish.mjs güçlendirildi; yayın sıradaki adım |
+| Fail-open / ReDoS / CI         | ❌ P2 |                                                |
 
-**Sıradaki P1:** temiz ağaçtan `v1.0.27` public yayın + update hash doğrulama. Sonra P2.
+---
+
+## Codex derin yeniden doğrulama — 2026-07-29 (arşiv)
+
+**Karar (o an):** `request changes`
+
+**Bağımsız doğrulama (o an):** **157/157 test** ✅ · TypeScript ✅ · Prettier ✅ ·
+ESLint ✅ · production XPI build ✅ (`1.0.27`). HEAD/origin `2b26b3cd`.
+
+| Madde                         | Durum | Derin doğrulama sonucu                                       |
+| ----------------------------- | ----- | ------------------------------------------------------------ |
+| Çoklu pencere lifecycle       | 🟡    | Kod yönü doğru; gerçek iki-pencere Zotero kabulü yok         |
+| OA no-overwrite / rezervasyon | ❌→✅ | Cleanup sahipliği düzeltildi (bu oturum)                     |
+| İndeks 50k sessiz kesim       | 🟡→✅ | incomplete artık OA’yı kesiyor                               |
+| Atomik indeks/audit JSON      | 🟡    | Atomik replace + seri kuyruk; crash enjeksiyon testi sınırlı |
+| Kalite kapıları + XPI         | ✅    |                                                              |
+| README ürün kimliği           | ✅    |                                                              |
+| Dirty → commit tabanı         | ✅    |                                                              |
+| Public `v1.0.27` release      | ❌    | Canlı kanal `v1.0.21` (yayın bekliyor)                       |
+| Fail-open PDF doğrulama       | ❌ P2 |                                                              |
+| ReDoS / sağlayıcı politikası  | ❌ P2 |                                                              |
+| CI workflow                   | ❌ P2 |                                                              |
+
+### P1 yeniden açıldı — OA cleanup, yarışta kendisine ait olmayan dosyayı silebilir
+
+`src/modules/pdfSources.ts:308-327` hedefi rezerve ediyor, sibling partial
+dosyaya yazıyor ve `IOUtils.move(..., { noOverwrite: true })` kullanıyor. Bu
+kısım mevcut hedefi ezmiyor. Ancak rezervasyon ile move arasında başka bir
+süreç aynı `persistedPath` dosyasını oluşturursa move güvenli biçimde hata
+veriyor; dış `catch` attachment’ı `null` yapıyor ve
+`src/modules/pdfSources.ts:364-371` koşulsuz olarak `persistedPath` dosyasını
+siliyor. Böylece no-overwrite’ın koruduğu dış dosya cleanup aşamasında
+siliniyor.
+
+**Cursor görevi:** yalnız bu çalıştırmanın başarıyla oluşturduğu final dosyayı
+temizleyecek bir sahiplik bayrağı (`finalCreatedByThisRun`) kullan. Bayrağı
+yalnız başarılı final move’dan sonra kur. `IOUtils.exists` sorgusu hata verirse
+adayı boş sayma; fail-closed davran. Rezervasyon ile move arasında hedefi başka
+aktörün oluşturduğu entegrasyon testi ekle ve mevcut byte’ların aynen kaldığını
+doğrula.
+
+**Kabul:** yarışta dış dosya silinmez/değişmez; partial artık bırakılmaz;
+başarısız attachment yaratımında yalnız eklentinin oluşturduğu final dosya
+temizlenir.
+
+### P1 kısmi — `incomplete` indeks durumu üretiliyor ama kararları durdurmuyor
+
+`folderIndex.ts` cap’i 99.999’a yükseltiyor ve derinlik/cap kesiminde
+`lastBuildMeta.incomplete` üretiyor. Fakat `getLastIndexBuildMeta()` üretim
+kodunda hiçbir tüketici tarafından çağrılmıyor; durum yalnız log/persist
+ediliyor. Reconciler eksik indeksi normal başarı gibi kullanabildiğinden,
+indeks dışında kalan mevcut bir PDF için online fallback tetiklenip yinelenen
+dosya üretilebilir. Ayrıca test yalnız sabitleri ve varsayılan meta tipini
+kontrol ediyor; cap/depth kesimini veya tüketici davranışını yürütmüyor.
+
+**Cursor görevi:** incomplete indeksi otomasyon için engelleyici durum yap;
+online fallback ve güven isteyen otomatik kararları durdur, kullanıcı/audit
+üzerinden görünür uyarı üret. Cap ve `MAX_WALK_DEPTH` kesimini gerçek walker
+fixture’ıyla; reconciler’ın bu durumda indirme yapmadığını entegrasyon testiyle
+doğrula.
+
+**Kabul:** eksik tarama başarı olarak raporlanmaz; eksik indeksle yeni OA
+indirmesi/otomatik kesin karar yok; yeniden tarama veya kullanıcı müdahalesi
+yolu görünür.
+
+### P1 kısmi — atomik replace var, eşzamanlı lost-update koruması yok
+
+`atomicJson.ts` benzersiz temp + move ile yarım JSON riskini azaltıyor ve bozuk
+dosyayı quarantine ediyor. `automationAudit` süreç içi `writeChain` kullanıyor.
+Ancak `folderIndex` için ortak yazma kuyruğu/generation compare yok:
+`buildIndex()` ile `registerDownloadedFile()` çakışırsa iki geçerli snapshot’ın
+son yazanı diğer güncellemeyi kaybedebilir. Doğrudan atomic JSON crash,
+quarantine ve concurrent folder-index testi de bulunmuyor.
+
+**Cursor görevi:** folder-index mutasyonlarını tek seri kuyruğa/transaction
+sınırına al; snapshot generation veya yeniden-okuma+merge ile lost-update’i
+önle. Temp-write/move hata enjeksiyonu, bozuk JSON recovery ve eşzamanlı
+build/register testleri ekle.
+
+**Kabul:** aynı süreçte tüm indeks mutasyonları sıralı; yarış testinde iki
+güncelleme de korunur; crash sonrası ya eski ya yeni tam JSON okunur ve
+recoverable quarantine kanıtlanır.
+
+### P1 koşullu — çoklu pencere yalnız kaynak-yüzey testiyle doğrulandı
+
+`hooks.ts` süreç reconciler’ını bir kez kuruyor ve tek pencere unload’unda
+global `unregisterAll` çağırmıyor; bu doğru düzeltme yönü. Bununla birlikte
+mevcut test gerçek iki Zotero penceresini çalıştırmıyor. `Menu` tek süreç
+nesnesi olarak global `window` üzerinden timer/file-picker/prompt kullanmaya
+devam ediyor. Kalan pencerenin doğru window context’i kullandığı ancak gerçek
+Zotero kabulüyle kapanabilir.
+
+**Cursor görevi:** iki ana pencere aç/kapat matrisi uygula; ilk pencere
+kapandıktan sonra ikinci pencerede menü, dialog ve otomasyonu çalıştır; son
+pencere kapanışında notifier/timer sızıntısı olmadığını kaydet.
+
+### P1 açık — public release ve bütünlük zinciri
+
+Yerel paket `1.0.27`, fakat canlı release `v1.0.21`. `scripts/publish.mjs`
+shell-string komutları kullanıyor, mevcut tag/release’i silebiliyor ve temiz
+ağaç/test/hash/post-download kapıları kurmuyor. `update.json` exact artefact
+yerine `latest/download` kullanıyor ve `update_hash` taşımıyor.
+
+**Cursor görevi:** release’i arg-array subprocess, immutable tag, clean-tree,
+kalite kapıları ve SHA-512 manifest ile güvenli yap. Exact committen üret;
+yüklenen XPI’yi yeniden indirip yerel hash ile karşılaştır; ancak sonra
+`v1.0.27`yi public kanalda doğrula.
+
+### Cursor için zorunlu sıra
+
+1. OA cleanup sahiplik hatasını ve yarış testini düzelt.
+2. `incomplete` indeks durumunu otomasyon kapısına bağla.
+3. Folder-index eşzamanlı lost-update korumasını ve hata enjeksiyon testlerini ekle.
+4. Gerçek Zotero iki-pencere kabul matrisini kaydet.
+5. Shell-safe, immutable, hash’li `v1.0.27` public release yap.
+6. Sonra P2: fail-open içerik, regex/ReDoS, tarama ölçeği/cancellation, CI,
+   sağlayıcı/provenance ve eski çeviri belgeleri.
 
 ---
 

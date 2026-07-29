@@ -13,6 +13,7 @@ import {
   releaseDownloadPathReservation,
   reserveUniqueDownloadPath,
   resolveOaDownloadsDir,
+  shouldCleanupPersistedDownload,
 } from "./oaDownloadPath";
 
 // Gecko globals available in the Zotero sandbox but not in the type defs.
@@ -286,6 +287,7 @@ export async function downloadAndAttach(
   let attachment: any = null;
   let persistedPath: string | null = null;
   let tmpPath: string | null = null;
+  let finalCreatedByThisRun = false;
 
   try {
     if (downloadsDir) {
@@ -308,13 +310,17 @@ export async function downloadAndAttach(
       persistedPath = await reserveUniqueDownloadPath(
         downloadsDir,
         basename,
-        async (p) => !!(await IOUtils.exists(p)),
+        async (p) => {
+          // Fail-closed: exists probe must succeed and return false.
+          return !!(await IOUtils.exists(p));
+        },
       );
       const partial = oaPartialTempPath(persistedPath);
       try {
         await IOUtils.write(partial, bytes);
         // noOverwrite: never clobber an existing final PDF if reservation raced.
         await IOUtils.move(partial, persistedPath, { noOverwrite: true });
+        finalCreatedByThisRun = true;
       } catch (e) {
         try {
           await IOUtils.remove(partial);
@@ -362,7 +368,10 @@ export async function downloadAndAttach(
     }
   }
   if (!attachment) {
-    if (persistedPath) {
+    if (
+      persistedPath &&
+      shouldCleanupPersistedDownload(finalCreatedByThisRun)
+    ) {
       try {
         await IOUtils.remove(persistedPath);
       } catch {
@@ -381,7 +390,10 @@ export async function downloadAndAttach(
       } catch (e) {
         ztoolkit.log("erase rejected attachment failed", e);
       }
-      if (persistedPath) {
+      if (
+        persistedPath &&
+        shouldCleanupPersistedDownload(finalCreatedByThisRun)
+      ) {
         try {
           await IOUtils.remove(persistedPath);
         } catch {

@@ -113,11 +113,32 @@ test("indexEntryFromDiscovery reuses previous entry on same mtime", () => {
 });
 
 test("folder index caps align with 99_999 contract and expose incomplete meta", () => {
-  const { MAX_INDEX_FILES, MAX_WALK_DEPTH, getLastIndexBuildMeta } =
-    loadModule();
+  const {
+    MAX_INDEX_FILES,
+    MAX_WALK_DEPTH,
+    getLastIndexBuildMeta,
+    isFolderIndexComplete,
+    __setLastIndexBuildMetaForTests,
+  } = loadModule();
   assert.equal(MAX_INDEX_FILES, 99999);
   assert.equal(MAX_WALK_DEPTH, 8);
   const meta = getLastIndexBuildMeta();
   assert.equal(typeof meta.incomplete, "boolean");
   assert.equal(meta.cappedAt, 99999);
+  __setLastIndexBuildMetaForTests({
+    incomplete: true,
+    truncateReason: "maxFiles",
+    discovered: 99999,
+    cappedAt: 99999,
+    maxDepth: 8,
+  });
+  assert.equal(isFolderIndexComplete(), false);
+  __setLastIndexBuildMetaForTests({
+    incomplete: false,
+    truncateReason: null,
+    discovered: 0,
+    cappedAt: 99999,
+    maxDepth: 8,
+  });
+  assert.equal(isFolderIndexComplete(), true);
 });

@@ -34,6 +34,30 @@ export function getLastIndexBuildMeta(): IndexBuildMeta {
   return { ...lastBuildMeta };
 }
 
+/** Incomplete scans must not drive OA / high-confidence automation. */
+export function isFolderIndexComplete(
+  meta: IndexBuildMeta = getLastIndexBuildMeta(),
+): boolean {
+  return !meta.incomplete;
+}
+
+/** @internal test helper — simulate a truncated scan result. */
+export function __setLastIndexBuildMetaForTests(meta: IndexBuildMeta): void {
+  lastBuildMeta = { ...meta };
+}
+
+/** Serialize all index mutations in-process (build + registerDownloadedFile). */
+let indexMutateChain: Promise<unknown> = Promise.resolve();
+
+function enqueueIndexMutation<T>(fn: () => Promise<T>): Promise<T> {
+  const run = indexMutateChain.then(fn, fn) as Promise<T>;
+  indexMutateChain = run.then(
+    () => undefined,
+    () => undefined,
+  );
+  return run;
+}
+
 /**
  * A persistent, incremental, multi-root index of the PDF files found under the
  * user's watched folders. This is the foundation of full automation:
@@ -298,6 +322,10 @@ async function walk(
  * mtime) reuse their cached entry so derived data is not recomputed.
  */
 export async function buildIndex(force = false): Promise<IndexedFile[]> {
+  return enqueueIndexMutation(() => buildIndexLocked(force));
+}
+
+async function buildIndexLocked(force = false): Promise<IndexedFile[]> {
   const now = Date.now();
   if (!force && memCache && now - memCacheAt < 60000) return memCache;
 
@@ -364,6 +392,12 @@ export function invalidateIndex(): void {
  * without a full rescan (P2-4).
  */
 export async function registerDownloadedFile(
+  path: string,
+): Promise<IndexedFile | null> {
+  return enqueueIndexMutation(() => registerDownloadedFileLocked(path));
+}
+
+async function registerDownloadedFileLocked(
   path: string,
 ): Promise<IndexedFile | null> {
   try {
