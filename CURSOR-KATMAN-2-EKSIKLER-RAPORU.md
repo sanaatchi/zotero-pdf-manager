@@ -7,20 +7,20 @@
 > Rule: `.cursor/rules/katman-eksik-raporu.mdc`
 
 **Tarih:** 2026-07-29  
-**Kapsam:** `zotero-pdf-manager` · v1.0.29 + cascade/add-abort düzeltmeleri  
-**Durum:** Codex P2 runtime `request changes` maddeleri kodlandı (AttachStoppedError
-cascade stop + add-notifier AbortController). Manuel checklist hâlâ açık.
+**Kapsam:** `zotero-pdf-manager` · **v1.0.30** public  
+**Durum:** Cascade stop + add abort yayınlandı. Açık: manuel Zotero checklist.
 
-## Güncel durum — 2026-07-29 (cascade + add abort)
+## Güncel durum — 2026-07-29 (v1.0.30)
 
-**Doğrulama:** **177/177 test** ✅ · lint:check ✅ · typecheck ✅
+**Doğrulama:** **177/177** · lint · typecheck ·  
+[v1.0.30](https://github.com/sanaatchi/zotero-pdf-manager-releases/releases/tag/v1.0.30) ✅
 
-| Madde                     | Durum | Not                                                                |
-| ------------------------- | ----- | ------------------------------------------------------------------ |
-| Review-source cascade     | ✅    | `AttachStoppedError` — unverifiable/erase-failed zinciri durdurur  |
-| Add-notifier cancellation | ✅    | flush → `runAbort` + `performItems(..., signal)` + signal’lı index |
-| Public `v1.0.29`          | ✅    | önceki artefact; yeni patch sırada                                 |
-| Çoklu pencere checklist   | 🟡    | [`ZOTERO-KABUL-CHECKLIST.md`](ZOTERO-KABUL-CHECKLIST.md)           |
+| Madde                     | Durum | Not                                                                                                   |
+| ------------------------- | ----- | ----------------------------------------------------------------------------------------------------- |
+| Review-source cascade     | ✅    | `AttachStoppedError` — unverifiable/erase-failed zinciri durdurur                                     |
+| Add-notifier cancellation | ✅    | flush → `runAbort` + `performItems(..., signal)` + signal’lı index                                    |
+| Public patch              | ✅    | [v1.0.30](https://github.com/sanaatchi/zotero-pdf-manager-releases/releases/tag/v1.0.30) · `3c97ed96` |
+| Çoklu pencere checklist   | 🟡    | [`ZOTERO-KABUL-CHECKLIST.md`](ZOTERO-KABUL-CHECKLIST.md)                                              |
 
 ---
 
