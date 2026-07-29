@@ -43,7 +43,7 @@ ESLint ✅ · production XPI build ✅ (`1.0.27`). HEAD/origin `2b26b3cd`.
 | Kalite kapıları + XPI         | ✅    |                                                              |
 | README ürün kimliği           | ✅    |                                                              |
 | Dirty → commit tabanı         | ✅    |                                                              |
-| Public `v1.0.27` release      | ❌    | Canlı kanal `v1.0.21` (yayın bekliyor)                       |
+| Public `v1.0.27` release      | ✅    | canlı + update_hash doğrulandı                               |
 | Fail-open PDF doğrulama       | ❌ P2 |                                                              |
 | ReDoS / sağlayıcı politikası  | ❌ P2 |                                                              |
 | CI workflow                   | ❌ P2 |                                                              |
