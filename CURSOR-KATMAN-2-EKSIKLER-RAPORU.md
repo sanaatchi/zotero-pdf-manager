@@ -8,25 +8,24 @@
 
 **Tarih:** 2026-07-29  
 **Kapsam:** `zotero-pdf-manager` · v1.0.28  
-**Durum:** P1 kapanış maddeleri (IO incomplete, publish arg-array/provenance,
-davranış testleri) + P2 (içerik üçlü durum, ReDoS, CI, Sci-Hub politika) kodlandı.
-Gerçek Zotero iki-pencere kabulü ve `v1.0.28` yayını sırada.
+**Durum:** P1 kapanış + P2 çekirdek + public **v1.0.28**. Kalan: gerçek Zotero
+iki-pencere checklist doldurma; P2 ölçek/abort/vendor derinliği.
 
 ## Güncel durum — 2026-07-29 (P1 kapanış + P2)
 
 **Doğrulama:** **165/165 test** ✅ · lint:check ✅ · typecheck ✅
 
-| Madde                          | Durum | Not                                                      |
-| ------------------------------ | ----- | -------------------------------------------------------- |
-| İndeks IO → incomplete         | ✅    | `ioError`; walker enjeksiyon testleri                    |
-| Publish arg-array + provenance | ✅    | `execFileSync`; `build/provenance.json`; notes tek argv  |
-| Davranış testleri              | ✅    | atomic crash/quarantine, index queue, IO incomplete      |
-| Çoklu pencere (manuel)         | 🟡    | [`ZOTERO-KABUL-CHECKLIST.md`](ZOTERO-KABUL-CHECKLIST.md) |
-| Public `v1.0.28`               | ❌    | bump hazır; `gh-release` sırada                          |
-| Fail-open PDF doğrulama        | ✅ P2 | `match\|mismatch\|unverifiable` → review/reject          |
-| ReDoS                          | ✅ P2 | `safeRegex.ts` + scanner/menu                            |
-| CI                             | ✅ P2 | `.github/workflows/ci.yml`                               |
-| Sci-Hub/LibGen politika        | ✅ P2 | default `sourceOrder` dışı + README uyarı                |
+| Madde                          | Durum | Not                                                                                                   |
+| ------------------------------ | ----- | ----------------------------------------------------------------------------------------------------- |
+| İndeks IO → incomplete         | ✅    | `ioError`; walker enjeksiyon testleri                                                                 |
+| Publish arg-array + provenance | ✅    | `execFileSync`; `build/provenance.json`; notes tek argv                                               |
+| Davranış testleri              | ✅    | atomic crash/quarantine, index queue, IO incomplete                                                   |
+| Çoklu pencere (manuel)         | 🟡    | [`ZOTERO-KABUL-CHECKLIST.md`](ZOTERO-KABUL-CHECKLIST.md)                                              |
+| Public `v1.0.28`               | ✅    | [v1.0.28](https://github.com/sanaatchi/zotero-pdf-manager-releases/releases/tag/v1.0.28) + provenance |
+| Fail-open PDF doğrulama        | ✅ P2 | `match\|mismatch\|unverifiable` → review/reject                                                       |
+| ReDoS                          | ✅ P2 | `safeRegex.ts` + scanner/menu                                                                         |
+| CI                             | ✅ P2 | `.github/workflows/ci.yml`                                                                            |
+| Sci-Hub/LibGen politika        | ✅ P2 | default `sourceOrder` dışı + README uyarı                                                             |
 
 ---
 

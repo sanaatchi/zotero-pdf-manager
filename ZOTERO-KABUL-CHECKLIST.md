@@ -2,7 +2,7 @@
 
 # Zotero PDF Manager — manuel kabul checklist
 
-**Sürüm:** 1.0.28 · **Kaynak:** (release sonrası commit)  
+**Sürüm:** 1.0.28 · **Kaynak:** `5a173f1f`  
 **Rule:** [`CURSOR-KATMAN-2-EKSIKLER-RAPORU.md`](CURSOR-KATMAN-2-EKSIKLER-RAPORU.md)
 
 | Alan          | Değer                 |
