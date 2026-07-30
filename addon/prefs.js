@@ -112,7 +112,4 @@ pref("extensions.zotero.__addonRef__.pdf.yoktezEnabled", true);
 pref("extensions.zotero.__addonRef__.pdf.proquestEnabled", false);
 pref("extensions.zotero.__addonRef__.pdf.proxyEnabled", false);
 pref("extensions.zotero.__addonRef__.pdf.proxyURL", "");
-pref(
-  "extensions.zotero.__addonRef__.pdf.oaBridgeUrl",
-  "http://127.0.0.1:8756",
-);
+pref("extensions.zotero.__addonRef__.pdf.oaBridgeUrl", "http://127.0.0.1:8756");

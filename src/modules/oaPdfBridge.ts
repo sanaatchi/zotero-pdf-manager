@@ -67,9 +67,7 @@ export function buildOaSearchRequest(
   const hay = `${urlField}\n${extra}`;
 
   let arxivId = "";
-  const arxivAnchored = hay.match(
-    /arxiv[:/]\s*([\w.-]+\/\d+|\d{4}\.\d{4,5})/i,
-  );
+  const arxivAnchored = hay.match(/arxiv[:/]\s*([\w.-]+\/\d+|\d{4}\.\d{4,5})/i);
   if (arxivAnchored) arxivId = arxivAnchored[1];
   else if (/arxiv\.org/i.test(hay))
     arxivId = hay.match(/(\d{4}\.\d{4,5})/)?.[1] || "";

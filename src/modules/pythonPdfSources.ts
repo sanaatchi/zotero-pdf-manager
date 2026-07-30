@@ -56,9 +56,8 @@ export class OaPdfPythonSource implements PDFSource {
   }
 
   async tryAttach(item: Zotero.Item) {
-    const { downloadAndAttach, rethrowAttachControlFlow } = await import(
-      "./pdfSources"
-    );
+    const { downloadAndAttach, rethrowAttachControlFlow } =
+      await import("./pdfSources");
     const req = buildOaSearchRequest(this.id, item, 5);
     if (
       !req.text &&

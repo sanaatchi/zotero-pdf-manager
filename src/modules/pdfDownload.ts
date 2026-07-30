@@ -183,9 +183,7 @@ function failureHint(
     );
   }
   if (isThesis(item) && !tried.has("yoktez")) {
-    return (
-      "Tez: YÖKTez denenmedi. Tercihler → PDF Manager → YÖKTez’i açın."
-    );
+    return "Tez: YÖKTez denenmedi. Tercihler → PDF Manager → YÖKTez’i açın.";
   }
   return undefined;
 }
