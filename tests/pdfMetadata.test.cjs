@@ -167,7 +167,10 @@ test("metadataEmbedTmpPath uses a short sibling name (Windows MAX_PATH safe)", (
   const pdf = dir + name;
   const tmp = metadataEmbedTmpPath(pdf, "ABCD1234");
   assert.equal(tmp, `${dir}.zpm-ABCD1234.tmp`);
-  assert.ok(tmp.length < 260, `short tmp should be under 260, got ${tmp.length}`);
+  assert.ok(
+    tmp.length < 260,
+    `short tmp should be under 260, got ${tmp.length}`,
+  );
   assert.ok(
     `${pdf}.zpdfmanager.tmp`.length > 260,
     `legacy tmp must exceed 260, got ${`${pdf}.zpdfmanager.tmp`.length}`,

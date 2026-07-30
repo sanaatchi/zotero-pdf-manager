@@ -1120,7 +1120,9 @@ async function searchDergiParkViaOpenAlex(
   const body = JSON.parse(xhr.responseText || "{}");
   const pdfs = pickDergiParkOpenAlexPdfUrls(body?.results || [], 5);
   for (const pdfURL of pdfs) {
-    const att = await downloadAndAttach(item, pdfURL, { sourceId: "dergipark" });
+    const att = await downloadAndAttach(item, pdfURL, {
+      sourceId: "dergipark",
+    });
     if (att) return att;
   }
   // Fallback: scrape dergipark landing pages from OpenAlex hits
@@ -1423,10 +1425,9 @@ export function parseYokTezAssets(html: string): {
   infoMessage: string;
 } {
   const pdfKey =
-    (html || "").match(/TezGoster\?key=([^'"\s]+)/i)?.[1]?.replace(
-      /&amp;/g,
-      "&",
-    ) || "";
+    (html || "")
+      .match(/TezGoster\?key=([^'"\s]+)/i)?.[1]
+      ?.replace(/&amp;/g, "&") || "";
   if (pdfKey) {
     return {
       status: "AVAILABLE",

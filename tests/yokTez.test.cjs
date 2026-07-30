@@ -131,8 +131,11 @@ test("YÖK getTezPdf.jsp assets HTML yields TezGoster PDF URL", () => {
 });
 
 test("YÖK opaque keys and display tez no are read from Extra", () => {
-  const { extractYokAssetKeys, extractYokDisplayTezNo, extractYokCardsFromSearchHtml } =
-    loadModule();
+  const {
+    extractYokAssetKeys,
+    extractYokDisplayTezNo,
+    extractYokCardsFromSearchHtml,
+  } = loadModule();
 
   const keyed = {
     getField(field) {
