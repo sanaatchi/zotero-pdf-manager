@@ -115,7 +115,10 @@ test("automatic OA source list still excludes Sci-Hub and LibGen", () => {
   );
   assert.match(src, /AUTOMATIC_ONLINE_SOURCE_IDS/);
   assert.match(src, /relocateImportedPdfToDownloads/);
-  assert.doesNotMatch(src, /"scihub"/);
-  assert.doesNotMatch(src, /"libgen"/);
+  const autoBlock =
+    src.match(/export const AUTOMATIC_ONLINE_SOURCE_IDS = \[[\s\S]*?\]/)?.[0] ||
+    "";
+  assert.doesNotMatch(autoBlock, /scihub/);
+  assert.doesNotMatch(autoBlock, /libgen/);
   void result;
 });

@@ -5,6 +5,7 @@ import { registerPrefsScripts } from "./modules/preferenceScript";
 import { createZToolkit } from "./utils/ztoolkit";
 import Menu from "./modules/menu";
 import { PDFReconciler } from "./modules/pdfReconciler";
+import { migrateBookPdfSources } from "./modules/bookSourcesMigrate";
 
 /** Open Zotero main windows that have UI loaded for this add-on. */
 const loadedWindows = new Set<Window>();
@@ -30,6 +31,11 @@ async function onStartup() {
   ]);
   initLocale();
   ensureProcessToolkit();
+  try {
+    migrateBookPdfSources();
+  } catch (e) {
+    ztoolkit.log("migrateBookPdfSources failed", e);
+  }
   Zotero.PreferencePanes.register({
     pluginID: config.addonID,
     src: rootURI + "chrome/content/preferences.xhtml",

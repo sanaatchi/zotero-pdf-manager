@@ -81,7 +81,7 @@ pref("extensions.zotero.__addonRef__.scanner.tagDuplicate", "#duplicate");
 pref("extensions.zotero.__addonRef__.scanner.tagNonfile", "#nonfile");
 pref(
   "extensions.zotero.__addonRef__.pdf.sourceOrder",
-  "local,doi,arxiv,pmc,s2,dergipark,yoktez,proquest,proxy",
+  "local,doi,arxiv,pmc,s2,dergipark,libgen,scihub,yoktez,proquest,proxy",
 );
 pref("extensions.zotero.__addonRef__.pdf.localEnabled", true);
 pref(
@@ -103,12 +103,16 @@ pref(
   "extensions.zotero.__addonRef__.pdf.scihubURL",
   "https://sci-hub.se/;https://sci-hub.st/;https://sci-hub.ru/",
 );
-pref("extensions.zotero.__addonRef__.pdf.libgenEnabled", false);
+pref("extensions.zotero.__addonRef__.pdf.libgenEnabled", true);
 pref(
   "extensions.zotero.__addonRef__.pdf.libgenURL",
   "https://libgen.li/;https://libgen.vg/;https://libgen.la/;https://libgen.bz/;https://libgen.gl/",
 );
-pref("extensions.zotero.__addonRef__.pdf.yoktezEnabled", false);
+pref("extensions.zotero.__addonRef__.pdf.yoktezEnabled", true);
 pref("extensions.zotero.__addonRef__.pdf.proquestEnabled", false);
 pref("extensions.zotero.__addonRef__.pdf.proxyEnabled", false);
 pref("extensions.zotero.__addonRef__.pdf.proxyURL", "");
+pref(
+  "extensions.zotero.__addonRef__.pdf.oaBridgeUrl",
+  "http://127.0.0.1:8756",
+);

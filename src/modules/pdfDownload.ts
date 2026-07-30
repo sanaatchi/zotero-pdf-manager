@@ -1,15 +1,15 @@
-// @ajan: cursor · @etiket: katman-2, p2, pdfDownload, cascade-stop, cancel
-import { getString } from "../utils/locale";
-import { getPref } from "../utils/prefs";
-import { config } from "../../package.json";
+// @ajan: cursor · @etiket: katman-2, p2, pdfDownload, cascade-stop, cancel, source-order
 import {
   ALL_SOURCES,
   downloadAndAttach,
   ensureDOI,
   isAttachStoppedError,
+  isBook,
+  isThesis,
   PDFSource,
   relocateImportedPdfToDownloads,
 } from "./pdfSources";
+import { getPref } from "../utils/prefs";
 import { maybeEmbedMetadata } from "./pdfMetadata";
 import {
   openDownloadReport,
@@ -22,6 +22,8 @@ import {
   cascadeAutomaticSources,
   type CascadeSourceLike,
 } from "../utils/oaCascade";
+import { getString } from "../utils/locale";
+import { config } from "../../package.json";
 
 export {
   resolveOaDownloadsDir,
@@ -74,21 +76,45 @@ function orderedAutomaticSources(): OnlineSourceLike[] {
   return list;
 }
 
-function orderedSources(): PDFSource[] {
-  const order = ((getPref("pdf.sourceOrder") as string) || "")
+/**
+ * Resolve the download cascade: prefer `sourceOrder` prefs, then append any
+ * other enabled sources missing from that list (so enabling LibGen/Sci-Hub
+ * checkboxes works even when older prefs omit them from sourceOrder).
+ */
+export function mergeEnabledSourceOrder(
+  orderCsv: string,
+  available: Record<string, { isEnabled: () => boolean }>,
+): string[] {
+  const order = (orderCsv || "")
     .split(",")
     .map((s) => s.trim())
     .filter(Boolean);
   const seen = new Set<string>();
-  const list: PDFSource[] = [];
+  const list: string[] = [];
   for (const id of order) {
-    const src = ALL_SOURCES[id];
+    const src = available[id];
     if (src && !seen.has(id) && src.isEnabled()) {
-      list.push(src);
+      list.push(id);
+      seen.add(id);
+    }
+  }
+  for (const id of Object.keys(available)) {
+    if (seen.has(id)) continue;
+    const src = available[id];
+    if (src && src.isEnabled()) {
+      list.push(id);
       seen.add(id);
     }
   }
   return list;
+}
+
+function orderedSources(): PDFSource[] {
+  const ids = mergeEnabledSourceOrder(
+    (getPref("pdf.sourceOrder") as string) || "",
+    ALL_SOURCES,
+  );
+  return ids.map((id) => ALL_SOURCES[id]).filter(Boolean);
 }
 
 function hasPDFAttachment(item: Zotero.Item): boolean {
@@ -143,6 +169,25 @@ export async function tryAutomaticOnlineSources(
     },
   );
   return result as AutomaticOnlineResult | null;
+}
+
+function failureHint(
+  item: Zotero.Item,
+  attempts: SourceAttempt[],
+): string | undefined {
+  const tried = new Set(attempts.map((a) => a.source));
+  if (isBook(item) && !tried.has("libgen")) {
+    return (
+      "Kitap: LibGen denenmedi. Tercihler → PDF Manager → LibGen’i açın " +
+      "(veya eklentiyi yeniden yükleyin; LibGen varsayılan açılır)."
+    );
+  }
+  if (isThesis(item) && !tried.has("yoktez")) {
+    return (
+      "Tez: YÖKTez denenmedi. Tercihler → PDF Manager → YÖKTez’i açın."
+    );
+  }
+  return undefined;
 }
 
 function notify(
@@ -273,7 +318,13 @@ export async function downloadPdfForSelectedItems() {
       });
     } else {
       failed++;
-      reports.push({ itemID: item.id, title, result: "failed", attempts });
+      reports.push({
+        itemID: item.id,
+        title,
+        result: "failed",
+        attempts,
+        note: failureHint(item, attempts),
+      });
     }
   }
 

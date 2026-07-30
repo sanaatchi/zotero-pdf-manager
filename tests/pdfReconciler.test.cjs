@@ -214,3 +214,18 @@ test("automatic online fallback contains only approved OA sources", () => {
     assert.equal(AUTOMATIC_ONLINE_SOURCE_IDS.includes(unsafe), false);
   }
 });
+
+test("enabled LibGen runs even when omitted from legacy sourceOrder", () => {
+  const { mergeEnabledSourceOrder } = loadModule("src/modules/pdfDownload.ts");
+  const available = {
+    local: { isEnabled: () => true },
+    doi: { isEnabled: () => true },
+    arxiv: { isEnabled: () => true },
+    libgen: { isEnabled: () => true },
+    scihub: { isEnabled: () => false },
+  };
+  assert.deepEqual(
+    mergeEnabledSourceOrder("local,doi,arxiv,pmc,s2", available),
+    ["local", "doi", "arxiv", "libgen"],
+  );
+});
