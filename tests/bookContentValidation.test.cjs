@@ -51,8 +51,9 @@ test("book validation: ISBN match keeps; ISBN conflict erases", () => {
   );
 });
 
-test("book validation: weak OCR keeps for review; wrong title+author erases", () => {
+test("book validation: weak/wrong evidence erases (no quarantine-keep)", () => {
   const { decideContentValidation } = loadModule();
+  // Middling title — previously "unverifiable"/kept; now erase.
   assert.equal(
     decideContentValidation({
       kind: "book",
@@ -64,7 +65,7 @@ test("book validation: weak OCR keeps for review; wrong title+author erases", ()
       authorExpected: true,
       authorFound: true,
     }),
-    "unverifiable",
+    "mismatch",
   );
   assert.equal(
     decideContentValidation({
@@ -78,6 +79,20 @@ test("book validation: weak OCR keeps for review; wrong title+author erases", ()
       authorFound: false,
     }),
     "mismatch",
+  );
+  // Solid title+score without ISBN still keeps.
+  assert.equal(
+    decideContentValidation({
+      kind: "book",
+      textChars: 200,
+      titleHit: 0.6,
+      score: 0.5,
+      hasIdConflict: false,
+      hasIdMatch: false,
+      authorExpected: true,
+      authorFound: true,
+    }),
+    "match",
   );
 });
 

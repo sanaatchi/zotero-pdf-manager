@@ -221,6 +221,8 @@ function failureHint(
     );
   }
   if (isThesis(item)) {
+    const yok = attempts.find((a) => a.source === "yoktez" && a.reason);
+    if (yok?.reason) return yok.reason;
     return "Tez: YÖKTez’te bulunamadı (başka kaynak aranmaz).";
   }
   return undefined;

@@ -115,7 +115,14 @@ test("multi-root PDF indexing is exposed in preferences", () => {
     "utf8",
   );
 
-  assert.match(prefs, /pdf\.watchRoots", ""/);
+  assert.match(
+    prefs,
+    /pdf\.watchRoots",\s*"D:\\\\OneDrive\\\\1A_E_KAYNAKLARIM\\\\Kütüphane Dışı Kaynaklar"/,
+  );
+  assert.match(
+    preferenceScript,
+    /DEFAULT_DISI_WATCH_ROOT|ensurePathInWatchRoots/,
+  );
   assert.match(prefs, /pdf\.useLinkedAttachmentBase", true/);
   assert.match(prefs, /pdf\.localAsLink", true/);
   assert.match(preferences, /preference="[^"]+\.pdf\.watchRoots"/);

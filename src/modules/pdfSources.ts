@@ -1,4 +1,4 @@
-// @ajan: cursor · @etiket: katman-2, pdfSources, oa-pdf-bridge, book-validation
+// @ajan: cursor · @etiket: katman-2, pdfSources, erase-mismatch
 import { getString } from "../utils/locale";
 import { getPref } from "../utils/prefs";
 import {
@@ -325,12 +325,11 @@ function scoreText(item: Zotero.Item, rawText: string): number {
  *
  * - match: extractable text supports the item
  * - mismatch: extractable text conflicts — reject / erase
- * - unverifiable: no/short text, or book inconclusive — keep + #pdf-review
+ * - unverifiable: too little extractable text — download path still erases
  * - skipped: validation pref off
  *
- * Books: ISBN/DOI conflict → erase. Strong title/author/year or ISBN match →
- * keep. Weak/inconclusive text → review (do not erase). Wrong title+author →
- * erase.
+ * Books: ISBN/DOI conflict → erase. Strong title/score or ISBN match → keep.
+ * Weak / wrong evidence → erase (do not quarantine-keep wrong OA catalogs).
  */
 export type ContentValidation =
   "match" | "mismatch" | "unverifiable" | "skipped";
@@ -354,12 +353,9 @@ export function decideContentValidation(input: {
   if (input.score >= 0.6) return "match";
 
   if (input.kind === "book") {
-    const clearlyWrong =
-      input.titleHit < 0.25 &&
-      ((input.authorExpected && !input.authorFound) || input.score < 0.25);
-    if (clearlyWrong) return "mismatch";
-    // Keep for manual review — scanned/TR OCR often scores low on correct files.
-    return "unverifiable";
+    // Solid title evidence → keep; otherwise erase wrong catalogs/books.
+    if (input.titleHit >= 0.5 && input.score >= 0.45) return "match";
+    return "mismatch";
   }
 
   // Articles / other: stricter auto-accept to cut wrong-paper attaches.
@@ -394,10 +390,19 @@ export async function validateAttachmentContent(
   item: Zotero.Item,
   attachmentID: number,
 ): Promise<ContentValidation> {
-  if (!getPref("pdf.validateContent")) return "skipped";
+  const detailed = await validateAttachmentContentDetailed(item, attachmentID);
+  return detailed.verdict;
+}
+
+export async function validateAttachmentContentDetailed(
+  item: Zotero.Item,
+  attachmentID: number,
+): Promise<{ verdict: ContentValidation; pdfText: string }> {
+  if (!getPref("pdf.validateContent")) {
+    return { verdict: "skipped", pdfText: "" };
+  }
   try {
     const book = isBook(item);
-    // Books often bury title after covers/front matter — read more pages.
     const pageLimit = book ? 20 : 5;
     const res = await (Zotero as any).PDFWorker.getFullText(
       attachmentID,
@@ -413,7 +418,7 @@ export async function validateAttachmentContent(
       surname.length > 2 &&
       normalizeSearchText(text).includes(surname);
 
-    return decideContentValidation({
+    let heuristic = decideContentValidation({
       kind: book ? "book" : "other",
       textChars,
       titleHit: titleTokenHit(item, text),
@@ -423,9 +428,50 @@ export async function validateAttachmentContent(
       authorExpected: surname.length > 2,
       authorFound,
     });
+
+    // Local LLM (Ollama via 8756 bridge) when enabled and text is usable.
+    if (
+      getPref("pdf.validateContentLlm") !== false &&
+      textChars >= 50 &&
+      heuristic !== "skipped"
+    ) {
+      try {
+        const { validateContentViaBridge } = await import("./oaPdfBridge");
+        const llm = await validateContentViaBridge({
+          title: String(item.getField("title") || ""),
+          creators: ((item.getCreators() as any[]) || [])
+            .slice(0, 6)
+            .map((c) =>
+              `${c.firstName || ""} ${c.lastName || c.name || ""}`.trim(),
+            )
+            .filter(Boolean)
+            .join("; "),
+          year: itemYear(item),
+          doi: getDOI(item),
+          isbn: String(item.getField("ISBN") || "").replace(/[^0-9Xx]/g, ""),
+          itemType: itemType(item),
+          pdfText: text.slice(0, 8000),
+        });
+        if (llm?.verdict === "match" || llm?.verdict === "mismatch") {
+          heuristic = llm.verdict;
+          ztoolkit.log(
+            `LLM content validation → ${llm.verdict}`,
+            llm.reason || "",
+          );
+        } else if (llm?.verdict === "unverifiable" && heuristic === "match") {
+          // Soft: don't upgrade a heuristic match to unverifiable erase solely from LLM doubt
+        } else if (llm?.verdict === "unverifiable") {
+          heuristic = "unverifiable";
+        }
+      } catch (e) {
+        ztoolkit.log("LLM content validation unavailable; heuristic only", e);
+      }
+    }
+
+    return { verdict: heuristic, pdfText: text };
   } catch (e) {
     ztoolkit.log("content validation error", e);
-    return "unverifiable";
+    return { verdict: "unverifiable", pdfText: "" };
   }
 }
 
@@ -464,30 +510,47 @@ async function removeAutomationTag(
 }
 
 /**
- * Erase attachment first; only then remove the on-disk file this run created.
- * If erase fails, keep the file so Zotero does not keep a broken linked path.
+ * Detach rejected PDF from the Zotero item (erase attachment / link only).
+ * Keep the on-disk PDF and rename it so orphan import can recreate a source
+ * from labelled filename metadata (title=/author=/year=).
  */
 export async function cleanupRejectedAttachment(opts: {
   attachment: Zotero.Item;
   persistedPath?: string | null;
   finalCreatedByThisRun: boolean | null;
+  /** PDF text used to build an orphan-ready filename. */
+  pdfText?: string;
 }): Promise<"cleaned" | "erase-failed"> {
+  let diskPath =
+    (opts.persistedPath || "").trim() ||
+    ((await opts.attachment.getFilePathAsync?.()) as string) ||
+    "";
+
+  if (diskPath && (opts.pdfText || "").trim()) {
+    try {
+      const { renameRejectedPdfOnDisk } = await import("./rejectedPdfRename");
+      const { registerDownloadedFile } = await import("./folderIndex");
+      diskPath = await renameRejectedPdfOnDisk(diskPath, opts.pdfText || "");
+      if (diskPath) {
+        try {
+          await registerDownloadedFile(diskPath);
+        } catch {
+          /* index best-effort */
+        }
+      }
+    } catch (e) {
+      ztoolkit.log("rejected PDF rename failed", e);
+    }
+  }
+
   try {
     await opts.attachment.eraseTx();
   } catch (e) {
     ztoolkit.log("erase rejected/unverifiable attachment failed", e);
     return "erase-failed";
   }
-  if (
-    opts.persistedPath &&
-    shouldCleanupPersistedDownload(opts.finalCreatedByThisRun === true)
-  ) {
-    try {
-      await IOUtils.remove(opts.persistedPath);
-    } catch {
-      /* best-effort */
-    }
-  }
+  // Never IOUtils.remove the PDF — file stays for orphan / manual re-import.
+  void opts.finalCreatedByThisRun;
   return "cleaned";
 }
 
@@ -610,41 +673,29 @@ export async function downloadAndAttach(
     }
   }
   if (!attachment) {
-    if (
-      persistedPath &&
-      shouldCleanupPersistedDownload(finalCreatedByThisRun)
-    ) {
-      try {
-        await IOUtils.remove(persistedPath);
-      } catch {
-        /* best-effort */
-      }
-    }
+    // Keep downloads/ file even if attach failed — never auto-delete disk PDFs.
     return null;
   }
 
   if (opts.validate !== false) {
-    const verdict = await validateAttachmentContent(item, attachment.id);
+    const { verdict, pdfText } = await validateAttachmentContentDetailed(
+      item,
+      attachment.id,
+    );
     if (verdict === "match" || verdict === "skipped") {
       await removeAutomationTag(item, "#pdf-review");
       await removeAutomationTag(item, "#pdf-quarantine");
       return attachment;
     }
-    if (verdict === "unverifiable") {
-      ztoolkit.log(
-        `Unverifiable PDF content for ${item.id} — quarantine + #pdf-review`,
-      );
-      await tagItem(item, "#pdf-review");
-      await tagItem(item, "#pdf-quarantine");
-      // Keep attachment for review; stop all further source/URL cascade.
-      throw new AttachStoppedError("review", attachment);
-    }
-    // mismatch — must erase before deleting the linked file
-    ztoolkit.log(`Rejected PDF (metadata mismatch) for ${item.id}`);
+    // mismatch OR unverifiable: detach link, keep+rename PDF on disk.
+    ztoolkit.log(
+      `Rejected PDF (${verdict}) for ${item.id} — detach link, rename on disk`,
+    );
     const cleaned = await cleanupRejectedAttachment({
       attachment,
       persistedPath,
       finalCreatedByThisRun,
+      pdfText,
     });
     if (cleaned === "erase-failed") {
       await tagItem(item, "#pdf-review");
@@ -652,7 +703,9 @@ export async function downloadAndAttach(
       throw new AttachStoppedError("erase-failed", attachment);
     }
     throw new ContentMismatchError(
-      "PDF içeriği künye metadata ile uyuşmadı (doğrulama)",
+      verdict === "unverifiable"
+        ? "PDF metni okunamadı / doğrulanamadı — Zotero eki kaldırıldı (dosya diskte yeniden adlandırıldı)"
+        : "PDF içeriği künye ile uyuşmadı — Zotero eki kaldırıldı (dosya diskte orphan-hazır adla bırakıldı)",
     );
   }
   return attachment;

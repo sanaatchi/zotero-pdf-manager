@@ -158,14 +158,19 @@ export function pdfUrlsFromHits(hits: OaPdfHit[]): string[] {
 }
 
 function normTokens(value: string): string[] {
-  return (value || "")
-    .normalize("NFKD")
-    .replace(/\p{Mark}/gu, "")
-    .toLocaleLowerCase()
-    .replace(/['`´\u2019]/g, " ")
-    .replace(/[^\p{L}\p{N}\s]/gu, " ")
-    .split(/\s+/)
-    .filter((w) => w.length > 3);
+  return (
+    (value || "")
+      .normalize("NFKD")
+      .replace(/\p{Mark}/gu, "")
+      // Turkish ı / İ → i so Sebastıan ≈ Sebastian (matches Python match_util).
+      .replace(/\u0131/g, "i")
+      .replace(/\u0130/g, "i")
+      .toLocaleLowerCase("tr")
+      .replace(/['`´\u2019]/g, " ")
+      .replace(/[^\p{L}\p{N}\s]/gu, " ")
+      .split(/\s+/)
+      .filter((w) => w.length > 3)
+  );
 }
 
 function titleOverlap(a: string, b: string): number {
@@ -321,4 +326,60 @@ export async function fetchOaPdfViaBridge(opts: {
 export function hitNeedsBridgeFetch(hit: OaPdfHit, sourceId?: string): boolean {
   if (sourceId === "yoktez" || hit.source === "yoktez") return true;
   return !!(hit.extra && hit.extra.fetchViaBridge);
+}
+
+export type ContentValidateRequest = {
+  title?: string;
+  creators?: string;
+  year?: string;
+  doi?: string;
+  isbn?: string;
+  itemType?: string;
+  pdfText?: string;
+};
+
+export type ContentValidateResult = {
+  ok?: boolean;
+  verdict?: "match" | "mismatch" | "unverifiable" | null;
+  confidence?: number;
+  reason?: string;
+  error?: string;
+  via?: string;
+};
+
+/** Local Ollama content check via Kutuphane bridge POST /pdf-validate-content. */
+export async function validateContentViaBridge(
+  req: ContentValidateRequest,
+): Promise<ContentValidateResult | null> {
+  const base = resolveOaBridgeUrl();
+  const endpoint = `${base}/pdf-validate-content`;
+  let xhr: any;
+  try {
+    xhr = await (Zotero.HTTP as any).request("POST", endpoint, {
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        title: req.title || "",
+        creators: req.creators || "",
+        year: req.year || "",
+        doi: req.doi || "",
+        isbn: req.isbn || "",
+        itemType: req.itemType || "",
+        pdfText: req.pdfText || "",
+      }),
+      responseType: "json",
+      timeout: 120000,
+      successCodes: false,
+    });
+  } catch (e) {
+    ztoolkit.log("pdf-validate-content bridge unreachable", e);
+    return null;
+  }
+  const status = Number(xhr?.status || 0);
+  if (status && (status < 200 || status >= 300)) {
+    ztoolkit.log("pdf-validate-content HTTP", status);
+    return null;
+  }
+  const body = (xhr?.response || {}) as ContentValidateResult;
+  if (!body || body.ok === false) return body || null;
+  return body;
 }

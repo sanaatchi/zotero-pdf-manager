@@ -108,6 +108,51 @@ test("YokTez source supports only theses", () => {
   delete global.Zotero;
 });
 
+test("yoktezUnavailableMessage explains NO_PERMIT", () => {
+  const result = esbuild.buildSync({
+    entryPoints: [path.join(process.cwd(), "src/modules/pythonPdfSources.ts")],
+    bundle: true,
+    platform: "node",
+    format: "cjs",
+    write: false,
+    logLevel: "silent",
+    external: ["./pdfSources", "./oaPdfBridge", "../utils/prefs"],
+  });
+  const module = { exports: {} };
+  const stubs = {
+    "./oaPdfBridge": {
+      buildOaSearchRequest: () => ({}),
+      filterTrustedHits: (h) => h,
+      fetchOaPdfViaBridge: async () => null,
+      hitNeedsBridgeFetch: () => false,
+      searchOaPdfBridge: async () => [],
+    },
+    "./pdfSources": {},
+    "../utils/prefs": { getPref: () => false },
+  };
+  const req = (name) => stubs[name] || require(name);
+  new Function("module", "exports", "require", result.outputFiles[0].text)(
+    module,
+    module.exports,
+    req,
+  );
+  const msg = module.exports.yoktezUnavailableMessage({
+    source: "yoktez",
+    title: "Sanatsal yaratıcılıkta soyutlama",
+    extra: {
+      display_no: 128122,
+      asset_status: 3,
+      asset_status_name: "NO_PERMIT",
+      info_message:
+        "Bu tezin, veri tabanı üzerinden yayınlanma izni bulunmamaktadır.",
+    },
+  });
+  assert.match(msg, /128122/);
+  assert.match(msg, /izin yok|izni yok/i);
+  assert.match(msg, /bulundu/);
+  assert.doesNotMatch(msg, /bulunamadı/);
+});
+
 test("LibGen supports books and articles (TR articles filtered by priority)", () => {
   global.Zotero = {
     ItemTypes: {

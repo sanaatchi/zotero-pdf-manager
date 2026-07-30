@@ -50,6 +50,20 @@ test("watch roots are de-duplicated case-insensitively", () => {
   ]);
 });
 
+test("ensurePathInWatchRoots appends Kütüphane Dışı path once", () => {
+  const { ensurePathInWatchRoots, DEFAULT_DISI_WATCH_ROOT } = loadModule();
+  const once = ensurePathInWatchRoots("", DEFAULT_DISI_WATCH_ROOT);
+  assert.equal(once, DEFAULT_DISI_WATCH_ROOT);
+  const twice = ensurePathInWatchRoots(once, DEFAULT_DISI_WATCH_ROOT);
+  assert.equal(twice, DEFAULT_DISI_WATCH_ROOT);
+  const withParent = ensurePathInWatchRoots(
+    "D:\\OneDrive\\1A_E_KAYNAKLARIM",
+    DEFAULT_DISI_WATCH_ROOT,
+  );
+  assert.ok(withParent.includes("D:\\OneDrive\\1A_E_KAYNAKLARIM"));
+  assert.ok(withParent.includes(DEFAULT_DISI_WATCH_ROOT));
+});
+
 test("filesystem roots retain their required trailing separator", () => {
   const { parseWatchRoots } = loadModule();
 

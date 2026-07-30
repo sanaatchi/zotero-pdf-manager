@@ -1,48 +1,32 @@
+// @ajan: cursor · @etiket: katman-2, tests, reject-keep-disk
 const assert = require("node:assert/strict");
 const fs = require("node:fs");
 const path = require("node:path");
 const { test } = require("node:test");
-const esbuild = require("esbuild");
 
-test("validation verdicts: match clears review; unverifiable stops cascade; mismatch erase-gates file", () => {
+test("validation verdicts: match clears review; mismatch/unverifiable detach link keep disk", () => {
   const source = fs.readFileSync(
     path.join(process.cwd(), "src/modules/pdfSources.ts"),
     "utf8",
   );
   assert.match(source, /cleanupRejectedAttachment/);
   assert.match(source, /removeAutomationTag\(item,\s*"#pdf-review"\)/);
-  assert.match(source, /AttachStoppedError\("review"/);
   assert.match(source, /AttachStoppedError\("erase-failed"/);
   assert.match(source, /ContentMismatchError/);
   assert.match(source, /decideContentValidation/);
+  assert.match(source, /Rejected PDF \(\$\{verdict\}\)/);
+  assert.match(source, /renameRejectedPdfOnDisk/);
+  assert.match(source, /Never IOUtils\.remove the PDF/);
+  assert.doesNotMatch(source, /AttachStoppedError\("review"/);
+  // Detach Zotero link only — do not delete the persisted download.
+  assert.match(source, /await opts\.attachment\.eraseTx\(\)/);
   assert.doesNotMatch(
-    source,
-    /Unverifiable PDF content[\s\S]{0,400}return null/,
-  );
-  assert.match(
     source,
     /await opts\.attachment\.eraseTx\(\);[\s\S]*?IOUtils\.remove\(opts\.persistedPath\)/,
   );
 });
 
 test("cleanupRejectedAttachment does not delete file when erase fails", async () => {
-  const result = esbuild.buildSync({
-    entryPoints: [path.join(process.cwd(), "src/modules/oaDownloadPath.ts")],
-    bundle: true,
-    platform: "node",
-    format: "cjs",
-    write: false,
-    logLevel: "silent",
-  });
-  const module = { exports: {} };
-  new Function("module", "exports", "require", result.outputFiles[0].text)(
-    module,
-    module.exports,
-    require,
-  );
-  const { shouldCleanupPersistedDownload } = module.exports;
-  assert.equal(shouldCleanupPersistedDownload(true), true);
-
   let removed = false;
   let erased = false;
   async function cleanupRejectedAttachment(opts) {
@@ -52,12 +36,9 @@ test("cleanupRejectedAttachment does not delete file when erase fails", async ()
     } catch {
       return "erase-failed";
     }
-    if (
-      opts.persistedPath &&
-      shouldCleanupPersistedDownload(opts.finalCreatedByThisRun)
-    ) {
-      removed = true;
-    }
+    // Disk PDF is kept (rename happens before erase in production).
+    void opts.persistedPath;
+    void removed;
     return "cleaned";
   }
 
@@ -86,5 +67,6 @@ test("cleanupRejectedAttachment does not delete file when erase fails", async ()
     }),
     "cleaned",
   );
-  assert.equal(removed, true);
+  assert.equal(removed, false);
+  assert.equal(erased, true);
 });

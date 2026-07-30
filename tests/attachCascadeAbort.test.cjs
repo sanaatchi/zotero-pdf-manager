@@ -1,3 +1,4 @@
+// @ajan: cursor · @etiket: katman-2, tests, cascade-abort
 const assert = require("node:assert/strict");
 const fs = require("node:fs");
 const path = require("node:path");
@@ -56,8 +57,11 @@ test("validation + cascade: AttachStoppedError stops further sources", () => {
     "utf8",
   );
   assert.match(source, /class AttachStoppedError/);
-  assert.match(source, /throw new AttachStoppedError\("review"/);
+  // mismatch/unverifiable detach successfully → ContentMismatchError (cascade may continue).
+  // Only erase-failed keeps the Zotero link and stops the cascade.
+  assert.doesNotMatch(source, /throw new AttachStoppedError\("review"/);
   assert.match(source, /throw new AttachStoppedError\("erase-failed"/);
+  assert.match(source, /ContentMismatchError/);
   assert.match(source, /rethrowAttachControlFlow/);
 
   const download = fs.readFileSync(
@@ -65,6 +69,7 @@ test("validation + cascade: AttachStoppedError stops further sources", () => {
     "utf8",
   );
   assert.match(download, /isAttachStoppedError/);
+  assert.match(download, /isContentMismatchError/);
   assert.match(download, /cascadeAutomaticSources/);
   assert.match(download, /stopped:/);
   assert.match(download, /hasPDFAttachment\(item\)/);
@@ -72,7 +77,7 @@ test("validation + cascade: AttachStoppedError stops further sources", () => {
   const { AttachStoppedError, isAttachStoppedError, rethrowAttachControlFlow } =
     loadPdfSourcesExports();
 
-  const err = new AttachStoppedError("review", { id: 1 });
+  const err = new AttachStoppedError("erase-failed", { id: 1 });
   assert.equal(isAttachStoppedError(err), true);
   assert.throws(() => rethrowAttachControlFlow(err), /stopped/);
 
@@ -80,19 +85,19 @@ test("validation + cascade: AttachStoppedError stops further sources", () => {
   function simulateCascade(firstResult) {
     for (const id of ["pmc", "dergipark", "scihub"]) {
       sourcesTried.push(id);
-      if (id === "pmc" && firstResult === "review") {
-        throw new AttachStoppedError("review", { id: 99 });
+      if (id === "pmc" && firstResult === "erase-failed") {
+        throw new AttachStoppedError("erase-failed", { id: 99 });
       }
     }
     return "continued";
   }
   let stopped = null;
   try {
-    simulateCascade("review");
+    simulateCascade("erase-failed");
   } catch (e) {
     if (isAttachStoppedError(e)) stopped = e.reason;
   }
-  assert.equal(stopped, "review");
+  assert.equal(stopped, "erase-failed");
   assert.deepEqual(sourcesTried, ["pmc"]);
 });
 

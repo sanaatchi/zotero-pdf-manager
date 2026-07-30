@@ -1,4 +1,4 @@
-// @ajan: cursor · @etiket: katman-2, p1, p2-1, p2-4, folderIndex, incomplete-index, abort
+// @ajan: cursor · @etiket: katman-2, folderIndex, disi-watch-root
 import { getPref } from "../utils/prefs";
 import { parseFilenameMetadata } from "./filenameMetadata";
 import { readJsonOrQuarantine, writeJsonAtomic } from "../utils/atomicJson";
@@ -138,9 +138,29 @@ export function parseWatchRoots(raw: string): string[] {
 }
 
 /**
- * Merge configured watch roots with Zotero's linked attachment base directory.
- * Pure — used by getWatchRoots and unit tests.
+ * Default staging / external library root used for local PDF search.
+ * Must stay in sync with prefs.js watchRoots default + preference migrate.
  */
+export const DEFAULT_DISI_WATCH_ROOT =
+  "D:\\OneDrive\\1A_E_KAYNAKLARIM\\Kütüphane Dışı Kaynaklar";
+
+/**
+ * Append ``pathToAdd`` to a watchRoots string when not already listed
+ * (case-insensitive exact match). Returns semicolon-joined roots.
+ */
+export function ensurePathInWatchRoots(
+  current: string,
+  pathToAdd: string,
+): string {
+  const roots = parseWatchRoots(current || "");
+  const want = (pathToAdd || "").trim().replace(/[\\/]+$/, "");
+  if (!want) return roots.join(";");
+  const wantKey = want.toLocaleLowerCase();
+  if (roots.some((r) => r.toLocaleLowerCase() === wantKey)) {
+    return roots.join(";");
+  }
+  return parseWatchRoots([...roots, want].join(";")).join(";");
+}
 export function mergeWatchRoots(
   configured: string[],
   linkedBase: string | null | undefined,

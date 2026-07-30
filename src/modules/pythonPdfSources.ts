@@ -1,4 +1,4 @@
-// @ajan: cursor · @etiket: katman-2, python-pdf-sources, oa-pdf-bridge
+// @ajan: cursor · @etiket: katman-2, python-pdf-sources, yoktez-status
 /**
  * Online PDF sources backed by Kutuphane `oa_pdf_search` (8756 bridge).
  * Old in-plugin scrape/mirror logic was removed — discovery is Python-only.
@@ -11,6 +11,7 @@ import {
   hitNeedsBridgeFetch,
   searchOaPdfBridge,
 } from "./oaPdfBridge";
+import type { OaPdfHit } from "./oaPdfBridge";
 import type { PDFSource } from "./pdfSources";
 
 const ARTICLE_TYPES = new Set([
@@ -40,6 +41,38 @@ type Gate = (item: Zotero.Item) => boolean;
 
 function prefEnabled(key: string): boolean {
   return !!getPref(key);
+}
+
+/** Human message when YÖK lists the thesis but PDF is not downloadable. */
+export function yoktezUnavailableMessage(hit: OaPdfHit): string {
+  const ex = (hit.extra || {}) as Record<string, unknown>;
+  const no =
+    ex.display_no != null && String(ex.display_no).trim()
+      ? ` (Tez No: ${ex.display_no})`
+      : "";
+  const name = String(ex.asset_status_name || "").toUpperCase();
+  const code = String(ex.asset_status ?? "");
+  const info = String(ex.info_message || "").trim();
+  const tag = `${name} ${code}`;
+  if (/NO_PERMIT|\b3\b/.test(tag) || /izin bulunmamaktadır/i.test(info)) {
+    return (
+      `Tez YÖKTez’de bulundu${no}, ancak çevrimiçi PDF izni yok` +
+      (info ? ` — ${info}` : " (TÜBESS / üniversite kütüphanesi).")
+    );
+  }
+  if (/UNDER_EMBARGO|\b2\b/.test(tag) || /embargo/i.test(info)) {
+    return (
+      `Tez YÖKTez’de bulundu${no}, ancak embargolu` +
+      (info ? ` — ${info}` : ".")
+    );
+  }
+  if (/PREPARING|\b4\b/.test(tag)) {
+    return `Tez YÖKTez’de bulundu${no}, ancak PDF henüz hazır değil.`;
+  }
+  return (
+    `Tez YÖKTez’de bulundu${no}, ancak indirilebilir PDF yok` +
+    (info ? ` — ${info}` : ".")
+  );
 }
 
 export class OaPdfPythonSource implements PDFSource {
@@ -82,6 +115,16 @@ export class OaPdfPythonSource implements PDFSource {
       rethrowAttachControlFlow(e);
       throw e;
     }
+
+    // YÖK often finds the record with NO_PERMIT / embargo (no pdfUrl).
+    // Do not report that as "bulunamadı".
+    if (this.id === "yoktez" && hits.length) {
+      const downloadable = hits.filter((h) => String(h.pdfUrl || "").trim());
+      if (!downloadable.length) {
+        throw new Error(yoktezUnavailableMessage(hits[0]));
+      }
+    }
+
     const trusted = filterTrustedHits(hits, {
       title: String(item.getField("title") || ""),
       doi: req.doi || "",

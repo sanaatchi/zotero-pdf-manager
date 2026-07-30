@@ -1,9 +1,13 @@
-// @ajan: cursor · @etiket: katman-2, p2, prefs, reconcile-cancel, audit
+// @ajan: cursor · @etiket: katman-2, prefs, disi-watch-root
 import { config } from "../../package.json";
 import { getString } from "../utils/locale";
 import { getPref, setPref } from "../utils/prefs";
 import { listenShortcut } from "../utils/shortcut";
-import { invalidateIndex } from "./folderIndex";
+import {
+  invalidateIndex,
+  ensurePathInWatchRoots,
+  DEFAULT_DISI_WATCH_ROOT,
+} from "./folderIndex";
 import {
   normalizeAddSettleMs,
   normalizePeriodicMinutes,
@@ -183,13 +187,27 @@ function ensureStringPref(key: string) {
 }
 
 function migratePDFWatchRoots() {
-  const roots = getPref("pdf.watchRoots");
-  if (typeof roots === "string" && roots.trim()) return;
-  const legacy = getPref("pdf.localFolder");
-  if (typeof legacy === "string" && legacy.trim()) {
-    setPref("pdf.watchRoots", legacy.trim());
-  } else {
-    ensureStringPref("pdf.watchRoots");
+  let roots = getPref("pdf.watchRoots");
+  if (typeof roots !== "string" || !roots.trim()) {
+    const legacy = getPref("pdf.localFolder");
+    if (typeof legacy === "string" && legacy.trim()) {
+      roots = legacy.trim();
+    } else {
+      roots = "";
+    }
+  }
+  // Always ensure Kütüphane Dışı Kaynaklar is a local search root.
+  const next = ensurePathInWatchRoots(
+    String(roots || ""),
+    DEFAULT_DISI_WATCH_ROOT,
+  );
+  setPref("pdf.watchRoots", next);
+  if (next !== String(roots || "").trim()) {
+    try {
+      invalidateIndex();
+    } catch {
+      /* index rebuild on next search */
+    }
   }
 }
 

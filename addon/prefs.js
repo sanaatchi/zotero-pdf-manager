@@ -1,3 +1,4 @@
+// @ajan: cursor · @etiket: katman-2, prefs, disi-watch-root
 /* eslint-disable no-undef */
 pref("extensions.zotero.__addonRef__.enable", true);
 pref("extensions.zotero.__addonRef__.attachType", "linking");
@@ -88,9 +89,12 @@ pref(
   "extensions.zotero.__addonRef__.pdf.localFolder",
   "D:\\OneDrive\\1A_E_KAYNAKLARIM",
 );
-// Semicolon/newline-separated roots. Empty means migrate/fall back to the
-// legacy localFolder preference above.
-pref("extensions.zotero.__addonRef__.pdf.watchRoots", "");
+// Semicolon/newline-separated roots. Empty migrates from localFolder and
+// always ensures Kütüphane Dışı Kaynaklar is present (preferenceScript).
+pref(
+  "extensions.zotero.__addonRef__.pdf.watchRoots",
+  "D:\\OneDrive\\1A_E_KAYNAKLARIM\\Kütüphane Dışı Kaynaklar",
+);
 pref("extensions.zotero.__addonRef__.pdf.useLinkedAttachmentBase", true);
 pref("extensions.zotero.__addonRef__.pdf.localAsLink", true);
 // Metadata-only (not PDF download): doi / arxiv / s2 / proquest
@@ -114,4 +118,6 @@ pref("extensions.zotero.__addonRef__.pdf.proquestEnabled", false);
 pref("extensions.zotero.__addonRef__.pdf.proxyEnabled", false);
 pref("extensions.zotero.__addonRef__.pdf.proxyURL", "");
 pref("extensions.zotero.__addonRef__.pdf.oaBridgeUrl", "http://127.0.0.1:8756");
+// Optional Ollama content check via bridge (/pdf-validate-content).
+pref("extensions.zotero.__addonRef__.pdf.validateContentLlm", true);
 pref("extensions.zotero.__addonRef__.pdf.metadataOnlySourcesMigratedV1", false);
