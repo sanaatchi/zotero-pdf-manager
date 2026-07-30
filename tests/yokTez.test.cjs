@@ -105,17 +105,77 @@ test("DergiPark extraction ignores article PDFs cited in references", () => {
   );
 });
 
-test("DergiPark extraction refuses an unlabelled reference-only PDF", () => {
-  const { extractDergiParkPdfURL } = loadModule();
-  const html =
-    '<div class="references"><a href="/tr/download/article-file/999">' +
-    "Kaynakça makalesi</a></div>";
+test("YÖK getTezPdf.jsp assets HTML yields TezGoster PDF URL", () => {
+  const { parseYokTezAssets, buildYokAssetsURL } = loadModule();
 
   assert.equal(
-    extractDergiParkPdfURL(
-      html,
-      "https://dergipark.org.tr/tr/pub/example/article/123",
-    ),
-    "",
+    buildYokAssetsURL("reg1", "tez2"),
+    "https://tez.yok.gov.tr/UlusalTezMerkezi/getTezPdf.jsp?kayitNo=reg1&tezNo=tez2",
   );
+
+  const available = parseYokTezAssets(
+    '<a href="TezGoster?key=abcKEY&amp;x=1">PDF</a>',
+  );
+  assert.equal(available.status, "AVAILABLE");
+  assert.equal(available.pdfKey, "abcKEY&x=1");
+  assert.equal(
+    available.pdfURL,
+    "https://tez.yok.gov.tr/UlusalTezMerkezi/TezGoster?key=abcKEY&x=1",
+  );
+
+  const embargo = parseYokTezAssets(
+    '<span class="pdf-info-msg">Embargo 15.03.2028</span>',
+  );
+  assert.equal(embargo.status, "UNDER_EMBARGO");
+  assert.equal(embargo.pdfURL, "");
+});
+
+test("YÖK opaque keys and display tez no are read from Extra", () => {
+  const { extractYokAssetKeys, extractYokDisplayTezNo, extractYokCardsFromSearchHtml } =
+    loadModule();
+
+  const keyed = {
+    getField(field) {
+      return field === "extra"
+        ? "kayitNo=AAA111\ntezNo=BBB222\nYÖK Tez No: 695080"
+        : "";
+    },
+  };
+  assert.deepEqual(extractYokAssetKeys(keyed), {
+    kayitNo: "AAA111",
+    tezNo: "BBB222",
+  });
+  assert.equal(extractYokDisplayTezNo(keyed), "695080");
+
+  const cards = extractYokCardsFromSearchHtml(
+    '<div data-kayitno="k1" data-tezno="t1"></div>' +
+      '<div data-tezno="t2" data-kayitno="k2"></div>',
+  );
+  assert.deepEqual(cards, [
+    { kayitNo: "k1", tezNo: "t1" },
+    { kayitNo: "k2", tezNo: "t2" },
+  ]);
+});
+
+test("DergiPark OpenAlex picker keeps only dergipark.org.tr PDF URLs", () => {
+  const { pickDergiParkOpenAlexPdfUrls } = loadModule();
+  const urls = pickDergiParkOpenAlexPdfUrls([
+    {
+      primary_location: {
+        landing_page_url: "https://dergipark.org.tr/tr/pub/x",
+        pdf_url: "https://dergipark.org.tr/tr/download/article-file/1",
+      },
+    },
+    {
+      locations: [
+        {
+          landing_page_url: "https://example.com/a",
+          pdf_url: "https://example.com/a.pdf",
+        },
+      ],
+    },
+  ]);
+  assert.deepEqual(urls, [
+    "https://dergipark.org.tr/tr/download/article-file/1",
+  ]);
 });

@@ -1,8 +1,30 @@
+// @ajan: cursor · @etiket: katman-2, pdf-metadata, max-path
 import { PDFDocument, PDFName } from "pdf-lib";
 import { config } from "../../package.json";
 import { getPref } from "../utils/prefs";
 
 declare const IOUtils: any;
+
+/**
+ * Sibling temp path for atomic PDF rewrite.
+ *
+ * Must stay SHORT: `${pdfPath}.zpdfmanager.tmp` on a near-Windows-MAX_PATH
+ * (~260) linked file exceeds the limit and IOUtils.write fails with
+ * NS_ERROR_FILE_NOT_FOUND even though the PDF itself is readable. Same
+ * directory keeps the rename atomic on one volume.
+ */
+export function metadataEmbedTmpPath(
+  pdfPath: string,
+  attachmentKey: string,
+): string {
+  const key = String(attachmentKey || "tmp").replace(/[^\w-]/g, "") || "tmp";
+  const lastSlash = Math.max(
+    pdfPath.lastIndexOf("/"),
+    pdfPath.lastIndexOf("\\"),
+  );
+  if (lastSlash < 0) return `.zpm-${key}.tmp`;
+  return `${pdfPath.slice(0, lastSlash)}${pdfPath[lastSlash]}.zpm-${key}.tmp`;
+}
 
 // pdf-lib's own parser calls console.warn/log for recoverable issues it hits
 // in slightly malformed real-world PDFs (bad object refs, XFA form data, …).
@@ -379,7 +401,11 @@ export async function embedMetadataIntoAttachment(
   attachment: Zotero.Item,
 ) {
   const path = await attachment.getFilePathAsync();
-  if (!path) throw new Error("Dosya yolu çözülemedi (getFilePathAsync boş)");
+  if (!path) {
+    throw new Error(
+      "Dosya yolu çözülemedi (getFilePathAsync boş) — ek eksik, bağlı dosya taşınmış/silinmiş veya OneDrive henüz indirmemiş olabilir",
+    );
+  }
   const ext = Zotero.File.getExtension(path).toLowerCase();
   if (ext !== "pdf") throw new Error(`PDF değil (uzantı: .${ext || "?"})`);
   if (!(await IOUtils.exists(path))) {
@@ -441,9 +467,13 @@ export async function embedMetadataIntoAttachment(
   const output = await pdf.save();
   // No permanent backup (user preference). The tmpPath write is still atomic
   // — it writes to a temporary file and renames, so a failed/partial write
-  // never leaves a corrupted original.
+  // never leaves a corrupted original. Short sibling name avoids Windows
+  // MAX_PATH when the PDF filename is already near 260 characters.
+  const attachmentKey = String(
+    (attachment as any).key || attachment.id || "tmp",
+  );
   await IOUtils.write(path, output, {
-    tmpPath: `${path}.zpdfmanager.tmp`,
+    tmpPath: metadataEmbedTmpPath(path, attachmentKey),
   });
 
   try {

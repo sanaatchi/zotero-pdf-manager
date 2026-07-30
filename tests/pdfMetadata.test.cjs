@@ -157,3 +157,28 @@ test("aggregateItemOutcomes: different items are tracked independently", () => {
   assert.equal(outcomes.get(2).allSucceeded, false);
   assert.equal(outcomes.size, 2);
 });
+
+test("metadataEmbedTmpPath uses a short sibling name (Windows MAX_PATH safe)", () => {
+  const { metadataEmbedTmpPath } = loadModule();
+  const dir =
+    "D:\\OneDrive\\1A_E_KAYNAKLARIM\\Zotero Kaynaklar\\iletişim\\özcan abi kaynaklar\\";
+  const name =
+    "Yörük Karakılıç ve Madikova Özer (2023) An assessment of the effect of generation Y and Z executives' perceptions of religion on narcissisti [journalArticle] Hitit Theology Jou.pdf";
+  const pdf = dir + name;
+  const tmp = metadataEmbedTmpPath(pdf, "ABCD1234");
+  assert.equal(tmp, `${dir}.zpm-ABCD1234.tmp`);
+  assert.ok(tmp.length < 260, `short tmp should be under 260, got ${tmp.length}`);
+  assert.ok(
+    `${pdf}.zpdfmanager.tmp`.length > 260,
+    `legacy tmp must exceed 260, got ${`${pdf}.zpdfmanager.tmp`.length}`,
+  );
+});
+
+test("metadataEmbedTmpPath preserves POSIX separators and sanitizes key", () => {
+  const { metadataEmbedTmpPath } = loadModule();
+  assert.equal(
+    metadataEmbedTmpPath("/data/books/long-name.pdf", "ab/cd!ef"),
+    "/data/books/.zpm-abcdef.tmp",
+  );
+  assert.equal(metadataEmbedTmpPath("orphan.pdf", ""), ".zpm-tmp.tmp");
+});

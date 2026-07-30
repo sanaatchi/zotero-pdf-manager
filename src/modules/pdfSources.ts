@@ -1,4 +1,4 @@
-// @ajan: cursor · @etiket: katman-2, p1, p2-2, p2-4, pdfSources, validation-cleanup, cascade-stop
+// @ajan: cursor · @etiket: katman-2, pdfSources, yoktez-assets, dergipark-openalex, mirrors
 import { getString } from "../utils/locale";
 import { getPref } from "../utils/prefs";
 import {
@@ -964,7 +964,7 @@ export class SemanticScholarSource implements PDFSource {
   }
 }
 
-/** DergiPark (Turkish journals) — scrape the article page for the PDF link. */
+/** DergiPark — page scrape + OpenAlex discovery (/tr/search is SPA). */
 export class DergiParkSource implements PDFSource {
   id = "dergipark";
   isEnabled() {
@@ -995,14 +995,22 @@ export class DergiParkSource implements PDFSource {
       }
     }
 
-    // B) No usable URL → search DergiPark by title.
+    // B) Legacy HTML search (may return 0 on SPA).
     const title = (item.getField("title") as string) || "";
     if (title) {
       try {
-        return await searchDergiParkByTitle(item, title);
+        const htmlHit = await searchDergiParkByTitle(item, title);
+        if (htmlHit) return htmlHit;
       } catch (e) {
         rethrowAttachControlFlow(e);
-        ztoolkit.log("DergiPark search failed", e);
+        ztoolkit.log("DergiPark HTML search failed", e);
+      }
+      // C) OpenAlex discovery → dergipark.org.tr PDF URLs (oa_pdf_search parity).
+      try {
+        return await searchDergiParkViaOpenAlex(item, title);
+      } catch (e) {
+        rethrowAttachControlFlow(e);
+        ztoolkit.log("DergiPark OpenAlex search failed", e);
       }
     }
     return null;
@@ -1063,6 +1071,78 @@ async function searchDergiParkByTitle(
     if (pdfURL) {
       const att = await downloadAndAttach(item, pdfURL);
       if (att) return att;
+    }
+  }
+  return null;
+}
+
+/** Pure filter: keep OpenAlex works that resolve to dergipark.org.tr PDFs. */
+export function pickDergiParkOpenAlexPdfUrls(
+  works: any[],
+  limit = 5,
+): string[] {
+  const out: string[] = [];
+  for (const work of works || []) {
+    const locs = [
+      work?.primary_location,
+      ...((work?.locations as any[]) || []),
+    ].filter(Boolean);
+    let pdf = "";
+    let landing = "";
+    for (const loc of locs) {
+      const al = String(loc?.landing_page_url || "");
+      const ap = String(loc?.pdf_url || "");
+      if (al.includes("dergipark.org.tr")) landing = al;
+      if (ap.includes("dergipark.org.tr")) {
+        pdf = ap;
+        break;
+      }
+    }
+    if (!pdf && landing.includes("dergipark.org.tr")) {
+      // caller may scrape landing; still surface landing as candidate marker
+      continue;
+    }
+    if (pdf && !out.includes(pdf)) out.push(pdf);
+    if (out.length >= limit) break;
+  }
+  return out;
+}
+
+async function searchDergiParkViaOpenAlex(
+  item: Zotero.Item,
+  title: string,
+): Promise<unknown | null> {
+  const url =
+    "https://api.openalex.org/works?search=" +
+    encodeURIComponent(`${title} dergipark`) +
+    "&per_page=25";
+  const xhr = await httpGet(url, "text");
+  const body = JSON.parse(xhr.responseText || "{}");
+  const pdfs = pickDergiParkOpenAlexPdfUrls(body?.results || [], 5);
+  for (const pdfURL of pdfs) {
+    const att = await downloadAndAttach(item, pdfURL, { sourceId: "dergipark" });
+    if (att) return att;
+  }
+  // Fallback: scrape dergipark landing pages from OpenAlex hits
+  for (const work of body?.results || []) {
+    const locs = [
+      work?.primary_location,
+      ...((work?.locations as any[]) || []),
+    ].filter(Boolean);
+    for (const loc of locs) {
+      const landing = String(loc?.landing_page_url || "");
+      if (!landing.includes("dergipark.org.tr")) continue;
+      try {
+        const pageHtml = (await httpGet(landing)).responseText || "";
+        const pdfURL = extractDergiParkPdfURL(pageHtml, landing);
+        if (!pdfURL || !pdfURL.includes("dergipark.org.tr")) continue;
+        const att = await downloadAndAttach(item, pdfURL, {
+          sourceId: "dergipark",
+        });
+        if (att) return att;
+      } catch (e) {
+        rethrowAttachControlFlow(e);
+      }
     }
   }
   return null;
@@ -1328,7 +1408,154 @@ export class LibGenSource implements PDFSource {
   }
 }
 
-/** YÖKTEZ (tez.yok.gov.tr) — Turkish National Thesis Center. Best-effort. */
+const YOK_TEZ_BASE = "https://tez.yok.gov.tr/UlusalTezMerkezi/";
+const YOK_ASSETS_URL = `${YOK_TEZ_BASE}getTezPdf.jsp`;
+const YOK_PDF_URL = `${YOK_TEZ_BASE}TezGoster`;
+
+/**
+ * Parse getTezPdf.jsp HTML (parity with yoktez.assets.parse_thesis_assets).
+ * Returns AVAILABLE + TezGoster URL, or status without a PDF.
+ */
+export function parseYokTezAssets(html: string): {
+  status: "AVAILABLE" | "UNDER_EMBARGO" | "NO_PERMIT" | "PREPARING" | "UNKNOWN";
+  pdfURL: string;
+  pdfKey: string;
+  infoMessage: string;
+} {
+  const pdfKey =
+    (html || "").match(/TezGoster\?key=([^'"\s]+)/i)?.[1]?.replace(
+      /&amp;/g,
+      "&",
+    ) || "";
+  if (pdfKey) {
+    return {
+      status: "AVAILABLE",
+      pdfKey,
+      pdfURL: `${YOK_PDF_URL}?key=${pdfKey}`,
+      infoMessage: "",
+    };
+  }
+  const info =
+    (html || "")
+      .match(/<span class=['"]pdf-info-msg['"]>([\s\S]*?)<\/span>/i)?.[1]
+      ?.replace(/<[^>]+>/g, " ")
+      .trim() || "";
+  if (info) {
+    const embargo = /\b\d{2}\.\d{2}\.\d{4}\b/.test(info);
+    return {
+      status: embargo ? "UNDER_EMBARGO" : "NO_PERMIT",
+      pdfKey: "",
+      pdfURL: "",
+      infoMessage: info,
+    };
+  }
+  const preparing =
+    (html || "")
+      .match(/<div class=['"]pdf-container['"]>([^<]+)<\/div>/i)?.[1]
+      ?.trim() || "";
+  if (preparing) {
+    return {
+      status: "PREPARING",
+      pdfKey: "",
+      pdfURL: "",
+      infoMessage: preparing,
+    };
+  }
+  return {
+    status: "UNKNOWN",
+    pdfKey: "",
+    pdfURL: "",
+    infoMessage: "",
+  };
+}
+
+export function buildYokAssetsURL(kayitNo: string, tezNo: string): string {
+  return (
+    `${YOK_ASSETS_URL}?kayitNo=${encodeURIComponent(kayitNo)}` +
+    `&tezNo=${encodeURIComponent(tezNo)}`
+  );
+}
+
+/** Extract opaque kayitNo + tezNo from item fields / YÖK URLs / search cards. */
+export function extractYokAssetKeys(item: Zotero.Item): {
+  kayitNo: string;
+  tezNo: string;
+} {
+  const blob = ["url", "extra", "archiveLocation", "callNumber"]
+    .map((f) => String((item as any).getField(f) || ""))
+    .join("\n");
+
+  const kayitFirst = blob.match(
+    /kayitNo[=:\s]+([A-Za-z0-9_-]+)[\s\S]{0,120}?tezNo[=:\s]+([A-Za-z0-9_-]+)/i,
+  );
+  if (kayitFirst) return { kayitNo: kayitFirst[1], tezNo: kayitFirst[2] };
+
+  const tezFirst = blob.match(
+    /tezNo[=:\s]+([A-Za-z0-9_-]+)[\s\S]{0,120}?kayitNo[=:\s]+([A-Za-z0-9_-]+)/i,
+  );
+  if (tezFirst) return { kayitNo: tezFirst[2], tezNo: tezFirst[1] };
+
+  const dataKayit = blob.match(/data-kayitno=["']([^"']+)["']/i)?.[1] || "";
+  const dataTez = blob.match(/data-tezno=["']([^"']+)["']/i)?.[1] || "";
+  if (dataKayit && dataTez) return { kayitNo: dataKayit, tezNo: dataTez };
+  return { kayitNo: "", tezNo: "" };
+}
+
+/** Human-readable YÖK thesis number from Extra (`YÖK Tez No: 123456`). */
+export function extractYokDisplayTezNo(item: Zotero.Item): string {
+  const blob = ["extra", "callNumber", "archiveLocation", "url"]
+    .map((f) => String((item as any).getField(f) || ""))
+    .join("\n");
+  return (
+    blob.match(/YÖK\s*Tez\s*No\s*:\s*(\d{5,})/i)?.[1] ||
+    blob.match(/Tez\s*No\s*:\s*(\d{5,})/i)?.[1] ||
+    ""
+  );
+}
+
+/** Parse search-result cards for data-kayitno / data-tezno pairs. */
+export function extractYokCardsFromSearchHtml(
+  html: string,
+): { kayitNo: string; tezNo: string }[] {
+  const out: { kayitNo: string; tezNo: string }[] = [];
+  const seen = new Set<string>();
+  for (const m of (html || "").matchAll(
+    /data-kayitno=["']([^"']+)["'][^>]*data-tezno=["']([^"']+)["']/gi,
+  )) {
+    const key = `${m[1]}|${m[2]}`;
+    if (seen.has(key)) continue;
+    seen.add(key);
+    out.push({ kayitNo: m[1], tezNo: m[2] });
+  }
+  for (const m of (html || "").matchAll(
+    /data-tezno=["']([^"']+)["'][^>]*data-kayitno=["']([^"']+)["']/gi,
+  )) {
+    const key = `${m[2]}|${m[1]}`;
+    if (seen.has(key)) continue;
+    seen.add(key);
+    out.push({ kayitNo: m[2], tezNo: m[1] });
+  }
+  return out;
+}
+
+async function attachViaYokAssets(
+  item: Zotero.Item,
+  kayitNo: string,
+  tezNo: string,
+): Promise<unknown | null> {
+  const assetsURL = buildYokAssetsURL(kayitNo, tezNo);
+  const html = (await httpGet(assetsURL)).responseText || "";
+  const parsed = parseYokTezAssets(html);
+  if (parsed.status !== "AVAILABLE" || !parsed.pdfURL) {
+    ztoolkit.log(
+      `YÖKTEZ assets ${parsed.status}: ${parsed.infoMessage || assetsURL}`,
+    );
+    return null;
+  }
+  return await downloadAndAttach(item, parsed.pdfURL, { sourceId: "yoktez" });
+}
+
+/** YÖKTEZ — TezGoster URL, getTezPdf.jsp assets, then SearchTez scrape. */
 export class YokTezSource implements PDFSource {
   id = "yoktez";
   isEnabled() {
@@ -1338,21 +1565,46 @@ export class YokTezSource implements PDFSource {
     return isThesis(item);
   }
   async tryAttach(item: Zotero.Item) {
+    // A) Opaque kayitNo+tezNo → getTezPdf.jsp (yoktez / oa_pdf_search parity).
+    const keys = extractYokAssetKeys(item);
+    if (keys.kayitNo && keys.tezNo) {
+      try {
+        const att = await attachViaYokAssets(item, keys.kayitNo, keys.tezNo);
+        if (att) return att;
+      } catch (e) {
+        rethrowAttachControlFlow(e);
+        ztoolkit.log("YÖKTEZ assets fetch failed", e);
+      }
+    }
+
     const url = getYokRecordURL(item);
     if (url) {
       try {
         // Zotero records imported from YÖK commonly store TezGoster itself as
         // the item URL — already the PDF endpoint, not an HTML detail page.
         if (/\/TezGoster(?:\?|$)/i.test(url)) {
-          const att = await downloadAndAttach(item, url);
+          const att = await downloadAndAttach(item, url, {
+            sourceId: "yoktez",
+          });
           if (att) return att;
         } else {
-          const direct = await downloadAndAttach(item, url);
+          const direct = await downloadAndAttach(item, url, {
+            sourceId: "yoktez",
+          });
           if (direct) return direct;
           const html = (await httpGet(url)).responseText || "";
+          const fromPage = parseYokTezAssets(html);
+          if (fromPage.pdfURL) {
+            const att = await downloadAndAttach(item, fromPage.pdfURL, {
+              sourceId: "yoktez",
+            });
+            if (att) return att;
+          }
           const pdfURL = extractYokPdfURL(html, url);
           if (pdfURL) {
-            const att = await downloadAndAttach(item, pdfURL);
+            const att = await downloadAndAttach(item, pdfURL, {
+              sourceId: "yoktez",
+            });
             if (att) return att;
           }
         }
@@ -1362,12 +1614,13 @@ export class YokTezSource implements PDFSource {
       }
     }
 
-    // No usable URL → search the thesis center by title (best-effort; YÖK
-    // frequently gates results, so this may legitimately find nothing).
+    // B) Display tez no or title → SearchTez, then assets for each card.
+    const displayNo = extractYokDisplayTezNo(item);
     const title = (item.getField("title") as string) || "";
-    if (title) {
+    const query = displayNo || title;
+    if (query) {
       try {
-        return await searchYokTezByTitle(item, title);
+        return await searchYokTezByTitle(item, query);
       } catch (e) {
         rethrowAttachControlFlow(e);
         ztoolkit.log("YÖKTEZ search failed", e);
@@ -1385,6 +1638,17 @@ async function searchYokTezByTitle(
     title,
   )}`;
   const html = (await httpGet(searchURL)).responseText || "";
+
+  // Prefer opaque card keys → getTezPdf.jsp (same path as yoktez package).
+  for (const card of extractYokCardsFromSearchHtml(html).slice(0, 5)) {
+    try {
+      const att = await attachViaYokAssets(item, card.kayitNo, card.tezNo);
+      if (att) return att;
+    } catch (e) {
+      rethrowAttachControlFlow(e);
+    }
+  }
+
   const links = uniqueStrings(
     [...html.matchAll(/href="([^"']*(?:tezDetay|TezGoster)[^"']*)"/gi)].map(
       (m) => m[1],
@@ -1394,16 +1658,27 @@ async function searchYokTezByTitle(
   for (const rel of links) {
     const pageURL = absoluteURL("https://tez.yok.gov.tr/", rel);
     if (/TezGoster/i.test(pageURL)) {
-      const att = await downloadAndAttach(item, pageURL);
+      const att = await downloadAndAttach(item, pageURL, {
+        sourceId: "yoktez",
+      });
       if (att) return att;
       continue;
     }
     const pageHtml = (await httpGet(pageURL)).responseText || "";
     const pageTitle = extractHtmlTitle(pageHtml);
     if (pageTitle && !titleSimilar(title, pageTitle)) continue;
+    const assets = parseYokTezAssets(pageHtml);
+    if (assets.pdfURL) {
+      const att = await downloadAndAttach(item, assets.pdfURL, {
+        sourceId: "yoktez",
+      });
+      if (att) return att;
+    }
     const pdfURL = extractYokPdfURL(pageHtml, pageURL);
     if (pdfURL) {
-      const att = await downloadAndAttach(item, pdfURL);
+      const att = await downloadAndAttach(item, pdfURL, {
+        sourceId: "yoktez",
+      });
       if (att) return att;
     }
   }
