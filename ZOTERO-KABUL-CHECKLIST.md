@@ -7,17 +7,18 @@
 
 | Alan   | Değer          |
 | ------ | -------------- |
-| Tarih  |                |
-| Testçi |                |
-| Zotero | 7 / 8 / 9 / 10 |
+| Tarih  | 2026-07-30     |
+| Testçi | kullanıcı (sohbet) |
+| Zotero | (sürümü sonra yaz) |
+| Özet   | A1–A6 tamam (A2 Windows N/A) |
 
 | #   | Senaryo                | Beklenen               | Sonuç | Kanıt |
 | --- | ---------------------- | ---------------------- | ----- | ----- |
-| 1   | Eklenti yükle          | Menü + tercihler       |       |       |
-| 2   | İkinci ana pencere     | Menü her ikisinde      |       |       |
-| 3   | ISBN checksum          | Geçersiz ISBN eşleşmez |       |       |
-| 4   | Metadata DOI normalize | Prefix temiz           |       |       |
-| 5   | Update kanalı          | v1.0.33 + sha512       |       |       |
-| 6   | Quarantine / review    | `#pdf-quarantine`      |       |       |
+| 1   | Eklenti yükle          | Menü + tercihler       | ✅    | tercihler paneli + 1.0.33 |
+| 2   | İkinci ana pencere     | Menü her ikisinde      | ⏭    | Windows’ta 2. ana pencere yok |
+| 3   | ISBN checksum          | Geçersiz ISBN eşleşmez | ✅    | 0 updated, 1 skipped; ISBN boş |
+| 4   | Metadata DOI normalize | Prefix temiz           | ✅    | Normalize: doi-prefix |
+| 5   | Update kanalı          | v1.0.33 + sha512       | ✅    | kurulu 1.0.33 |
+| 6   | Quarantine / review    | `#pdf-quarantine`      | ✅    | kullanıcı: A6 ok |
 
-- [ ] Manuel matris tamam → rapor checklist `✅`
+- [x] Manuel matris tamam → rapor checklist `✅`
