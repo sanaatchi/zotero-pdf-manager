@@ -208,7 +208,7 @@ test("automatic online fallback contains only approved OA sources", () => {
 
   assert.deepEqual(
     [...AUTOMATIC_ONLINE_SOURCE_IDS],
-    ["doi", "arxiv", "pmc", "s2", "dergipark"],
+    ["dergipark", "doi", "arxiv", "pmc", "s2"],
   );
   for (const unsafe of ["scihub", "libgen", "proxy", "proquest"]) {
     assert.equal(AUTOMATIC_ONLINE_SOURCE_IDS.includes(unsafe), false);

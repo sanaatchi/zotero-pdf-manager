@@ -25,6 +25,12 @@ import {
 } from "../utils/oaCascade";
 import { getString } from "../utils/locale";
 import { config } from "../../package.json";
+import {
+  ARTICLE_DATABASE_IDS,
+  isScientificJournalArticle,
+  looksTurkish,
+  prioritizeSourcesForItem,
+} from "./sourcePriority";
 
 export {
   resolveOaDownloadsDir,
@@ -38,13 +44,21 @@ export {
 } from "./oaDownloadPath";
 
 export { cascadeAutomaticSources } from "../utils/oaCascade";
+export {
+  ARTICLE_DATABASE_IDS,
+  prioritizeSourcesForItem,
+  looksTurkish,
+  itemHasDOI,
+  isScientificJournalArticle,
+} from "./sourcePriority";
 
+/** Automatic OA: article DBs only (never Sci-Hub/LibGen/proxy in reconcile). */
 export const AUTOMATIC_ONLINE_SOURCE_IDS = [
+  "dergipark",
   "doi",
   "arxiv",
   "pmc",
   "s2",
-  "dergipark",
 ] as const;
 
 export type AutomaticOnlineResult =
@@ -75,6 +89,16 @@ function orderedAutomaticSources(): OnlineSourceLike[] {
     if (source) list.push(source);
   }
   return list;
+}
+
+function orderedAutomaticSourcesForItem(item: Zotero.Item): OnlineSourceLike[] {
+  if (automaticSourcesForTests) return automaticSourcesForTests;
+  const enabled = AUTOMATIC_ONLINE_SOURCE_IDS.filter((id) => {
+    const src = ALL_SOURCES[id];
+    return !!src && src.isEnabled();
+  });
+  const ids = prioritizeSourcesForItem([...enabled], item);
+  return ids.map((id) => ALL_SOURCES[id]).filter(Boolean) as OnlineSourceLike[];
 }
 
 /**
@@ -118,6 +142,16 @@ function orderedSources(): PDFSource[] {
   return ids.map((id) => ALL_SOURCES[id]).filter(Boolean);
 }
 
+/** Per-item cascade: base prefs order, then article/book/DOI/language boosts. */
+export function orderedSourcesForItem(item: Zotero.Item): PDFSource[] {
+  const base = mergeEnabledSourceOrder(
+    (getPref("pdf.sourceOrder") as string) || "",
+    ALL_SOURCES,
+  );
+  const ids = prioritizeSourcesForItem(base, item);
+  return ids.map((id) => ALL_SOURCES[id]).filter(Boolean);
+}
+
 function hasPDFAttachment(item: Zotero.Item): boolean {
   return item.getAttachments().some((id: number) => {
     const att = Zotero.Items.get(id);
@@ -147,7 +181,7 @@ export async function tryAutomaticOnlineSources(
 
   const result = await cascadeAutomaticSources(
     item,
-    orderedAutomaticSources() as CascadeSourceLike[],
+    orderedAutomaticSourcesForItem(item) as CascadeSourceLike[],
     {
       hasPDF: hasPDFAttachment as (item: unknown) => boolean,
       throwIfAborted: throwIfRunAborted,
@@ -177,6 +211,15 @@ function failureHint(
   attempts: SourceAttempt[],
 ): string | undefined {
   const tried = new Set(attempts.map((a) => a.source));
+  if (isScientificJournalArticle(item) && looksTurkish(item)) {
+    if (!tried.has("dergipark")) {
+      return (
+        "Türkçe makale: yalnızca DergiPark denenir. " +
+        "Tercihler → PDF Manager → DergiPark’ı açın."
+      );
+    }
+    return "Türkçe makale: DergiPark’ta bulunamadı (başka kaynak aranmaz).";
+  }
   if (isBook(item) && !tried.has("libgen")) {
     return (
       "Kitap: LibGen denenmedi. Tercihler → PDF Manager → LibGen’i açın " +
@@ -210,8 +253,7 @@ export async function downloadPdfForSelectedItems() {
     notify(getString("pdf-no-items"));
     return;
   }
-  const sources = orderedSources();
-  if (sources.length === 0) {
+  if (orderedSources().length === 0) {
     notify(getString("pdf-no-sources"));
     return;
   }
@@ -255,6 +297,7 @@ export async function downloadPdfForSelectedItems() {
     const attempts: SourceAttempt[] = [];
     let attached: unknown | null = null;
     let attachedSource: string | undefined;
+    const sources = orderedSourcesForItem(item);
     for (const src of sources) {
       if (!src.supportsItem(item)) {
         attempts.push({ source: src.id, outcome: "unsupported" });

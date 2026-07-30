@@ -81,7 +81,7 @@ pref("extensions.zotero.__addonRef__.scanner.tagDuplicate", "#duplicate");
 pref("extensions.zotero.__addonRef__.scanner.tagNonfile", "#nonfile");
 pref(
   "extensions.zotero.__addonRef__.pdf.sourceOrder",
-  "local,doi,arxiv,pmc,s2,dergipark,libgen,scihub,yoktez,proquest,proxy",
+  "local,dergipark,doi,arxiv,pmc,s2,libgen,scihub,yoktez,proquest,proxy",
 );
 pref("extensions.zotero.__addonRef__.pdf.localEnabled", true);
 pref(
@@ -97,8 +97,8 @@ pref("extensions.zotero.__addonRef__.pdf.doiEnabled", true);
 pref("extensions.zotero.__addonRef__.pdf.arxivEnabled", true);
 pref("extensions.zotero.__addonRef__.pdf.pmcEnabled", true);
 pref("extensions.zotero.__addonRef__.pdf.s2Enabled", true);
-pref("extensions.zotero.__addonRef__.pdf.dergiparkEnabled", false);
-pref("extensions.zotero.__addonRef__.pdf.scihubEnabled", false);
+pref("extensions.zotero.__addonRef__.pdf.dergiparkEnabled", true);
+pref("extensions.zotero.__addonRef__.pdf.scihubEnabled", true);
 pref(
   "extensions.zotero.__addonRef__.pdf.scihubURL",
   "https://sci-hub.se/;https://sci-hub.st/;https://sci-hub.ru/",

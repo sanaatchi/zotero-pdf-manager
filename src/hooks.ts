@@ -6,6 +6,7 @@ import { createZToolkit } from "./utils/ztoolkit";
 import Menu from "./modules/menu";
 import { PDFReconciler } from "./modules/pdfReconciler";
 import { migrateBookPdfSources } from "./modules/bookSourcesMigrate";
+import { migrateArticleDergiparkPriority } from "./modules/articleDergiparkMigrate";
 
 /** Open Zotero main windows that have UI loaded for this add-on. */
 const loadedWindows = new Set<Window>();
@@ -35,6 +36,11 @@ async function onStartup() {
     migrateBookPdfSources();
   } catch (e) {
     ztoolkit.log("migrateBookPdfSources failed", e);
+  }
+  try {
+    migrateArticleDergiparkPriority();
+  } catch (e) {
+    ztoolkit.log("migrateArticleDergiparkPriority failed", e);
   }
   Zotero.PreferencePanes.register({
     pluginID: config.addonID,

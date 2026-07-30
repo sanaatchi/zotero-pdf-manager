@@ -144,6 +144,7 @@ export const SemanticScholarSource = new OaPdfPythonSource(
 export const DergiParkSource = new OaPdfPythonSource(
   "dergipark",
   "pdf.dergiparkEnabled",
+  // DergiPark: yalnızca bilimsel dergi makalesi (journalArticle).
   (item) => itemTypeName(item) === "journalArticle",
 );
 export const SciHubSource = new OaPdfPythonSource(
@@ -154,7 +155,9 @@ export const SciHubSource = new OaPdfPythonSource(
 export const LibGenSource = new OaPdfPythonSource(
   "libgen",
   "pdf.libgenEnabled",
-  (item) => isArticle(item) || isBook(item),
+  // Books + foreign articles (LibGen is book-heavy but holds many non-TR papers).
+  // Turkish articles stay on DergiPark/DOI/… via prioritizeSourcesForItem.
+  (item) => isBook(item) || isArticle(item),
 );
 export const YokTezSource = new OaPdfPythonSource(
   "yoktez",

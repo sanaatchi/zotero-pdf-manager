@@ -105,6 +105,19 @@ test("YokTez source supports only theses", () => {
   const { ALL_SOURCES } = loadPdfSources();
   assert.equal(ALL_SOURCES.yoktez.supportsItem({ itemTypeID: 5 }), true);
   assert.equal(ALL_SOURCES.yoktez.supportsItem({ itemTypeID: 1 }), false);
+  delete global.Zotero;
+});
+
+test("LibGen supports books and articles (TR articles filtered by priority)", () => {
+  global.Zotero = {
+    ItemTypes: {
+      getName: (id) =>
+        ({ 1: "journalArticle", 2: "book", 5: "thesis" })[id] || "book",
+    },
+  };
+  const { ALL_SOURCES } = loadPdfSources();
+  assert.equal(ALL_SOURCES.libgen.supportsItem({ itemTypeID: 2 }), true);
   assert.equal(ALL_SOURCES.libgen.supportsItem({ itemTypeID: 1 }), true);
+  assert.equal(ALL_SOURCES.libgen.supportsItem({ itemTypeID: 5 }), false);
   delete global.Zotero;
 });
