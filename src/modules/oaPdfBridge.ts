@@ -235,3 +235,70 @@ export function trustedPdfUrlsFromHits(
 ): string[] {
   return pdfUrlsFromHits(filterTrustedHits(hits, ctx));
 }
+
+/**
+ * Fetch PDF bytes through the Kutuphane bridge (required for YÖK Tez —
+ * bare TezGoster URLs return HTML without the yoktez session).
+ */
+export async function fetchOaPdfViaBridge(opts: {
+  source: string;
+  pdfUrl?: string;
+  extra?: Record<string, unknown>;
+}): Promise<Uint8Array | null> {
+  const base = resolveOaBridgeUrl();
+  const endpoint = `${base}/pdf-fetch`;
+  let xhr: any;
+  try {
+    xhr = await (Zotero.HTTP as any).request("POST", endpoint, {
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        source: opts.source,
+        pdfUrl: opts.pdfUrl || "",
+        extra: opts.extra || {},
+      }),
+      responseType: "arraybuffer",
+      timeout: 180000,
+      successCodes: false,
+    });
+  } catch (e) {
+    throw new Error(
+      `oa_pdf köprü fetch kapalı (${base}): ${
+        e instanceof Error ? e.message : String(e)
+      }`,
+    );
+  }
+  const status = Number(xhr?.status || 0);
+  if (status && (status < 200 || status >= 300)) {
+    let detail = "";
+    try {
+      const text =
+        typeof xhr.responseText === "string"
+          ? xhr.responseText
+          : xhr.response
+            ? new TextDecoder().decode(new Uint8Array(xhr.response))
+            : "";
+      detail = JSON.parse(text || "{}").detail || text.slice(0, 200);
+    } catch {
+      detail = `HTTP ${status}`;
+    }
+    throw new Error(`oa_pdf fetch ${opts.source}: ${detail}`);
+  }
+  if (!xhr?.response) return null;
+  const bytes = new Uint8Array(xhr.response as ArrayBuffer);
+  if (bytes.length < 5) return null;
+  // %PDF
+  if (
+    bytes[0] !== 0x25 ||
+    bytes[1] !== 0x50 ||
+    bytes[2] !== 0x44 ||
+    bytes[3] !== 0x46
+  ) {
+    return null;
+  }
+  return bytes;
+}
+
+export function hitNeedsBridgeFetch(hit: OaPdfHit, sourceId?: string): boolean {
+  if (sourceId === "yoktez" || hit.source === "yoktez") return true;
+  return !!(hit.extra && hit.extra.fetchViaBridge);
+}

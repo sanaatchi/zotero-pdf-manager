@@ -500,10 +500,21 @@ export async function cleanupRejectedAttachment(opts: {
 export async function downloadAndAttach(
   item: Zotero.Item,
   url: string,
-  opts: { validate?: boolean; sourceId?: string; forceImport?: boolean } = {},
+  opts: {
+    validate?: boolean;
+    sourceId?: string;
+    forceImport?: boolean;
+    /** Pre-fetched PDF bytes (e.g. YÖK via bridge session). */
+    bytes?: Uint8Array | null;
+  } = {},
 ): Promise<unknown | null> {
   throwIfRunAborted();
-  const bytes = await fetchPdfBytes(url);
+  const bytes =
+    opts.bytes && opts.bytes.length
+      ? looksLikePDF(opts.bytes)
+        ? opts.bytes
+        : null
+      : await fetchPdfBytes(url);
   throwIfRunAborted();
   if (!bytes) return null;
 

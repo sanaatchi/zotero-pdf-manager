@@ -6,7 +6,9 @@
 import { getPref } from "../utils/prefs";
 import {
   buildOaSearchRequest,
-  trustedPdfUrlsFromHits,
+  filterTrustedHits,
+  fetchOaPdfViaBridge,
+  hitNeedsBridgeFetch,
   searchOaPdfBridge,
 } from "./oaPdfBridge";
 import type { PDFSource } from "./pdfSources";
@@ -80,19 +82,38 @@ export class OaPdfPythonSource implements PDFSource {
       rethrowAttachControlFlow(e);
       throw e;
     }
-    const urls = trustedPdfUrlsFromHits(hits, {
+    const trusted = filterTrustedHits(hits, {
       title: String(item.getField("title") || ""),
       doi: req.doi || "",
       sourceId: this.id,
     });
-    if (!urls.length) {
+    if (!trusted.length) {
       ztoolkit.log(`oa_pdf ${this.id}: no trusted hits after title/DOI gate`);
       return null;
     }
     let mismatchRejects = 0;
-    for (const url of urls) {
+    let attempted = 0;
+    for (const hit of trusted) {
+      const url = String(hit.pdfUrl || "").trim();
+      if (!url) continue;
+      attempted++;
       try {
-        const att = await downloadAndAttach(item, url, { sourceId: this.id });
+        let bytes: Uint8Array | null = null;
+        if (hitNeedsBridgeFetch(hit, this.id)) {
+          bytes = await fetchOaPdfViaBridge({
+            source: this.id,
+            pdfUrl: url,
+            extra: (hit.extra || {}) as Record<string, unknown>,
+          });
+          if (!bytes) {
+            ztoolkit.log(`oa_pdf ${this.id} bridge fetch empty`, url);
+            continue;
+          }
+        }
+        const att = await downloadAndAttach(item, url, {
+          sourceId: this.id,
+          bytes,
+        });
         if (att) return att;
       } catch (e) {
         rethrowAttachControlFlow(e);
@@ -104,7 +125,7 @@ export class OaPdfPythonSource implements PDFSource {
         ztoolkit.log(`oa_pdf ${this.id} attach failed`, e);
       }
     }
-    if (mismatchRejects > 0 && mismatchRejects >= urls.length) {
+    if (mismatchRejects > 0 && mismatchRejects >= attempted) {
       throw new pdfSources.ContentMismatchError(
         `${this.id}: ${mismatchRejects} aday PDF künye ile uyuşmadı`,
       );
