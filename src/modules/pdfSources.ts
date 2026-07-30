@@ -8,17 +8,15 @@ import {
   registerDownloadedFile,
 } from "./folderIndex";
 import {
-  ArxivSource,
   DergiParkSource,
-  DOISource,
   LibGenSource,
   PMCSource,
-  ProQuestSource,
   ProxySource,
   SciHubSource,
-  SemanticScholarSource,
   YokTezSource,
 } from "./pythonPdfSources";
+// doi / arxiv / s2 / proquest → metadata-only (oa_pdf_search role=metadata);
+// not registered in ALL_SOURCES download cascade.
 
 import {
   buildOaDownloadBasename,
@@ -258,10 +256,13 @@ function tokenize(s: string): string[] {
 
 function titleSimilar(a: string, b: string): boolean {
   const ta = new Set(tokenize(a));
-  const tb = tokenize(b);
-  if (ta.size === 0 || tb.length === 0) return false;
-  const overlap = tb.filter((w) => ta.has(w)).length;
-  return overlap / Math.max(ta.size, tb.length) >= 0.6;
+  const tb = new Set(tokenize(b));
+  if (!ta.size || !tb.size) return false;
+  let inter = 0;
+  for (const t of ta) if (tb.has(t)) inter++;
+  if (!inter) return false;
+  // Jaccard — Crossref DOI fill must be high-confidence.
+  return inter / new Set([...ta, ...tb]).size >= 0.75;
 }
 
 function firstAuthorSurname(item: Zotero.Item): string {
@@ -302,14 +303,16 @@ function scoreText(item: Zotero.Item, rawText: string): number {
   let score = 0;
 
   const tokens = tokenize((item.getField("title") as string) || "");
+  let titleHit = 0;
   if (tokens.length) {
-    const hit = tokens.filter((t) => text.includes(t)).length / tokens.length;
-    score += hit;
+    titleHit = tokens.filter((t) => text.includes(t)).length / tokens.length;
+    score += titleHit;
   }
   const surname = firstAuthorSurname(item);
   if (surname && text.includes(surname)) score += 0.5;
   const year = itemYear(item);
-  if (year && text.includes(year)) score += 0.3;
+  // Year alone is noisy (bibliographies); only credit with some title evidence.
+  if (year && text.includes(year) && titleHit >= 0.25) score += 0.3;
   const publisher = itemPublisher(item);
   if (publisher && publisher.length > 3 && text.includes(publisher))
     score += 0.2;
@@ -352,15 +355,15 @@ export function decideContentValidation(input: {
 
   if (input.kind === "book") {
     const clearlyWrong =
-      input.titleHit < 0.2 &&
+      input.titleHit < 0.25 &&
       ((input.authorExpected && !input.authorFound) || input.score < 0.25);
     if (clearlyWrong) return "mismatch";
     // Keep for manual review — scanned/TR OCR often scores low on correct files.
     return "unverifiable";
   }
 
-  // Articles / other: keep stricter auto-reject.
-  if (input.score >= 0.3 && input.titleHit >= 0.4) return "match";
+  // Articles / other: stricter auto-accept to cut wrong-paper attaches.
+  if (input.score >= 0.45 && input.titleHit >= 0.5) return "match";
   return "mismatch";
 }
 
@@ -758,14 +761,28 @@ export async function ensureDOI(item: Zotero.Item): Promise<string> {
 
   try {
     const author = (item.getField("firstCreator") as string) || "";
+    const surname = firstAuthorSurname(item);
     const q = encodeURIComponent(`${title} ${author}`.trim());
-    const url = `https://api.crossref.org/works?query.bibliographic=${q}&rows=1`;
+    const url = `https://api.crossref.org/works?query.bibliographic=${q}&rows=3`;
     const xhr = await httpGet(url, "text");
     const data = JSON.parse(xhr.responseText);
-    const found = data?.message?.items?.[0];
-    const foundDOI: string = normalizeDOI(found?.DOI || "");
-    const foundTitle: string = found?.title?.[0] || "";
-    if (foundDOI && titleSimilar(title, foundTitle)) {
+    const items = (data?.message?.items || []) as any[];
+    for (const found of items) {
+      const foundDOI: string = normalizeDOI(found?.DOI || "");
+      const foundTitle: string = found?.title?.[0] || "";
+      if (!foundDOI || !titleSimilar(title, foundTitle)) continue;
+      if (surname && surname.length > 2) {
+        const authors = (found?.author || []) as {
+          family?: string;
+          name?: string;
+        }[];
+        const families = authors
+          .map((a) => normalizeSearchText(a.family || a.name || ""))
+          .filter(Boolean);
+        if (families.length && !families.some((f) => f.includes(surname))) {
+          continue;
+        }
+      }
       try {
         item.setField("DOI", foundDOI);
         await item.saveTx();
@@ -833,7 +850,16 @@ export class LocalFolderSource implements PDFSource {
     if (doi.length > 8) {
       const byDOI = index.filter((f) => {
         const field = (f.doi || "").toLowerCase().replace(/[^a-z0-9]+/g, "");
-        return field === doi || f.alnum.includes(doi);
+        if (field && field === doi) return true;
+        // Filename alnum: require full DOI token (avoid short substring collisions).
+        if (doi.length < 12) return false;
+        return (
+          f.alnum.includes(doi) &&
+          (f.alnum.includes(`doi${doi}`) ||
+            f.alnum.startsWith(doi) ||
+            f.alnum.endsWith(doi) ||
+            new RegExp(`(?:^|[^a-z0-9])${doi}(?:$|[^a-z0-9])`).test(f.alnum))
+        );
       });
       if (byDOI.length === 1) {
         return { status: "matched", file: byDOI[0], score: 1 };
@@ -935,17 +961,25 @@ export class LocalFolderSource implements PDFSource {
 // Online PDF sources live in pythonPdfSources.ts (oa_pdf_search over 8756).
 // Class implementations above were removed; see imports at file top.
 
-/** Registry of all known sources, keyed by id. */
+/**
+ * Download cascade registry only.
+ * Metadata-only (doi, arxiv, s2, proquest) live in Python `oa_pdf_search`
+ * with role=metadata and are never attached from here.
+ */
 export const ALL_SOURCES: Record<string, PDFSource> = {
   local: new LocalFolderSource(),
-  doi: DOISource,
-  arxiv: ArxivSource,
   pmc: PMCSource,
-  s2: SemanticScholarSource,
   dergipark: DergiParkSource,
   scihub: SciHubSource,
   libgen: LibGenSource,
   yoktez: YokTezSource,
-  proquest: ProQuestSource,
   proxy: new ProxySource(),
 };
+
+/** Lookup / validate only — not PDF download. */
+export const METADATA_ONLY_SOURCE_IDS = [
+  "doi",
+  "arxiv",
+  "s2",
+  "proquest",
+] as const;

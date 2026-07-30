@@ -8,7 +8,6 @@ import {
   isContentMismatchError,
   isThesis,
   PDFSource,
-  relocateImportedPdfToDownloads,
 } from "./pdfSources";
 import { getPref } from "../utils/prefs";
 import { maybeEmbedMetadata } from "./pdfMetadata";
@@ -52,14 +51,11 @@ export {
   isScientificJournalArticle,
 } from "./sourcePriority";
 
-/** Automatic OA: article DBs only (never Sci-Hub/LibGen/proxy in reconcile). */
-export const AUTOMATIC_ONLINE_SOURCE_IDS = [
-  "dergipark",
-  "doi",
-  "arxiv",
-  "pmc",
-  "s2",
-] as const;
+/**
+ * Automatic OA: downloadable article DBs only.
+ * Never: Sci-Hub/LibGen/proxy, or metadata-only doi/arxiv/s2/proquest.
+ */
+export const AUTOMATIC_ONLINE_SOURCE_IDS = ["dergipark", "pmc"] as const;
 
 export type AutomaticOnlineResult =
   | { attachment: Zotero.Item; source: string; stopped?: undefined }
@@ -186,15 +182,7 @@ export async function tryAutomaticOnlineSources(
       hasPDF: hasPDFAttachment as (item: unknown) => boolean,
       throwIfAborted: throwIfRunAborted,
       afterAttach: async (parent, attachment, id) => {
-        let next = attachment as Zotero.Item;
-        if (id === "doi") {
-          next =
-            (await relocateImportedPdfToDownloads(
-              parent as Zotero.Item,
-              next,
-              "doi",
-            )) || next;
-        }
+        const next = attachment as Zotero.Item;
         await maybeEmbedMetadata(parent as Zotero.Item, next);
         return next;
       },

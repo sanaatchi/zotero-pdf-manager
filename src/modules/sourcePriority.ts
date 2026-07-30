@@ -2,25 +2,20 @@
 /**
  * Item-aware PDF source priority.
  *
- * Turkish journal articles → DergiPark only (no DOI/LibGen/Sci-Hub/…).
+ * Turkish journal articles → DergiPark only (no LibGen/Sci-Hub/…).
  * DergiPark itself only accepts journalArticle (scientific articles).
  *
  * Other policies:
  * - Foreign articles → article DBs; LibGen late fallback (book-heavy but OK).
  * - DOI (non-TR articles) → Sci-Hub early.
  * - Non-Turkish books → LibGen early.
+ *
+ * Metadata-only (doi/arxiv/s2/proquest) are never in the download cascade.
  */
 import { getDOI, isArticle, isBook, isThesis } from "./pdfSources";
 
-/** Online article databases (used for non-Turkish articles). */
-export const ARTICLE_DATABASE_IDS = [
-  "dergipark",
-  "doi",
-  "arxiv",
-  "pmc",
-  "s2",
-  "scihub",
-] as const;
+/** Online article download sources (used for non-Turkish articles). */
+export const ARTICLE_DATABASE_IDS = ["dergipark", "pmc", "scihub"] as const;
 
 const TURKISH_CHARS = /[çğıöşüÇĞİÖŞÜ]/;
 const TURKISH_LANG = /^(tr|tur|turkish|türkçe|turkce)\b/i;
@@ -103,7 +98,6 @@ export function prioritizeSourcesForItem(
   if (article) {
     const allow = new Set<string>(["local", ...ARTICLE_DATABASE_IDS]);
     if (!turkish) allow.add("libgen");
-    if (ids.includes("proquest")) allow.add("proquest");
     ids = ids.filter((id) => allow.has(id));
 
     if (hasDoi && ids.includes("scihub")) {

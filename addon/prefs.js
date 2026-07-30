@@ -81,7 +81,7 @@ pref("extensions.zotero.__addonRef__.scanner.tagDuplicate", "#duplicate");
 pref("extensions.zotero.__addonRef__.scanner.tagNonfile", "#nonfile");
 pref(
   "extensions.zotero.__addonRef__.pdf.sourceOrder",
-  "local,dergipark,doi,arxiv,pmc,s2,libgen,scihub,yoktez,proquest,proxy",
+  "local,dergipark,pmc,libgen,scihub,yoktez,proxy",
 );
 pref("extensions.zotero.__addonRef__.pdf.localEnabled", true);
 pref(
@@ -93,10 +93,11 @@ pref(
 pref("extensions.zotero.__addonRef__.pdf.watchRoots", "");
 pref("extensions.zotero.__addonRef__.pdf.useLinkedAttachmentBase", true);
 pref("extensions.zotero.__addonRef__.pdf.localAsLink", true);
-pref("extensions.zotero.__addonRef__.pdf.doiEnabled", true);
-pref("extensions.zotero.__addonRef__.pdf.arxivEnabled", true);
+// Metadata-only (not PDF download): doi / arxiv / s2 / proquest
+pref("extensions.zotero.__addonRef__.pdf.doiEnabled", false);
+pref("extensions.zotero.__addonRef__.pdf.arxivEnabled", false);
 pref("extensions.zotero.__addonRef__.pdf.pmcEnabled", true);
-pref("extensions.zotero.__addonRef__.pdf.s2Enabled", true);
+pref("extensions.zotero.__addonRef__.pdf.s2Enabled", false);
 pref("extensions.zotero.__addonRef__.pdf.dergiparkEnabled", true);
 pref("extensions.zotero.__addonRef__.pdf.scihubEnabled", true);
 pref(
@@ -113,3 +114,4 @@ pref("extensions.zotero.__addonRef__.pdf.proquestEnabled", false);
 pref("extensions.zotero.__addonRef__.pdf.proxyEnabled", false);
 pref("extensions.zotero.__addonRef__.pdf.proxyURL", "");
 pref("extensions.zotero.__addonRef__.pdf.oaBridgeUrl", "http://127.0.0.1:8756");
+pref("extensions.zotero.__addonRef__.pdf.metadataOnlySourcesMigratedV1", false);

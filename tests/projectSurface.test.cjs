@@ -238,9 +238,13 @@ test("OA downloads folder preference is exposed", () => {
 
   assert.match(prefs, /pdf\.saveOaToDownloads", true/);
   assert.match(preferences, /preference="[^"]+\.pdf\.saveOaToDownloads"/);
-  assert.match(download, /relocateImportedPdfToDownloads/);
+  assert.match(sources, /relocateImportedPdfToDownloads/);
   assert.match(sources, /registerDownloadedFile/);
   assert.match(sources, /resolveOaDownloadsDir/);
+  assert.match(
+    download,
+    /AUTOMATIC_ONLINE_SOURCE_IDS = \["dergipark", "pmc"\]/,
+  );
 
   for (const locale of ["de", "en-US", "it-IT"]) {
     const source = fs.readFileSync(

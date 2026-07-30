@@ -78,9 +78,9 @@ test("validation + cascade: AttachStoppedError stops further sources", () => {
 
   const sourcesTried = [];
   function simulateCascade(firstResult) {
-    for (const id of ["arxiv", "pmc", "s2"]) {
+    for (const id of ["pmc", "dergipark", "scihub"]) {
       sourcesTried.push(id);
-      if (id === "arxiv" && firstResult === "review") {
+      if (id === "pmc" && firstResult === "review") {
         throw new AttachStoppedError("review", { id: 99 });
       }
     }
@@ -93,7 +93,7 @@ test("validation + cascade: AttachStoppedError stops further sources", () => {
     if (isAttachStoppedError(e)) stopped = e.reason;
   }
   assert.equal(stopped, "review");
-  assert.deepEqual(sourcesTried, ["arxiv"]);
+  assert.deepEqual(sourcesTried, ["pmc"]);
 });
 
 test("add-notifier flush wires AbortController into performItems", () => {

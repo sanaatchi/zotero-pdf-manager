@@ -206,11 +206,16 @@ test("automatic online fallback contains only approved OA sources", () => {
     "src/modules/pdfDownload.ts",
   );
 
-  assert.deepEqual(
-    [...AUTOMATIC_ONLINE_SOURCE_IDS],
-    ["dergipark", "doi", "arxiv", "pmc", "s2"],
-  );
-  for (const unsafe of ["scihub", "libgen", "proxy", "proquest"]) {
+  assert.deepEqual([...AUTOMATIC_ONLINE_SOURCE_IDS], ["dergipark", "pmc"]);
+  for (const unsafe of [
+    "scihub",
+    "libgen",
+    "proxy",
+    "proquest",
+    "doi",
+    "arxiv",
+    "s2",
+  ]) {
     assert.equal(AUTOMATIC_ONLINE_SOURCE_IDS.includes(unsafe), false);
   }
 });
@@ -219,13 +224,15 @@ test("enabled LibGen runs even when omitted from legacy sourceOrder", () => {
   const { mergeEnabledSourceOrder } = loadModule("src/modules/pdfDownload.ts");
   const available = {
     local: { isEnabled: () => true },
-    doi: { isEnabled: () => true },
-    arxiv: { isEnabled: () => true },
+    dergipark: { isEnabled: () => true },
+    pmc: { isEnabled: () => true },
     libgen: { isEnabled: () => true },
     scihub: { isEnabled: () => false },
   };
-  assert.deepEqual(
-    mergeEnabledSourceOrder("local,doi,arxiv,pmc,s2", available),
-    ["local", "doi", "arxiv", "libgen"],
-  );
+  assert.deepEqual(mergeEnabledSourceOrder("local,dergipark,pmc", available), [
+    "local",
+    "dergipark",
+    "pmc",
+    "libgen",
+  ]);
 });

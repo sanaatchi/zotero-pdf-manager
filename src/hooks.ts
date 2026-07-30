@@ -7,6 +7,7 @@ import Menu from "./modules/menu";
 import { PDFReconciler } from "./modules/pdfReconciler";
 import { migrateBookPdfSources } from "./modules/bookSourcesMigrate";
 import { migrateArticleDergiparkPriority } from "./modules/articleDergiparkMigrate";
+import { migrateMetadataOnlyOutOfDownload } from "./modules/metadataSourcesMigrate";
 
 /** Open Zotero main windows that have UI loaded for this add-on. */
 const loadedWindows = new Set<Window>();
@@ -41,6 +42,11 @@ async function onStartup() {
     migrateArticleDergiparkPriority();
   } catch (e) {
     ztoolkit.log("migrateArticleDergiparkPriority failed", e);
+  }
+  try {
+    migrateMetadataOnlyOutOfDownload();
+  } catch (e) {
+    ztoolkit.log("migrateMetadataOnlyOutOfDownload failed", e);
   }
   Zotero.PreferencePanes.register({
     pluginID: config.addonID,

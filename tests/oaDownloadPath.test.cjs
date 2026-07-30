@@ -114,11 +114,15 @@ test("automatic OA source list still excludes Sci-Hub and LibGen", () => {
     "utf8",
   );
   assert.match(src, /AUTOMATIC_ONLINE_SOURCE_IDS/);
-  assert.match(src, /relocateImportedPdfToDownloads/);
+  assert.match(src, /\["dergipark", "pmc"\]/);
+  assert.doesNotMatch(src, /doi.*arxiv.*pmc.*s2/);
   const autoBlock =
     src.match(/export const AUTOMATIC_ONLINE_SOURCE_IDS = \[[\s\S]*?\]/)?.[0] ||
     "";
   assert.doesNotMatch(autoBlock, /scihub/);
   assert.doesNotMatch(autoBlock, /libgen/);
+  assert.doesNotMatch(autoBlock, /doi/);
+  assert.doesNotMatch(autoBlock, /arxiv/);
+  assert.doesNotMatch(autoBlock, /s2/);
   void result;
 });

@@ -68,7 +68,7 @@ test("Turkish journal article → dergipark only", () => {
   assert.equal(looksTurkish(it), true);
   assert.deepEqual(
     prioritizeSourcesForItem(
-      ["local", "dergipark", "doi", "libgen", "scihub", "s2"],
+      ["local", "dergipark", "pmc", "libgen", "scihub"],
       it,
     ),
     ["dergipark"],
@@ -85,13 +85,13 @@ test("English article with DOI → scihub early; libgen late allowed", () => {
     typeId: 1,
   });
   const order = prioritizeSourcesForItem(
-    ["local", "dergipark", "doi", "arxiv", "pmc", "s2", "scihub", "libgen"],
+    ["local", "dergipark", "pmc", "scihub", "libgen"],
     it,
   );
   assert.equal(order[0], "local");
   assert.equal(order[1], "scihub");
   assert.ok(order.includes("libgen"));
-  assert.ok(order.indexOf("libgen") > order.indexOf("doi"));
+  assert.ok(order.indexOf("libgen") > order.indexOf("pmc"));
 });
 
 test("Non-Turkish book → libgen after local", () => {
@@ -103,7 +103,7 @@ test("Non-Turkish book → libgen after local", () => {
     typeId: 2,
   });
   const order = prioritizeSourcesForItem(
-    ["local", "doi", "libgen", "scihub"],
+    ["local", "pmc", "libgen", "scihub"],
     it,
   );
   assert.deepEqual(order.slice(0, 2), ["local", "libgen"]);

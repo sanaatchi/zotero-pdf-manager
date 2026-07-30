@@ -6,7 +6,7 @@
 import { getPref } from "../utils/prefs";
 import {
   buildOaSearchRequest,
-  pdfUrlsFromHits,
+  trustedPdfUrlsFromHits,
   searchOaPdfBridge,
 } from "./oaPdfBridge";
 import type { PDFSource } from "./pdfSources";
@@ -80,7 +80,15 @@ export class OaPdfPythonSource implements PDFSource {
       rethrowAttachControlFlow(e);
       throw e;
     }
-    const urls = pdfUrlsFromHits(hits);
+    const urls = trustedPdfUrlsFromHits(hits, {
+      title: String(item.getField("title") || ""),
+      doi: req.doi || "",
+      sourceId: this.id,
+    });
+    if (!urls.length) {
+      ztoolkit.log(`oa_pdf ${this.id}: no trusted hits after title/DOI gate`);
+      return null;
+    }
     let mismatchRejects = 0;
     for (const url of urls) {
       try {
@@ -156,7 +164,7 @@ export const LibGenSource = new OaPdfPythonSource(
   "libgen",
   "pdf.libgenEnabled",
   // Books + foreign articles (LibGen is book-heavy but holds many non-TR papers).
-  // Turkish articles stay on DergiPark/DOI/… via prioritizeSourcesForItem.
+  // Turkish articles stay on DergiPark/PMC/… via prioritizeSourcesForItem.
   (item) => isBook(item) || isArticle(item),
 );
 export const YokTezSource = new OaPdfPythonSource(
@@ -164,6 +172,7 @@ export const YokTezSource = new OaPdfPythonSource(
   "pdf.yoktezEnabled",
   isThesis,
 );
+/** Metadata-only — not registered in ALL_SOURCES download cascade. */
 export const ProQuestSource = new OaPdfPythonSource(
   "proquest",
   "pdf.proquestEnabled",
