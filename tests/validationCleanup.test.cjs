@@ -13,6 +13,8 @@ test("validation verdicts: match clears review; unverifiable stops cascade; mism
   assert.match(source, /removeAutomationTag\(item,\s*"#pdf-review"\)/);
   assert.match(source, /AttachStoppedError\("review"/);
   assert.match(source, /AttachStoppedError\("erase-failed"/);
+  assert.match(source, /ContentMismatchError/);
+  assert.match(source, /decideContentValidation/);
   assert.doesNotMatch(
     source,
     /Unverifiable PDF content[\s\S]{0,400}return null/,

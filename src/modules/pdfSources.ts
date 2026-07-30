@@ -1,4 +1,4 @@
-// @ajan: cursor · @etiket: katman-2, pdfSources, oa-pdf-bridge, python-backend
+// @ajan: cursor · @etiket: katman-2, pdfSources, oa-pdf-bridge, book-validation
 import { getString } from "../utils/locale";
 import { getPref } from "../utils/prefs";
 import {
@@ -321,12 +321,71 @@ function scoreText(item: Zotero.Item, rawText: string): number {
  * metadata.
  *
  * - match: extractable text supports the item
- * - mismatch: extractable text conflicts — reject
- * - unverifiable: no/short text or PDFWorker error — do not auto-accept
+ * - mismatch: extractable text conflicts — reject / erase
+ * - unverifiable: no/short text, or book inconclusive — keep + #pdf-review
  * - skipped: validation pref off
+ *
+ * Books: ISBN/DOI conflict → erase. Strong title/author/year or ISBN match →
+ * keep. Weak/inconclusive text → review (do not erase). Wrong title+author →
+ * erase.
  */
 export type ContentValidation =
   "match" | "mismatch" | "unverifiable" | "skipped";
+
+/** Pure decision helper (unit-tested). */
+export function decideContentValidation(input: {
+  kind: "book" | "other";
+  textChars: number;
+  /** 0–1 share of title tokens found in PDF text */
+  titleHit: number;
+  /** Combined score from scoreText (title + author + year + publisher) */
+  score: number;
+  hasIdConflict: boolean;
+  hasIdMatch: boolean;
+  authorExpected: boolean;
+  authorFound: boolean;
+}): ContentValidation {
+  if (input.textChars < 50) return "unverifiable";
+  if (input.hasIdConflict) return "mismatch";
+  if (input.hasIdMatch) return "match";
+  if (input.score >= 0.6) return "match";
+
+  if (input.kind === "book") {
+    const clearlyWrong =
+      input.titleHit < 0.2 &&
+      ((input.authorExpected && !input.authorFound) || input.score < 0.25);
+    if (clearlyWrong) return "mismatch";
+    // Keep for manual review — scanned/TR OCR often scores low on correct files.
+    return "unverifiable";
+  }
+
+  // Articles / other: keep stricter auto-reject.
+  if (input.score >= 0.3 && input.titleHit >= 0.4) return "match";
+  return "mismatch";
+}
+
+export function titleTokenHit(item: Zotero.Item, rawText: string): number {
+  const text = normalizeSearchText(rawText);
+  const tokens = tokenize((item.getField("title") as string) || "");
+  if (!tokens.length || !text) return 0;
+  return tokens.filter((t) => text.includes(t)).length / tokens.length;
+}
+
+export class ContentMismatchError extends Error {
+  readonly name = "ContentMismatchError";
+  constructor(message = "PDF içeriği künye metadata ile uyuşmadı") {
+    super(message);
+  }
+}
+
+export function isContentMismatchError(e: unknown): e is ContentMismatchError {
+  return (
+    !!e &&
+    typeof e === "object" &&
+    ((e as Error).name === "ContentMismatchError" ||
+      e instanceof ContentMismatchError)
+  );
+}
 
 export async function validateAttachmentContent(
   item: Zotero.Item,
@@ -334,20 +393,33 @@ export async function validateAttachmentContent(
 ): Promise<ContentValidation> {
   if (!getPref("pdf.validateContent")) return "skipped";
   try {
-    const res = await (Zotero as any).PDFWorker.getFullText(attachmentID, 5);
+    const book = isBook(item);
+    // Books often bury title after covers/front matter — read more pages.
+    const pageLimit = book ? 20 : 5;
+    const res = await (Zotero as any).PDFWorker.getFullText(
+      attachmentID,
+      pageLimit,
+    );
     const text: string = res?.text || "";
-    if (text.replace(/\s/g, "").length < 50) return "unverifiable";
+    const textChars = text.replace(/\s/g, "").length;
 
-    // format-metadata-aligned identifier compare (DOI/ISBN) — critical mismatch
-    // wins even when token score would pass.
     const structured = compareItemAgainstText(item, text);
-    if (hasIdentifierConflict(structured)) return "mismatch";
+    const surname = firstAuthorSurname(item);
+    const authorFound =
+      !!surname &&
+      surname.length > 2 &&
+      normalizeSearchText(text).includes(surname);
 
-    const score = scoreText(item, text);
-    if (score >= 0.6) return "match";
-    // Strong DOI/ISBN hit can rescue a weak title-token score.
-    if (hasIdentifierMatch(structured) && score >= 0.3) return "match";
-    return "mismatch";
+    return decideContentValidation({
+      kind: book ? "book" : "other",
+      textChars,
+      titleHit: titleTokenHit(item, text),
+      score: scoreText(item, text),
+      hasIdConflict: hasIdentifierConflict(structured),
+      hasIdMatch: hasIdentifierMatch(structured),
+      authorExpected: surname.length > 2,
+      authorFound,
+    });
   } catch (e) {
     ztoolkit.log("content validation error", e);
     return "unverifiable";
@@ -565,7 +637,9 @@ export async function downloadAndAttach(
       await tagItem(item, "#pdf-quarantine");
       throw new AttachStoppedError("erase-failed", attachment);
     }
-    return null;
+    throw new ContentMismatchError(
+      "PDF içeriği künye metadata ile uyuşmadı (doğrulama)",
+    );
   }
   return attachment;
 }

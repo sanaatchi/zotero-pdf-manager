@@ -56,8 +56,12 @@ export class OaPdfPythonSource implements PDFSource {
   }
 
   async tryAttach(item: Zotero.Item) {
-    const { downloadAndAttach, rethrowAttachControlFlow } =
-      await import("./pdfSources");
+    const pdfSources = await import("./pdfSources");
+    const {
+      downloadAndAttach,
+      rethrowAttachControlFlow,
+      isContentMismatchError,
+    } = pdfSources;
     const req = buildOaSearchRequest(this.id, item, 5);
     if (
       !req.text &&
@@ -76,14 +80,26 @@ export class OaPdfPythonSource implements PDFSource {
       rethrowAttachControlFlow(e);
       throw e;
     }
-    for (const url of pdfUrlsFromHits(hits)) {
+    const urls = pdfUrlsFromHits(hits);
+    let mismatchRejects = 0;
+    for (const url of urls) {
       try {
         const att = await downloadAndAttach(item, url, { sourceId: this.id });
         if (att) return att;
       } catch (e) {
         rethrowAttachControlFlow(e);
+        if (isContentMismatchError(e)) {
+          mismatchRejects++;
+          ztoolkit.log(`oa_pdf ${this.id} rejected by metadata check`, e);
+          continue;
+        }
         ztoolkit.log(`oa_pdf ${this.id} attach failed`, e);
       }
+    }
+    if (mismatchRejects > 0 && mismatchRejects >= urls.length) {
+      throw new pdfSources.ContentMismatchError(
+        `${this.id}: ${mismatchRejects} aday PDF künye ile uyuşmadı`,
+      );
     }
     return null;
   }

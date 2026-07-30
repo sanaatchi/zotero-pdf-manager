@@ -5,6 +5,7 @@ import {
   ensureDOI,
   isAttachStoppedError,
   isBook,
+  isContentMismatchError,
   isThesis,
   PDFSource,
   relocateImportedPdfToDownloads,
@@ -276,7 +277,7 @@ export async function downloadPdfForSelectedItems() {
         if (isAttachStoppedError(e)) {
           attempts.push({
             source: src.id,
-            outcome: "error",
+            outcome: e.reason === "review" ? "rejected" : "error",
             reason: e.reason,
           });
           failed++;
@@ -286,12 +287,22 @@ export async function downloadPdfForSelectedItems() {
             result: "failed",
             note:
               e.reason === "review"
-                ? "PDF review quarantine — cascade stopped"
+                ? isBook(item)
+                  ? "PDF doğrulanamadı — eklenti durdu (#pdf-review). Elle kontrol edin."
+                  : "PDF review quarantine — cascade stopped"
                 : "Erase failed — cascade stopped; file kept",
             attempts,
           });
           attached = "stopped";
           break;
+        }
+        if (isContentMismatchError(e)) {
+          attempts.push({
+            source: src.id,
+            outcome: "rejected",
+            reason: (e as Error).message,
+          });
+          continue;
         }
         attempts.push({
           source: src.id,
