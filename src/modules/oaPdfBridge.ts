@@ -1,4 +1,4 @@
-// @ajan: cursor · @etiket: katman-2, oa-pdf-bridge, python
+// @ajan: cursor · @etiket: katman-2, oa-pdf-bridge, search-logic
 /**
  * Katman-2 → Kutuphane köprü (8756) `oa_pdf_search` client.
  * Online PDF discovery runs in Python; this module only POSTs queries.
@@ -162,6 +162,7 @@ function normTokens(value: string): string[] {
     .normalize("NFKD")
     .replace(/\p{Mark}/gu, "")
     .toLocaleLowerCase()
+    .replace(/['`´\u2019]/g, " ")
     .replace(/[^\p{L}\p{N}\s]/gu, " ")
     .split(/\s+/)
     .filter((w) => w.length > 3);
@@ -177,6 +178,25 @@ function titleOverlap(a: string, b: string): number {
   return inter / new Set([...ta, ...tb]).size;
 }
 
+/** Share of needle tokens found in haystack (asymmetric). */
+function titleContainment(needle: string, haystack: string): number {
+  const na = new Set(normTokens(needle));
+  const hb = new Set(normTokens(haystack));
+  if (!na.size || !hb.size) return 0;
+  let inter = 0;
+  for (const t of na) if (hb.has(t)) inter++;
+  return inter / na.size;
+}
+
+/** Best of Jaccard and either-direction containment (matches Python match_util). */
+function titleMatchScore(a: string, b: string): number {
+  return Math.max(
+    titleOverlap(a, b),
+    titleContainment(a, b),
+    titleContainment(b, a),
+  );
+}
+
 export type HitTrustContext = {
   title?: string;
   doi?: string;
@@ -186,7 +206,7 @@ export type HitTrustContext = {
 
 /**
  * Drop low-confidence OA hits before download.
- * Keep when: DOI matches, or title overlap ≥ 0.45, or scihub+DOI on item.
+ * Keep when: DOI matches, or title match ≥ 0.45, or scihub+DOI on item.
  */
 export function filterTrustedHits(
   hits: OaPdfHit[],
@@ -200,7 +220,7 @@ export function filterTrustedHits(
     if (!url) continue;
     const hitDoi = normalizeDOI(String(hit.doi || ""));
     const doiMatch = !!(itemDoi && hitDoi && itemDoi === hitDoi);
-    const ov = titleOverlap(itemTitle, String(hit.title || ""));
+    const ov = titleMatchScore(itemTitle, String(hit.title || ""));
     if (doiMatch) {
       scored.push({ hit, rank: 1 + ov });
       continue;
