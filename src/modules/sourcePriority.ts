@@ -1,8 +1,9 @@
-// @ajan: cursor · @etiket: katman-2, source-priority, dergipark-only-tr
+// @ajan: cursor · @etiket: katman-2, source-priority, yoktez-only-thesis
 /**
  * Item-aware PDF source priority.
  *
  * Turkish journal articles → DergiPark only (no LibGen/Sci-Hub/…).
+ * Theses → YÖKTez only (no local/proxy/LibGen/…).
  * DergiPark itself only accepts journalArticle (scientific articles).
  *
  * Other policies:
@@ -95,6 +96,11 @@ export function prioritizeSourcesForItem(
     return ids.filter((id) => id === "dergipark");
   }
 
+  // Tez → yalnızca YÖKTez (local/proxy/LibGen vb. aranmaz).
+  if (isThesis(item)) {
+    return ids.filter((id) => id === "yoktez");
+  }
+
   if (article) {
     const allow = new Set<string>(["local", ...ARTICLE_DATABASE_IDS]);
     if (!turkish) allow.add("libgen");
@@ -115,10 +121,6 @@ export function prioritizeSourcesForItem(
       ids = moveToFrontAfterLocal(ids, "libgen");
     }
     return ids;
-  }
-
-  if (isThesis(item)) {
-    return moveToFrontAfterLocal(ids, "yoktez");
   }
 
   if (hasDoi && ids.includes("scihub")) {

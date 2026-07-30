@@ -1,4 +1,4 @@
-// @ajan: cursor · @etiket: katman-2, p2, pdfDownload, cascade-stop, cancel, source-order
+// @ajan: cursor · @etiket: katman-2, pdfDownload, yoktez-only-thesis
 import {
   ALL_SOURCES,
   downloadAndAttach,
@@ -215,7 +215,13 @@ function failureHint(
     );
   }
   if (isThesis(item) && !tried.has("yoktez")) {
-    return "Tez: YÖKTez denenmedi. Tercihler → PDF Manager → YÖKTez’i açın.";
+    return (
+      "Tez: yalnızca YÖKTez denenir. " +
+      "Tercihler → PDF Manager → YÖKTez’i açın."
+    );
+  }
+  if (isThesis(item)) {
+    return "Tez: YÖKTez’te bulunamadı (başka kaynak aranmaz).";
   }
   return undefined;
 }

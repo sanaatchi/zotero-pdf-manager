@@ -108,3 +108,20 @@ test("Non-Turkish book → libgen after local", () => {
   );
   assert.deepEqual(order.slice(0, 2), ["local", "libgen"]);
 });
+
+test("Thesis → yoktez only", () => {
+  const { prioritizeSourcesForItem } = loadPriority();
+  const it = item({
+    title:
+      "Savaş fotoğraflarının kullanımı bağlamında propaganda ve manipülasyon",
+    type: "thesis",
+    typeId: 3,
+  });
+  assert.deepEqual(
+    prioritizeSourcesForItem(
+      ["local", "dergipark", "pmc", "libgen", "scihub", "yoktez", "proxy"],
+      it,
+    ),
+    ["yoktez"],
+  );
+});
