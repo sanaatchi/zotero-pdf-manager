@@ -241,8 +241,9 @@ export function filterTrustedHits(
     if (
       (ctx.sourceId === "libgen" || hit.source === "libgen") &&
       itemTitle &&
-      String(hit.title || "").trim().toLowerCase() ===
-        itemTitle.trim().toLowerCase()
+      String(hit.title || "")
+        .trim()
+        .toLowerCase() === itemTitle.trim().toLowerCase()
     ) {
       const ovExtra = Number(
         (hit.extra as Record<string, unknown> | undefined)?.title_overlap,
@@ -342,7 +343,10 @@ export function hitNeedsBridgeFetch(hit: OaPdfHit, sourceId?: string): boolean {
   // All oa_pdf_search download hits use POST /pdf-fetch (YÖK session +
   // DergiPark/PMC/Sci-Hub/LibGen UA and %PDF gate). Never bare Zotero GET.
   void sourceId;
-  return !!(String(hit.pdfUrl || "").trim() || (hit.extra && hit.extra.fetchViaBridge));
+  return !!(
+    String(hit.pdfUrl || "").trim() ||
+    (hit.extra && hit.extra.fetchViaBridge)
+  );
 }
 
 export type ContentValidateRequest = {

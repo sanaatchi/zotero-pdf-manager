@@ -351,11 +351,7 @@ export function decideContentValidation(input: {
   if (input.hasIdConflict) return "mismatch";
   if (input.hasIdMatch) return "match";
   // Books without the expected author in PDF text are almost always wrong OA.
-  if (
-    input.kind === "book" &&
-    input.authorExpected &&
-    !input.authorFound
-  ) {
+  if (input.kind === "book" && input.authorExpected && !input.authorFound) {
     return "mismatch";
   }
   if (input.score >= 0.6) return "match";
