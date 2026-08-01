@@ -80,7 +80,7 @@ test("book validation: weak/wrong evidence erases (no quarantine-keep)", () => {
     }),
     "mismatch",
   );
-  // Solid title+score without ISBN still keeps.
+  // Solid title+score without ISBN still keeps when author is in the PDF.
   assert.equal(
     decideContentValidation({
       kind: "book",
@@ -93,6 +93,34 @@ test("book validation: weak/wrong evidence erases (no quarantine-keep)", () => {
       authorFound: true,
     }),
     "match",
+  );
+  // Same title evidence but missing author surname → wrong catalog / erase.
+  assert.equal(
+    decideContentValidation({
+      kind: "book",
+      textChars: 200,
+      titleHit: 0.6,
+      score: 0.5,
+      hasIdConflict: false,
+      hasIdMatch: false,
+      authorExpected: true,
+      authorFound: false,
+    }),
+    "mismatch",
+  );
+  // High combined score still cannot override missing author on books.
+  assert.equal(
+    decideContentValidation({
+      kind: "book",
+      textChars: 200,
+      titleHit: 0.8,
+      score: 0.9,
+      hasIdConflict: false,
+      hasIdMatch: false,
+      authorExpected: true,
+      authorFound: false,
+    }),
+    "mismatch",
   );
 });
 

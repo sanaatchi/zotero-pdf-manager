@@ -1,4 +1,4 @@
-// @ajan: cursor · @etiket: katman-2, python-pdf-sources, yoktez-status
+// @ajan: cursor · @etiket: katman-2, python-pdf-sources, fetch-via-bridge
 /**
  * Online PDF sources backed by Kutuphane `oa_pdf_search` (8756 bridge).
  * Old in-plugin scrape/mirror logic was removed — discovery is Python-only.
@@ -8,7 +8,6 @@ import {
   buildOaSearchRequest,
   filterTrustedHits,
   fetchOaPdfViaBridge,
-  hitNeedsBridgeFetch,
   searchOaPdfBridge,
 } from "./oaPdfBridge";
 import type { OaPdfHit } from "./oaPdfBridge";
@@ -141,17 +140,19 @@ export class OaPdfPythonSource implements PDFSource {
       if (!url) continue;
       attempted++;
       try {
-        let bytes: Uint8Array | null = null;
-        if (hitNeedsBridgeFetch(hit, this.id)) {
-          bytes = await fetchOaPdfViaBridge({
-            source: this.id,
+        // Same path as YÖK: always POST /pdf-fetch (UA + %PDF + session).
+        const bytes = await fetchOaPdfViaBridge({
+          source: this.id,
+          pdfUrl: url,
+          extra: {
+            ...((hit.extra || {}) as Record<string, unknown>),
+            landingUrl: hit.landingUrl || undefined,
             pdfUrl: url,
-            extra: (hit.extra || {}) as Record<string, unknown>,
-          });
-          if (!bytes) {
-            ztoolkit.log(`oa_pdf ${this.id} bridge fetch empty`, url);
-            continue;
-          }
+          },
+        });
+        if (!bytes) {
+          ztoolkit.log(`oa_pdf ${this.id} bridge fetch empty`, url);
+          continue;
         }
         const att = await downloadAndAttach(item, url, {
           sourceId: this.id,

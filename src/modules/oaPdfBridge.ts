@@ -1,4 +1,4 @@
-// @ajan: cursor · @etiket: katman-2, oa-pdf-bridge, search-logic
+// @ajan: cursor · @etiket: katman-2, oa-pdf-bridge, libgen-trust
 /**
  * Katman-2 → Kutuphane köprü (8756) `oa_pdf_search` client.
  * Online PDF discovery runs in Python; this module only POSTs queries.
@@ -236,6 +236,21 @@ export function filterTrustedHits(
       scored.push({ hit, rank: 0.9 });
       continue;
     }
+    // LibGen historically set hit.title = query (always matches item title).
+    // Require Python title_overlap (row vs query) when titles look identical.
+    if (
+      (ctx.sourceId === "libgen" || hit.source === "libgen") &&
+      itemTitle &&
+      String(hit.title || "").trim().toLowerCase() ===
+        itemTitle.trim().toLowerCase()
+    ) {
+      const ovExtra = Number(
+        (hit.extra as Record<string, unknown> | undefined)?.title_overlap,
+      );
+      if (!(ovExtra >= 0.5)) {
+        continue;
+      }
+    }
     if (ov >= 0.45) {
       scored.push({ hit, rank: ov });
       continue;
@@ -262,8 +277,8 @@ export function trustedPdfUrlsFromHits(
 }
 
 /**
- * Fetch PDF bytes through the Kutuphane bridge (required for YÖK Tez —
- * bare TezGoster URLs return HTML without the yoktez session).
+ * Fetch PDF bytes through the Kutuphane bridge for every oa_pdf_search
+ * download source (YÖK session, DergiPark, PMC, Sci-Hub, LibGen, …).
  */
 export async function fetchOaPdfViaBridge(opts: {
   source: string;
@@ -324,8 +339,10 @@ export async function fetchOaPdfViaBridge(opts: {
 }
 
 export function hitNeedsBridgeFetch(hit: OaPdfHit, sourceId?: string): boolean {
-  if (sourceId === "yoktez" || hit.source === "yoktez") return true;
-  return !!(hit.extra && hit.extra.fetchViaBridge);
+  // All oa_pdf_search download hits use POST /pdf-fetch (YÖK session +
+  // DergiPark/PMC/Sci-Hub/LibGen UA and %PDF gate). Never bare Zotero GET.
+  void sourceId;
+  return !!(String(hit.pdfUrl || "").trim() || (hit.extra && hit.extra.fetchViaBridge));
 }
 
 export type ContentValidateRequest = {

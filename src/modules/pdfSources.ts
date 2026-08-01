@@ -1,4 +1,4 @@
-// @ajan: cursor · @etiket: katman-2, pdfSources, erase-mismatch
+// @ajan: cursor · @etiket: katman-2, content-validate, fail-closed
 import { getString } from "../utils/locale";
 import { getPref } from "../utils/prefs";
 import {
@@ -350,6 +350,14 @@ export function decideContentValidation(input: {
   if (input.textChars < 50) return "unverifiable";
   if (input.hasIdConflict) return "mismatch";
   if (input.hasIdMatch) return "match";
+  // Books without the expected author in PDF text are almost always wrong OA.
+  if (
+    input.kind === "book" &&
+    input.authorExpected &&
+    !input.authorFound
+  ) {
+    return "mismatch";
+  }
   if (input.score >= 0.6) return "match";
 
   if (input.kind === "book") {
@@ -452,16 +460,23 @@ export async function validateAttachmentContentDetailed(
           itemType: itemType(item),
           pdfText: text.slice(0, 8000),
         });
-        if (llm?.verdict === "match" || llm?.verdict === "mismatch") {
-          heuristic = llm.verdict;
-          ztoolkit.log(
-            `LLM content validation → ${llm.verdict}`,
-            llm.reason || "",
-          );
+        // Fail-closed: LLM may confirm mismatch / unblock unverifiable,
+        // but must NEVER upgrade a heuristic mismatch to match (wrong PDF).
+        if (llm?.verdict === "mismatch") {
+          heuristic = "mismatch";
+          ztoolkit.log(`LLM content validation → mismatch`, llm.reason || "");
+        } else if (llm?.verdict === "match" && heuristic !== "mismatch") {
+          heuristic = "match";
+          ztoolkit.log(`LLM content validation → match`, llm.reason || "");
         } else if (llm?.verdict === "unverifiable" && heuristic === "match") {
-          // Soft: don't upgrade a heuristic match to unverifiable erase solely from LLM doubt
+          // Soft: don't erase a heuristic match solely from LLM doubt
         } else if (llm?.verdict === "unverifiable") {
           heuristic = "unverifiable";
+        } else if (llm?.verdict === "match" && heuristic === "mismatch") {
+          ztoolkit.log(
+            "LLM said match but heuristic mismatch — keeping mismatch",
+            llm.reason || "",
+          );
         }
       } catch (e) {
         ztoolkit.log("LLM content validation unavailable; heuristic only", e);
