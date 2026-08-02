@@ -21,7 +21,7 @@ function loadModule() {
   return module.exports;
 }
 
-test("book validation: ISBN match keeps; ISBN conflict erases", () => {
+test("book validation: ISBN match keeps; ISBN conflict is mismatch", () => {
   const { decideContentValidation } = loadModule();
   assert.equal(
     decideContentValidation({
@@ -51,7 +51,7 @@ test("book validation: ISBN match keeps; ISBN conflict erases", () => {
   );
 });
 
-test("book validation: weak/wrong evidence erases (no quarantine-keep)", () => {
+test("book validation: weak/wrong evidence is mismatch (tag, not erase)", () => {
   const { decideContentValidation } = loadModule();
   // Middling title — previously "unverifiable"/kept; now erase.
   assert.equal(

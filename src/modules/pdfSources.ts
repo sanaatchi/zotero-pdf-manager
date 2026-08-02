@@ -1,4 +1,4 @@
-// @ajan: cursor · @etiket: katman-2, pdf-sources, download-progress, content-audit
+// @ajan: cursor · @etiket: katman-2, pdf-sources, validate-tag-only, content-audit
 import { getString } from "../utils/locale";
 import { getPref } from "../utils/prefs";
 import {
@@ -394,12 +394,14 @@ function scoreText(item: Zotero.Item, rawText: string): number {
  * metadata.
  *
  * - match: extractable text supports the item
- * - mismatch: extractable text conflicts — detach Zotero link; keep disk copy
+ * - mismatch: extractable text conflicts — **keep** attachment; tag
+ *   `#pdf-mismatch` + `#pdf-review` (never auto-erase on download)
  * - unverifiable: too little extractable text / PDFWorker failure — **keep**
- *   attachment and tag `#pdf-review` (do not erase downloaded PDFs)
+ *   attachment and tag `#pdf-review`
  * - skipped: validation pref off
  *
  * Books: ISBN/DOI conflict → mismatch. Strong title/score or ISBN match → keep.
+ * Manual content-audit menu may still detach when the user confirms.
  */
 export type ContentValidation =
   "match" | "mismatch" | "unverifiable" | "skipped";
@@ -818,13 +820,14 @@ export async function downloadAndAttach(
   }
 
   if (opts.validate !== false) {
-    const { verdict, pdfText } = await validateAttachmentContentDetailed(
+    const { verdict } = await validateAttachmentContentDetailed(
       item,
       attachment.id,
     );
     if (verdict === "match" || verdict === "skipped") {
       await removeAutomationTag(item, "#pdf-review");
       await removeAutomationTag(item, "#pdf-quarantine");
+      await removeAutomationTag(item, "#pdf-mismatch");
       return attachment;
     }
     // Scanned / image-only / PDFWorker failure: keep the downloaded PDF.
@@ -835,24 +838,13 @@ export async function downloadAndAttach(
       await tagItem(item, "#pdf-review");
       return attachment;
     }
-    // mismatch: detach Zotero link; keep+rename (or rescue) PDF on disk.
+    // mismatch: keep attachment; tag for review (no eraseTx on auto-download).
     ztoolkit.log(
-      `Rejected PDF (${verdict}) for ${item.id} — detach link, keep disk copy`,
+      `PDF content mismatch for ${item.id} — keeping attachment (#pdf-mismatch)`,
     );
-    const cleaned = await cleanupRejectedAttachment({
-      attachment,
-      persistedPath,
-      finalCreatedByThisRun,
-      pdfText,
-    });
-    if (cleaned === "erase-failed") {
-      await tagItem(item, "#pdf-review");
-      await tagItem(item, "#pdf-quarantine");
-      throw new AttachStoppedError("erase-failed", attachment);
-    }
-    throw new ContentMismatchError(
-      "PDF içeriği künye ile uyuşmadı — Zotero eki kaldırıldı (dosya diskte orphan-hazır adla bırakıldı)",
-    );
+    await tagItem(item, "#pdf-mismatch");
+    await tagItem(item, "#pdf-review");
+    return attachment;
   }
   return attachment;
 }
