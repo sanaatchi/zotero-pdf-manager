@@ -27,6 +27,7 @@ pdf-manager-menu = PDF Manager
 oa-search-open = Ricerca OA…
 oa-search-title = Ricerca OA
 oa-search-run = Cerca
+oa-search-run-busy = Ricerca…
 oa-search-attach = Allega alla selezione
 oa-search-create = Nuovo elemento + PDF
 oa-search-related = Allega alla selezione + Related

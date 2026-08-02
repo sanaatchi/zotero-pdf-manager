@@ -1,8 +1,9 @@
-// @ajan: cursor · @etiket: katman-2, oa-search, window, source-picker, prefill-core
+// @ajan: cursor · @etiket: katman-2, oa-search, window, search-btn-fix
 /**
  * Independent OA Search popup (openDialog) — federated results + attach actions.
  * UX: per-search source picker, PDF-only filter, keyboard nav, double-click apply,
  * auto-search on open, source/error summary. Selection optional for search.
+ * Ara never stays disabled during long bridge calls (generation supersede).
  */
 import { config } from "../../package.json";
 import { getString } from "../utils/locale";
@@ -48,6 +49,7 @@ const LABEL_FALLBACK: Record<string, string> = {
   "oa-search-attach-fail": "PDF eklenemedi",
   "oa-search-creating": "Öğe oluşturuluyor…",
   "oa-search-searching": "Kaynaklarda aranıyor…",
+  "oa-search-run-busy": "Aranıyor…",
   "oa-search-results": "{count} sonuç",
   "oa-search-load-fail": "OA Arama penceresi yüklenemedi",
   "oa-search-dblclick-hint": "Çift tık: seçiliye ekle (yoksa yeni öğe)",
@@ -68,6 +70,9 @@ type OaSearchWindowState = {
   pdfOnly: boolean;
   selectedSources: string[];
   meta: OaSearchMeta;
+  /** Bumps on each Ara click — older in-flight searches discard their result. */
+  searchGeneration: number;
+  searching: boolean;
 };
 
 function isWindowAlive(win?: Window | null): boolean {
@@ -94,6 +99,8 @@ function getState(): OaSearchWindowState {
       pdfOnly: true,
       selectedSources: loadOaSearchSourceSelection(),
       meta: { sourcesQueried: [], errors: {} },
+      searchGeneration: 0,
+      searching: false,
     };
   }
   const s = data.oaSearch;
@@ -103,6 +110,8 @@ function getState(): OaSearchWindowState {
     s.selectedSources = loadOaSearchSourceSelection();
   }
   if (!s.meta) s.meta = { sourcesQueried: [], errors: {} };
+  if (typeof s.searchGeneration !== "number") s.searchGeneration = 0;
+  if (typeof s.searching !== "boolean") s.searching = false;
   return s;
 }
 
@@ -169,7 +178,17 @@ async function waitForOaDom(win: Window): Promise<Document> {
 
 function bindSearchTrigger(win: Window, el: Element | null): void {
   if (!el) return;
+  if ((el as any).dataset?.oaBound === "1") return;
+  try {
+    (el as any).dataset.oaBound = "1";
+  } catch {
+    /* ignore */
+  }
+  let lastRun = 0;
   const run = (ev?: Event) => {
+    const now = Date.now();
+    if (now - lastRun < 350) return;
+    lastRun = now;
     try {
       ev?.preventDefault?.();
       ev?.stopPropagation?.();
@@ -178,9 +197,47 @@ function bindSearchTrigger(win: Window, el: Element | null): void {
     }
     void runSearch(win);
   };
+  // Chrome/XHTML dialogs: click alone can miss; mousedown + command cover Zotero.
+  el.addEventListener("mousedown", (ev) => {
+    if ((ev as MouseEvent).button === 0) run(ev);
+  });
   el.addEventListener("click", run);
   el.addEventListener("command", run);
   (el as any).onclick = run;
+}
+
+function searchButton(doc: Document): HTMLButtonElement | null {
+  return doc.getElementById(
+    `${config.addonRef}-oa-search`,
+  ) as HTMLButtonElement | null;
+}
+
+/** Ara must stay clickable — long bridge calls used to leave it disabled. */
+function setSearchBusy(doc: Document, busy: boolean): void {
+  const state = getState();
+  state.searching = busy;
+  const btn = searchButton(doc);
+  if (!btn) return;
+  btn.disabled = false;
+  btn.removeAttribute("disabled");
+  btn.setAttribute("aria-busy", busy ? "true" : "false");
+  btn.classList.toggle("busy", busy);
+  const key = busy ? "oa-search-run-busy" : "oa-search-run";
+  setButtonLabel(btn, key, "data-label");
+  if (!busy) {
+    // Restore static fallback attr used when Fluent is empty.
+    btn.setAttribute("data-label", LABEL_FALLBACK["oa-search-run"] || "Ara");
+  }
+}
+
+function ensureSearchEnabled(doc: Document): void {
+  const btn = searchButton(doc);
+  if (!btn) return;
+  btn.disabled = false;
+  btn.removeAttribute("disabled");
+  if (!getState().searching) {
+    setButtonLabel(btn, "oa-search-run", "data-label");
+  }
 }
 
 function esc(value: unknown): string {
@@ -436,6 +493,10 @@ function updateActionButtons(doc: Document, state: OaSearchWindowState): void {
     `${config.addonRef}-oa-pdf-only`,
   ) as HTMLInputElement | null;
   if (pdfOnly) pdfOnly.checked = state.pdfOnly;
+
+  // applyChromeLabels resets Ara caption — restore busy / enabled state.
+  if (state.searching) setSearchBusy(doc, true);
+  else ensureSearchEnabled(doc);
 }
 
 function shortErr(msg: string): string {
@@ -619,11 +680,9 @@ async function runSearch(win: Window): Promise<void> {
   const doc = win.document;
   const state = getState();
   syncTargetFromPane(doc, state);
+  ensureSearchEnabled(doc);
 
-  const searchBtn = doc.getElementById(
-    `${config.addonRef}-oa-search`,
-  ) as HTMLButtonElement | null;
-  if (searchBtn) searchBtn.disabled = true;
+  const gen = ++state.searchGeneration;
 
   try {
     const sources = persistSelectedSources(doc, state);
@@ -638,6 +697,7 @@ async function runSearch(win: Window): Promise<void> {
       return;
     }
 
+    setSearchBusy(doc, true);
     setStatus(
       doc,
       `${uiString("oa-search-searching")} (${sources.join(", ")})`,
@@ -657,6 +717,7 @@ async function runSearch(win: Window): Promise<void> {
           sources,
         },
       );
+      if (gen !== state.searchGeneration) return;
       state.rawHits = Array.isArray(body.hits) ? body.hits : [];
       state.meta = {
         sourcesQueried: body.sourcesQueried || sources,
@@ -670,12 +731,16 @@ async function runSearch(win: Window): Promise<void> {
         Boolean(Object.keys(state.meta.errors).length) && !state.hits.length,
       );
     } catch (e) {
+      if (gen !== state.searchGeneration) return;
       const msg = e instanceof Error ? e.message : String(e);
       setStatus(doc, uiString("oa-search-error", { message: msg }), true);
       ztoolkit.log("OA search window failed", e);
     }
   } finally {
-    if (searchBtn) searchBtn.disabled = false;
+    if (gen === state.searchGeneration) {
+      setSearchBusy(doc, false);
+    }
+    ensureSearchEnabled(doc);
     updateActionButtons(doc, state);
   }
 }
@@ -685,7 +750,6 @@ async function withBusy(doc: Document, fn: () => Promise<void>): Promise<void> {
     `${config.addonRef}-oa-attach`,
     `${config.addonRef}-oa-create`,
     `${config.addonRef}-oa-related`,
-    `${config.addonRef}-oa-search`,
   ];
   for (const id of buttons) {
     const b = doc.getElementById(id) as HTMLButtonElement | null;
@@ -695,10 +759,7 @@ async function withBusy(doc: Document, fn: () => Promise<void>): Promise<void> {
     await fn();
   } finally {
     updateActionButtons(doc, getState());
-    const search = doc.getElementById(
-      `${config.addonRef}-oa-search`,
-    ) as HTMLButtonElement | null;
-    if (search) search.disabled = false;
+    ensureSearchEnabled(doc);
   }
 }
 
@@ -727,13 +788,15 @@ function moveSelection(
 function wireActions(win: Window): void {
   const doc = win.document;
   if (doc.documentElement.getAttribute("data-oa-wired") === "1") {
+    ensureSearchEnabled(doc);
+    bindSearchTrigger(win, searchButton(doc));
     updateActionButtons(doc, getState());
     return;
   }
   doc.documentElement.setAttribute("data-oa-wired", "1");
   const state = getState();
 
-  bindSearchTrigger(win, doc.getElementById(`${config.addonRef}-oa-search`));
+  bindSearchTrigger(win, searchButton(doc));
 
   doc
     .getElementById(`${config.addonRef}-oa-sources-all`)
@@ -771,6 +834,7 @@ function wireActions(win: Window): void {
   });
 
   win.addEventListener("focus", () => {
+    ensureSearchEnabled(doc);
     updateActionButtons(doc, state);
   });
 
@@ -889,14 +953,19 @@ export async function initOaSearchWindow(win: Window): Promise<void> {
   state.pdfOnly = true;
   state.selectedSources = loadOaSearchSourceSelection();
   state.meta = { sourcesQueried: [], errors: {} };
+  state.searching = false;
+  // Invalidate any previous window's in-flight search.
+  state.searchGeneration += 1;
 
   applyChromeLabels(doc);
+  ensureSearchEnabled(doc);
   refreshTargetBand(doc, state.targetItem);
   prefillFromItem(doc, state.targetItem);
   renderSourcePicker(doc, state);
   renderHits(doc, state);
   setStatus(doc, uiString("oa-search-ready"));
   wireActions(win);
+  ensureSearchEnabled(doc);
   updateActionButtons(doc, state);
 
   // Auto-search when fields already have a query (e.g. from selected item).
@@ -912,6 +981,7 @@ export async function openOaSearchWindow(): Promise<void> {
     try {
       await waitForOaDom(state.window!);
       state.targetItem = firstSelectedRegular();
+      ensureSearchEnabled(state.window!.document);
       updateActionButtons(state.window!.document, state);
       prefillFromItem(state.window!.document, state.targetItem);
       setStatus(state.window!.document, uiString("oa-search-ready"));
