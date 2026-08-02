@@ -1,7 +1,8 @@
-// @ajan: cursor · @etiket: katman-2, oa-search, actions
+// @ajan: cursor · @etiket: katman-2, oa-search, actions, skip-validate
 /**
  * OA Search popup actions: attach hit PDF, create item from hit, Related Items.
  * Pure field mapping is unit-tested; Zotero I/O stays async.
+ * User-picked hits skip content validation (same trust as manual URL paste).
  */
 import type { OaPdfHit } from "./oaPdfBridge";
 import { fetchOaPdfViaBridge } from "./oaPdfBridge";
@@ -134,9 +135,12 @@ export async function attachHitToItem(
       },
     });
     if (!bytes) return false;
+    // Explicit OA Search pick — trust like attachPdfFromUrl (validate: false).
+    // Otherwise content validation can attach then eraseTx → "Could not attach".
     const att = await downloadAndAttach(item, url, {
       sourceId,
       bytes,
+      validate: false,
     });
     return !!att;
   } catch (e) {

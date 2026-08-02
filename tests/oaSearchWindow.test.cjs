@@ -78,6 +78,15 @@ test("createItemFieldsFromHit maps DOI article and ISBN book", () => {
   assert.deepEqual(relatedPairIds(2, 2), [2, 2]);
 });
 
+test("attachHitToItem source skips content validation for user picks", () => {
+  const src = fs.readFileSync(
+    path.join(process.cwd(), "src/modules/oaSearchActions.ts"),
+    "utf8",
+  );
+  assert.match(src, /validate:\s*false/);
+  assert.match(src, /attachPdfFromUrl|trust|user-picked|Explicit OA Search/i);
+});
+
 test("rankOaHits prefers PDF rows; filterOaHits drops landing-only", () => {
   const result = esbuild.buildSync({
     entryPoints: [path.join(process.cwd(), "src/modules/oaSearchWindow.ts")],
