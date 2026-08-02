@@ -773,7 +773,11 @@ export async function downloadAndAttach(
           try {
             await IOUtils.remove(persistedPath);
           } catch (e) {
-            ztoolkit.log("OA download overwrite remove failed", persistedPath, e);
+            ztoolkit.log(
+              "OA download overwrite remove failed",
+              persistedPath,
+              e,
+            );
           }
         }
         await IOUtils.move(partial, persistedPath, { noOverwrite: true });
