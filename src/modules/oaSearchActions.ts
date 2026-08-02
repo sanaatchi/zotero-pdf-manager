@@ -38,16 +38,16 @@ export function guessItemTypeFromHit(hit: OaPdfHit): string {
   const source = String(hit.source || "")
     .toLowerCase()
     .trim();
-  if (source === "yoktez" || source.includes("tez") || source.includes("thesis")) {
+  if (
+    source === "yoktez" ||
+    source.includes("tez") ||
+    source.includes("thesis")
+  ) {
     return "thesis";
   }
   if (hitIsbn(hit)) return "book";
   if (String(hit.doi || "").trim()) return "journalArticle";
-  if (
-    source === "libgen" ||
-    source === "book" ||
-    source.includes("isbn")
-  ) {
+  if (source === "libgen" || source === "book" || source.includes("isbn")) {
     return "book";
   }
   return "journalArticle";

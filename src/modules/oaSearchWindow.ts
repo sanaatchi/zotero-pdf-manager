@@ -92,8 +92,7 @@ function refreshTargetBand(doc: Document, item: Zotero.Item | null): void {
 }
 
 function updateActionButtons(doc: Document, state: OaSearchWindowState): void {
-  const hit =
-    state.selectedIndex >= 0 ? state.hits[state.selectedIndex] : null;
+  const hit = state.selectedIndex >= 0 ? state.hits[state.selectedIndex] : null;
   const hasPdf = Boolean(hit && String(hit.pdfUrl || "").trim());
   const hasTarget = Boolean(state.targetItem);
   const attach = doc.getElementById(
@@ -123,8 +122,7 @@ function renderHits(doc: Document, state: OaSearchWindowState): void {
   }
   state.hits.forEach((hit, i) => {
     const tr = doc.createElement("tr");
-    tr.className =
-      "clickable" + (i === state.selectedIndex ? " selected" : "");
+    tr.className = "clickable" + (i === state.selectedIndex ? " selected" : "");
     const pdf = String(hit.pdfUrl || "").trim();
     tr.innerHTML = `
       <td class="num">${esc(hit.score ?? "")}</td>
@@ -155,10 +153,8 @@ function prefillFromItem(doc: Document, item: Zotero.Item | null): void {
   const authors = doc.getElementById(
     `${config.addonRef}-oa-authors`,
   ) as HTMLInputElement | null;
-  if (q && !q.value)
-    q.value = String(item.getField("title") || "").trim();
-  if (doi && !doi.value)
-    doi.value = String(item.getField("DOI") || "").trim();
+  if (q && !q.value) q.value = String(item.getField("title") || "").trim();
+  if (doi && !doi.value) doi.value = String(item.getField("DOI") || "").trim();
   if (isbn && !isbn.value)
     isbn.value = String(item.getField("ISBN") || "")
       .replace(/[^0-9Xx]/g, "")
@@ -168,8 +164,9 @@ function prefillFromItem(doc: Document, item: Zotero.Item | null): void {
       const creators = item.getCreators?.() || [];
       authors.value = creators
         .slice(0, 4)
-        .map((c: any) =>
-          `${c.firstName || ""} ${c.lastName || ""}`.trim() || c.name || "",
+        .map(
+          (c: any) =>
+            `${c.firstName || ""} ${c.lastName || ""}`.trim() || c.name || "",
         )
         .filter(Boolean)
         .join("; ");
@@ -230,15 +227,16 @@ async function runSearch(win: Window): Promise<void> {
     );
   } catch (e) {
     const msg = e instanceof Error ? e.message : String(e);
-    setStatus(doc, getString("oa-search-error", { args: { message: msg } }), true);
+    setStatus(
+      doc,
+      getString("oa-search-error", { args: { message: msg } }),
+      true,
+    );
     ztoolkit.log("OA search window failed", e);
   }
 }
 
-async function withBusy(
-  doc: Document,
-  fn: () => Promise<void>,
-): Promise<void> {
+async function withBusy(doc: Document, fn: () => Promise<void>): Promise<void> {
   const buttons = [
     `${config.addonRef}-oa-attach`,
     `${config.addonRef}-oa-create`,
@@ -310,8 +308,7 @@ function wireActions(win: Window): void {
         const hit = state.hits[state.selectedIndex];
         if (!hit) return;
         const libraryID =
-          state.targetItem?.libraryID ??
-          Zotero.Libraries.userLibraryID;
+          state.targetItem?.libraryID ?? Zotero.Libraries.userLibraryID;
         setStatus(doc, getString("oa-search-creating"));
         const item = await createItemFromHit(hit, libraryID, {
           attachPdf: true,

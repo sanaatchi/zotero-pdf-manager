@@ -16,10 +16,10 @@ ZotAssets, File Utility, Attachment Scanner, ozefe/yoktez).
 
 ### Son eklenen (v1.0.58)
 
-| Madde                         | Not                                                                 |
-| ----------------------------- | ------------------------------------------------------------------- |
-| OA Arama popup + menü çubuğu  | `PDF Manager → OA Arama…`; Attanger federated aynı pencere          |
-| Attach / yeni öğe / Related   | `oaSearchActions.ts` — Related = yeni künye + PDF seçiliye + bağla |
+| Madde                        | Not                                                                |
+| ---------------------------- | ------------------------------------------------------------------ |
+| OA Arama popup + menü çubuğu | `PDF Manager → OA Arama…`; Attanger federated aynı pencere         |
+| Attach / yeni öğe / Related  | `oaSearchActions.ts` — Related = yeni künye + PDF seçiliye + bağla |
 
 ---
 
