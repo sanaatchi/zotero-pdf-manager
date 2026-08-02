@@ -57,7 +57,9 @@ export function decideContentAuditAction(input: {
   return "skip";
 }
 
-export function summarizeContentAudit(rows: ContentAuditRow[]): ContentAuditSummary {
+export function summarizeContentAudit(
+  rows: ContentAuditRow[],
+): ContentAuditSummary {
   const s: ContentAuditSummary = {
     scanned: rows.length,
     match: 0,
@@ -103,8 +105,7 @@ async function removeTag(item: Zotero.Item, tag: string): Promise<void> {
 function isPdfAttachment(att: Zotero.Item): boolean {
   return Boolean(
     att?.isPDFAttachment?.() ||
-      String(att.attachmentContentType || "").toLowerCase() ===
-        "application/pdf",
+    String(att.attachmentContentType || "").toLowerCase() === "application/pdf",
   );
 }
 
