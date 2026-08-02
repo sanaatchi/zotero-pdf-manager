@@ -1,4 +1,4 @@
-// @ajan: cursor · @etiket: katman-2, tests, cascade-abort
+// @ajan: cursor · @etiket: katman-2, tests, cascade-abort, validate-tag-only
 const assert = require("node:assert/strict");
 const fs = require("node:fs");
 const path = require("node:path");
@@ -57,11 +57,11 @@ test("validation + cascade: AttachStoppedError stops further sources", () => {
     "utf8",
   );
   assert.match(source, /class AttachStoppedError/);
-  // mismatch detach successfully → ContentMismatchError (cascade may continue).
-  // unverifiable keeps the attachment (#pdf-review).
-  // Only erase-failed keeps the Zotero link and stops the cascade.
+  // Auto-download mismatch/unverifiable: keep attachment + tag (no eraseTx).
+  assert.match(source, /keeping attachment \(#pdf-mismatch\)/);
+  assert.match(source, /keeping attachment \(#pdf-review\)/);
   assert.doesNotMatch(source, /throw new AttachStoppedError\("review"/);
-  assert.match(source, /throw new AttachStoppedError\("erase-failed"/);
+  assert.doesNotMatch(source, /throw new AttachStoppedError\("erase-failed"/);
   assert.match(source, /ContentMismatchError/);
   assert.match(source, /rethrowAttachControlFlow/);
 

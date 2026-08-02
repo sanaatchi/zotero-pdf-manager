@@ -1,34 +1,35 @@
-// @ajan: cursor · @etiket: katman-2, tests, reject-keep-disk
+// @ajan: cursor · @etiket: katman-2, tests, validate-tag-only
 const assert = require("node:assert/strict");
 const fs = require("node:fs");
 const path = require("node:path");
 const { test } = require("node:test");
 
-test("validation verdicts: match clears review; mismatch detaches; unverifiable keeps", () => {
+test("validation verdicts: match clears tags; mismatch/unverifiable keep + tag", () => {
   const source = fs.readFileSync(
     path.join(process.cwd(), "src/modules/pdfSources.ts"),
     "utf8",
   );
   assert.match(source, /cleanupRejectedAttachment/);
   assert.match(source, /removeAutomationTag\(item,\s*"#pdf-review"\)/);
-  assert.match(source, /AttachStoppedError\("erase-failed"/);
+  assert.match(source, /removeAutomationTag\(item,\s*"#pdf-mismatch"\)/);
   assert.match(source, /ContentMismatchError/);
   assert.match(source, /decideContentValidation/);
-  assert.match(source, /Rejected PDF \(\$\{verdict\}\)/);
+  assert.match(source, /keeping attachment \(#pdf-mismatch\)/);
   assert.match(source, /renameRejectedPdfOnDisk/);
   assert.match(source, /Never IOUtils\.remove the PDF/);
   assert.match(
     source,
     /unverifiable[\s\S]*?keeping attachment \(#pdf-review\)/,
   );
-  assert.doesNotMatch(source, /AttachStoppedError\("review"/);
-  // Detach Zotero link only — do not delete the persisted download.
+  // Auto-download never throws AttachStoppedError / eraseTx on mismatch.
+  assert.doesNotMatch(source, /throw new AttachStoppedError\("review"/);
+  assert.doesNotMatch(source, /throw new AttachStoppedError\("erase-failed"/);
+  // Manual audit may still erase via cleanupRejectedAttachment.
   assert.match(source, /await opts\.attachment\.eraseTx\(\)/);
   assert.doesNotMatch(
     source,
     /await opts\.attachment\.eraseTx\(\);[\s\S]*?IOUtils\.remove\(opts\.persistedPath\)/,
   );
-  // Storage rescue before erase.
   assert.match(source, /rejected storage PDF rescue/);
 });
 
