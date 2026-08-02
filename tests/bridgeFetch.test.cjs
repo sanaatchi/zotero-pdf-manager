@@ -64,3 +64,62 @@ test("oaBridgeUrl rejects non-loopback (SSRF gate, K1/K3 parity)", () => {
     "http://127.0.0.1:8756",
   );
 });
+
+test("fanOutOaSourcesByQuery ranks by extra.rank (single-source hits carry no top-level score)", async () => {
+  const responses = {
+    doi: {
+      ok: true,
+      source: "doi",
+      hits: [
+        {
+          source: "doi",
+          title: "Weak match",
+          pdfUrl: "https://x/weak.pdf",
+          extra: { rank: 0.5 },
+        },
+      ],
+    },
+    pmc: {
+      ok: true,
+      source: "pmc",
+      hits: [
+        {
+          source: "pmc",
+          title: "Strong match",
+          pdfUrl: "https://x/strong.pdf",
+          extra: { rank: 0.95 },
+        },
+      ],
+    },
+  };
+  // loadBridge() resets global.Zotero to a bare {Prefs} stub as a module
+  // -load side effect — the HTTP mock must be installed *after* loading,
+  // not before, or it gets clobbered.
+  const { fanOutOaSourcesByQuery } = loadBridge();
+  global.Zotero.HTTP = {
+    // Regression guard: the final sort used to compare a nonexistent
+    // top-level `score` (always 0 - 0), so results stayed in network
+    // -completion order instead of relevance order. `pmc` is made to
+    // resolve *after* `doi` here so a completion-order bug would put
+    // the weak "doi" hit first.
+    request: async (_method, _endpoint, opts) => {
+      const body = JSON.parse(opts.body);
+      if (body.source === "pmc") {
+        await new Promise((r) => setTimeout(r, 10));
+      }
+      return {
+        status: 200,
+        responseText: JSON.stringify(
+          responses[body.source] || { ok: true, hits: [] },
+        ),
+      };
+    },
+  };
+  const result = await fanOutOaSourcesByQuery(
+    { text: "x" },
+    { sources: ["doi", "pmc"] },
+  );
+  assert.equal(result.hits.length, 2);
+  assert.equal(result.hits[0].title, "Strong match");
+  assert.equal(result.hits[1].title, "Weak match");
+});

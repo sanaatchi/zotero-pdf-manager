@@ -1,9 +1,10 @@
-// @ajan: cursor · @etiket: katman-2, oa-pdf-bridge, federated-search, source-picker
+// @ajan: cursor · @etiket: katman-2, oa-pdf-bridge, allow-web-search, fanout-rank
 /**
  * Katman-2 → Kutuphane köprü (8756) `oa_pdf_search` client.
  * Online PDF discovery runs in Python; this module only POSTs queries.
  * LibGen book PDFs: long fetch timeout (keys refresh + multi-minute download).
  * Bridge base URL is loopback-only (same SSRF policy as K1/K3).
+ * Manual OA Search sends allowWebSearch=true (DergiPark DDG last-resort).
  */
 import { getPref, setPref } from "../utils/prefs";
 import { normalizeDOI } from "../utils/metadataNormalize";
@@ -41,6 +42,10 @@ export type OaPdfSearchRequest = {
   sources?: string[];
   profile?: "full" | "auto";
   totalLimit?: number;
+  /** Manual/user-triggered search only (OA Search window) — never set from
+   * the automatic add-item cascade. Unlocks fragile last-resort discovery
+   * (e.g. DergiPark's DuckDuckGo fallback) that must not fire unattended. */
+  allowWebSearch?: boolean;
 };
 
 export type OaPdfSearchResponse = {
@@ -177,6 +182,7 @@ export async function searchOaPdfBridgeDetailed(
         sources: req.sources || [],
         profile: req.profile || "full",
         totalLimit: req.totalLimit ?? 25,
+        allowWebSearch: req.allowWebSearch ?? false,
       }),
       responseType: "text",
       timeout: 180000,
@@ -352,6 +358,9 @@ export async function searchAllOaSourcesByQuery(
     limit: 5,
     profile: opts.profile || "full",
     totalLimit: opts.totalLimit ?? 25,
+    // Both callers (searchAllOaSources item menu, OA Search popup) are
+    // user-triggered — safe to unlock the DuckDuckGo last-resort fallback.
+    allowWebSearch: true,
   };
   // Only send sources when non-empty so bridge falls back to full profile.
   if (sources.length) req.sources = sources;
@@ -412,6 +421,8 @@ export async function fanOutOaSourcesByQuery(
           pmcid: String(query.pmcid || "").trim(),
           authors: String(query.authors || "").trim(),
           limit: perSourceLimit,
+          // Only reachable from user-triggered federated search paths.
+          allowWebSearch: true,
         });
         if (body.error) errors[sid] = String(body.error);
         for (const hit of body.hits || []) {
@@ -426,7 +437,16 @@ export async function fanOutOaSourcesByQuery(
     }),
   );
 
-  hits.sort((a, b) => Number(b.score || 0) - Number(a.score || 0));
+  // Single-source /pdf-search responses never carry a top-level `score`
+  // (only federated `source=all` payloads do) — sorting by it here was a
+  // no-op (always 0-0), leaving results in network-completion order
+  // instead of relevance order. Fall back to the per-hit rank the source
+  // adapters already compute into `extra`.
+  const hitScore = (h: OaPdfHit): number =>
+    Number(
+      h.score ?? (h.extra as any)?.rank ?? (h.extra as any)?.title_overlap ?? 0,
+    );
+  hits.sort((a, b) => hitScore(b) - hitScore(a));
   return {
     ok: true,
     source: "all",
