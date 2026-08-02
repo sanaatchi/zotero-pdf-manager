@@ -349,7 +349,7 @@ async function runSearch(win: Window): Promise<void> {
   if (searchBtn) searchBtn.disabled = true;
 
   try {
-    let sources = enabledFederatedSourceIds();
+    const sources = enabledFederatedSourceIds();
     // Prefs empty → still ask bridge for full download set (selection not required).
     if (!sources.length) {
       ztoolkit.log(
