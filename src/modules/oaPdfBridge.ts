@@ -270,10 +270,16 @@ export async function searchAllOaSourcesByQuery(
     pmid?: string;
     pmcid?: string;
   },
-  opts: { profile?: "full" | "auto"; totalLimit?: number } = {},
+  opts: {
+    profile?: "full" | "auto";
+    totalLimit?: number;
+    /** Omit / empty → bridge uses full download profile. */
+    sources?: string[];
+  } = {},
 ): Promise<OaPdfSearchResponse> {
-  const sources = enabledFederatedSourceIds();
-  return searchOaPdfBridgeDetailed({
+  const sources =
+    opts.sources !== undefined ? opts.sources : enabledFederatedSourceIds();
+  const req: OaPdfSearchRequest = {
     source: "all",
     text: String(query.text || "").trim(),
     doi: String(query.doi || "").trim(),
@@ -285,10 +291,12 @@ export async function searchAllOaSourcesByQuery(
     pmcid: String(query.pmcid || "").trim(),
     authors: String(query.authors || "").trim(),
     limit: 5,
-    sources,
     profile: opts.profile || "full",
     totalLimit: opts.totalLimit ?? 25,
-  });
+  };
+  // Only send sources when non-empty so bridge falls back to full profile.
+  if (sources.length) req.sources = sources;
+  return searchOaPdfBridgeDetailed(req);
 }
 
 export function pdfUrlsFromHits(hits: OaPdfHit[]): string[] {

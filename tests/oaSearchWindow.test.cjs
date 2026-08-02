@@ -98,6 +98,12 @@ test("OA search surface: xhtml + menubar + locales + menu wiring", () => {
   assert.match(win, /uiString/);
   assert.match(win, /syncTargetFromPane/);
   assert.match(win, /LABEL_FALLBACK/);
+  assert.match(win, /waitForOaDom/);
+  assert.match(win, /bindSearchTrigger/);
+  assert.match(
+    win,
+    /arama için gerekmez|selection is optional|Zotero selection is optional|gerekmez/,
+  );
 
   const menubar = fs.readFileSync(
     path.join(root, "src/modules/menubar.ts"),

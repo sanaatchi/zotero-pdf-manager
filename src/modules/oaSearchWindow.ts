@@ -25,11 +25,12 @@ const LABEL_FALLBACK: Record<string, string> = {
   "oa-search-create": "Yeni öğe + PDF",
   "oa-search-related": "Seçiliye ekle + Related",
   "oa-search-target-none":
-    "Seçili yok — yeni öğe / ilişki için Zotero’da bir kayıt seçin",
-  "oa-search-ready": "Sorgu girip Ara’ya basın",
+    "Seçim yok (arama için gerekmez). Seçiliye ekle / Related için Zotero’da kayıt seçin",
+  "oa-search-ready": "Sorgu yazıp Ara’ya basın — Zotero seçimi zorunlu değil",
   "oa-search-empty": "Sonuç yok",
   "oa-search-need-query": "Başlık, DOI, ISBN veya yazar girin",
-  "oa-search-hint-no-target": "Seçili öğe yok — Zotero’da bir kayıt seçin",
+  "oa-search-hint-no-target":
+    "Seçili öğe yok — Seçiliye ekle / Related için Zotero’da bir kayıt seçin",
   "oa-search-hint-no-pdf": "PDF’si olan bir sonuç satırı seçin",
   "oa-search-hint-no-hit": "Önce arama yapın, sonra bir satır seçin",
   "oa-search-attaching": "PDF indirilip ekleniyor…",
@@ -37,6 +38,7 @@ const LABEL_FALLBACK: Record<string, string> = {
   "oa-search-attach-fail": "PDF eklenemedi",
   "oa-search-creating": "Öğe oluşturuluyor…",
   "oa-search-searching": "Kaynaklarda aranıyor…",
+  "oa-search-load-fail": "OA Arama penceresi yüklenemedi",
   "pdf-federated-no-sources": "İndirme kaynağı açık değil (tercihler)",
 };
 
@@ -98,6 +100,55 @@ function waitForWindowLoad(win: Window): Promise<void> {
     }
     win.addEventListener("load", () => resolve(), { once: true });
   });
+}
+
+function delayMs(ms: number): Promise<void> {
+  return new Promise((resolve) => {
+    const schedule =
+      (typeof setTimeout === "function" ? setTimeout : null) ||
+      Zotero.getMainWindow()?.setTimeout?.bind(Zotero.getMainWindow()) ||
+      globalThis.setTimeout;
+    schedule(resolve, ms);
+  });
+}
+
+/**
+ * openDialog often reports readyState=complete on an empty shell first.
+ * Wait until the real OA DOM exists before wiring events.
+ */
+async function waitForOaDom(win: Window): Promise<Document> {
+  const shellId = `${config.addonRef}-oa-shell`;
+  const searchId = `${config.addonRef}-oa-search`;
+  const deadline = Date.now() + 15000;
+  while (Date.now() < deadline) {
+    try {
+      if (!isWindowAlive(win)) break;
+      const doc = win.document;
+      if (doc?.getElementById(shellId) && doc.getElementById(searchId)) {
+        return doc;
+      }
+    } catch {
+      /* ignore transient dead wrappers */
+    }
+    await delayMs(50);
+  }
+  throw new Error(uiString("oa-search-load-fail"));
+}
+
+function bindSearchTrigger(win: Window, el: Element | null): void {
+  if (!el) return;
+  const run = (ev?: Event) => {
+    try {
+      ev?.preventDefault?.();
+      ev?.stopPropagation?.();
+    } catch {
+      /* ignore */
+    }
+    void runSearch(win);
+  };
+  el.addEventListener("click", run);
+  el.addEventListener("command", run);
+  (el as any).onclick = run;
 }
 
 function esc(value: unknown): string {
@@ -289,60 +340,79 @@ function prefillFromItem(doc: Document, item: Zotero.Item | null): void {
 async function runSearch(win: Window): Promise<void> {
   const doc = win.document;
   const state = getState();
+  // Selection is optional for search — only refresh banner if present.
   syncTargetFromPane(doc, state);
-  const sources = enabledFederatedSourceIds();
-  if (!sources.length) {
-    setStatus(doc, uiString("pdf-federated-no-sources"), true);
-    return;
-  }
-  const text = (
-    doc.getElementById(`${config.addonRef}-oa-q`) as HTMLInputElement
-  )?.value?.trim();
-  const doi = (
-    doc.getElementById(`${config.addonRef}-oa-doi`) as HTMLInputElement
-  )?.value?.trim();
-  const isbn = (
-    doc.getElementById(`${config.addonRef}-oa-isbn`) as HTMLInputElement
-  )?.value?.trim();
-  const authors = (
-    doc.getElementById(`${config.addonRef}-oa-authors`) as HTMLInputElement
-  )?.value?.trim();
-  if (!text && !doi && !isbn && !authors) {
-    setStatus(doc, uiString("oa-search-need-query"), true);
-    return;
-  }
 
-  setStatus(doc, uiString("oa-search-searching"));
-  state.hits = [];
-  state.selectedIndex = -1;
-  renderHits(doc, state);
+  const searchBtn = doc.getElementById(
+    `${config.addonRef}-oa-search`,
+  ) as HTMLButtonElement | null;
+  if (searchBtn) searchBtn.disabled = true;
 
   try {
-    const body = await searchAllOaSourcesByQuery(
-      { text, doi, isbn, authors },
-      { profile: "full", totalLimit: 25 },
-    );
-    state.hits = Array.isArray(body.hits) ? body.hits : [];
-    // Prefer first downloadable hit so Attach enables immediately.
-    let sel = state.hits.findIndex((h) => String(h.pdfUrl || "").trim());
-    if (sel < 0) sel = state.hits.length ? 0 : -1;
-    state.selectedIndex = sel;
-    renderHits(doc, state);
-    const errBits = Object.entries(body.errors || {})
-      .map(([sid, err]) => `${sid}: ${err}`)
-      .join("; ");
-    const base = uiString("oa-search-results", { count: state.hits.length });
-    let status = errBits ? `${base} — ${errBits}` : base;
-    if (state.hits.length && !hasSelectedPdf(state)) {
-      status = `${status} · ${uiString("oa-search-hint-no-pdf")}`;
-    } else if (state.hits.length && !state.targetItem) {
-      status = `${status} · ${uiString("oa-search-hint-no-target")}`;
+    let sources = enabledFederatedSourceIds();
+    // Prefs empty → still ask bridge for full download set (selection not required).
+    if (!sources.length) {
+      ztoolkit.log(
+        "OA search: no prefs-enabled sources; bridge will use full profile",
+      );
     }
-    setStatus(doc, status, Boolean(errBits) && !state.hits.length);
-  } catch (e) {
-    const msg = e instanceof Error ? e.message : String(e);
-    setStatus(doc, uiString("oa-search-error", { message: msg }), true);
-    ztoolkit.log("OA search window failed", e);
+
+    const text = (
+      doc.getElementById(`${config.addonRef}-oa-q`) as HTMLInputElement
+    )?.value?.trim();
+    const doi = (
+      doc.getElementById(`${config.addonRef}-oa-doi`) as HTMLInputElement
+    )?.value?.trim();
+    const isbn = (
+      doc.getElementById(`${config.addonRef}-oa-isbn`) as HTMLInputElement
+    )?.value?.trim();
+    const authors = (
+      doc.getElementById(`${config.addonRef}-oa-authors`) as HTMLInputElement
+    )?.value?.trim();
+    if (!text && !doi && !isbn && !authors) {
+      setStatus(doc, uiString("oa-search-need-query"), true);
+      return;
+    }
+
+    setStatus(doc, uiString("oa-search-searching"));
+    state.hits = [];
+    state.selectedIndex = -1;
+    renderHits(doc, state);
+
+    try {
+      const body = await searchAllOaSourcesByQuery(
+        { text, doi, isbn, authors },
+        {
+          profile: "full",
+          totalLimit: 25,
+          // Empty sources → omit filter so bridge uses full download list.
+          sources: sources.length ? sources : undefined,
+        },
+      );
+      state.hits = Array.isArray(body.hits) ? body.hits : [];
+      let sel = state.hits.findIndex((h) => String(h.pdfUrl || "").trim());
+      if (sel < 0) sel = state.hits.length ? 0 : -1;
+      state.selectedIndex = sel;
+      renderHits(doc, state);
+      const errBits = Object.entries(body.errors || {})
+        .map(([sid, err]) => `${sid}: ${err}`)
+        .join("; ");
+      const base = uiString("oa-search-results", { count: state.hits.length });
+      let status = errBits ? `${base} — ${errBits}` : base;
+      if (state.hits.length && !hasSelectedPdf(state)) {
+        status = `${status} · ${uiString("oa-search-hint-no-pdf")}`;
+      } else if (state.hits.length && !state.targetItem) {
+        status = `${status} · ${uiString("oa-search-hint-no-target")}`;
+      }
+      setStatus(doc, status, Boolean(errBits) && !state.hits.length);
+    } catch (e) {
+      const msg = e instanceof Error ? e.message : String(e);
+      setStatus(doc, uiString("oa-search-error", { message: msg }), true);
+      ztoolkit.log("OA search window failed", e);
+    }
+  } finally {
+    if (searchBtn) searchBtn.disabled = false;
+    updateActionButtons(doc, state);
   }
 }
 
@@ -382,11 +452,7 @@ function wireActions(win: Window): void {
   doc.documentElement.setAttribute("data-oa-wired", "1");
   const state = getState();
 
-  doc
-    .getElementById(`${config.addonRef}-oa-search`)
-    ?.addEventListener("click", () => {
-      void runSearch(win);
-    });
+  bindSearchTrigger(win, doc.getElementById(`${config.addonRef}-oa-search`));
 
   for (const id of [
     `${config.addonRef}-oa-q`,
@@ -495,8 +561,10 @@ function wireActions(win: Window): void {
 }
 
 export async function initOaSearchWindow(win: Window): Promise<void> {
+  await waitForOaDom(win);
   const doc = win.document;
   const state = getState();
+  // Optional: prefill from selection if any — never required for search.
   state.targetItem = firstSelectedRegular();
   state.hits = [];
   state.selectedIndex = -1;
@@ -514,8 +582,10 @@ export async function openOaSearchWindow(): Promise<void> {
   const state = getState();
   if (isWindowAlive(state.window)) {
     try {
+      await waitForOaDom(state.window!);
       updateActionButtons(state.window!.document, state);
       prefillFromItem(state.window!.document, state.targetItem);
+      setStatus(state.window!.document, uiString("oa-search-ready"));
     } catch {
       /* ignore */
     }
