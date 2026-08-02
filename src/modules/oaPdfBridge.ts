@@ -1,4 +1,4 @@
-// @ajan: cursor · @etiket: katman-2, oa-pdf-bridge, soft-trust-typo, fetch-progress
+// @ajan: cursor · @etiket: katman-2, oa-pdf-bridge, short-title-trust, reuse-download
 /**
  * Katman-2 → Kutuphane köprü (8756) `oa_pdf_search` client.
  * Online PDF discovery runs in Python; this module only POSTs queries.
@@ -547,16 +547,17 @@ const TITLE_STOP = new Set([
 ]);
 
 /**
- * Mid-band scores (0.45–0.8) need every distinctive query token (≥7, not stop)
- * present in the hit title — blocks "Interview with Todd Golub" and Turkish
- * Golub essays that only share the artist name.
- * Soft typo: edit-distance ≤1 on tokens ≥6 (eğitimi ↔ eğilimi).
+ * Mid-band scores need required query tokens present in the hit title.
+ * Soft typo: edit-distance ≤1 on tokens ≥6 (eğitimi ↔ eğilimi) — not 2
+ * (Turkish morphology: toplumda ≉ toplumsal).
+ * Short titles (≤3 content tokens or ≤1 distinctive ≥7): every content
+ * token + score ≥0.75 (blocks "sahteciliği"-only forgery matches).
  */
 function editDistance(a: string, b: string): number {
   if (a === b) return 0;
   const la = a.length;
   const lb = b.length;
-  if (Math.abs(la - lb) > 2) return 99;
+  if (Math.abs(la - lb) > 1) return 99;
   if (!la || !lb) return Math.max(la, lb);
   let prev = Array.from({ length: lb + 1 }, (_, i) => i);
   for (let i = 0; i < la; i++) {
@@ -575,24 +576,68 @@ function editDistance(a: string, b: string): number {
 function tokenInFuzzy(needle: string, haystack: Set<string>): boolean {
   if (haystack.has(needle)) return true;
   if (needle.length < 6) return false;
-  const limit = needle.length >= 8 ? 2 : 1;
   for (const h of haystack) {
-    if (Math.abs(h.length - needle.length) > limit) continue;
-    if (editDistance(needle, h) <= limit) return true;
+    if (Math.abs(h.length - needle.length) > 1) continue;
+    if (editDistance(needle, h) <= 1) return true;
   }
   return false;
 }
 
+const TITLE_STOP_TRUST = new Set([
+  ...TITLE_STOP,
+  "calismasi",
+  "calisma",
+  "iliskisi",
+  "arasindaki",
+  "incelenmesi",
+  "degerlendirme",
+]);
+
 function titleTrustOk(itemTitle: string, hitTitle: string): boolean {
   const ov = titleMatchScore(itemTitle, hitTitle);
   if (ov < 0.45) return false;
-  const hitToks = new Set(normTokens(hitTitle));
-  const distinctive = normTokens(itemTitle).filter(
-    (t) => t.length >= 7 && !TITLE_STOP.has(t),
+  const qToks = normTokens(itemTitle).filter((t) => !TITLE_STOP_TRUST.has(t));
+  let need = normTokens(itemTitle).filter(
+    (t) => t.length >= 7 && !TITLE_STOP_TRUST.has(t),
   );
-  if (!distinctive.length) return ov >= 0.6;
-  if (!distinctive.every((t) => tokenInFuzzy(t, hitToks))) return false;
-  return ov >= 0.45;
+  const shortQuery = qToks.length <= 3 || need.length <= 1;
+  if (shortQuery) {
+    need = qToks.length ? qToks : normTokens(itemTitle);
+    if (ov < 0.75) return false;
+  }
+  if (!need.length) return ov >= 0.6;
+  const hitToks = new Set(normTokens(hitTitle));
+  if (need.every((t) => tokenInFuzzy(t, hitToks))) return true;
+  if (shortQuery || ov < 0.85) return false;
+  const misses = need.filter((t) => !tokenInFuzzy(t, hitToks));
+  if (misses.length !== 1) return false;
+  const m = misses[0]!;
+  if (m.length < 8) return false;
+  for (const h of hitToks) {
+    if (Math.abs(h.length - m.length) > 2) continue;
+    if (editDistanceAllow2(m, h) <= 2) return true;
+  }
+  return false;
+}
+
+function editDistanceAllow2(a: string, b: string): number {
+  if (a === b) return 0;
+  const la = a.length;
+  const lb = b.length;
+  if (Math.abs(la - lb) > 2) return 99;
+  if (!la || !lb) return Math.max(la, lb);
+  let prev = Array.from({ length: lb + 1 }, (_, i) => i);
+  for (let i = 0; i < la; i++) {
+    const cur = [i + 1];
+    for (let j = 0; j < lb; j++) {
+      const ins = cur[j]! + 1;
+      const del = prev[j + 1]! + 1;
+      const sub = prev[j]! + (a[i] === b[j] ? 0 : 1);
+      cur.push(Math.min(ins, del, sub));
+    }
+    prev = cur;
+  }
+  return prev[lb]!;
 }
 
 export type HitTrustContext = {
