@@ -86,6 +86,7 @@ test("OA search surface: xhtml + menubar + locales + menu wiring", () => {
   );
   assert.match(xhtml, /zpdfmanager-oa-shell/);
   assert.match(xhtml, /zpdfmanager-oa-tbody/);
+  assert.match(xhtml, /data-label="Seçiliye ekle"/);
 
   const win = fs.readFileSync(
     path.join(root, "src/modules/oaSearchWindow.ts"),
@@ -94,6 +95,9 @@ test("OA search surface: xhtml + menubar + locales + menu wiring", () => {
   assert.match(win, /openOaSearchWindow/);
   assert.match(win, /initOaSearchWindow/);
   assert.match(win, /oa-search\.xhtml/);
+  assert.match(win, /uiString/);
+  assert.match(win, /syncTargetFromPane/);
+  assert.match(win, /LABEL_FALLBACK/);
 
   const menubar = fs.readFileSync(
     path.join(root, "src/modules/menubar.ts"),

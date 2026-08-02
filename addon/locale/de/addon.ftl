@@ -43,6 +43,9 @@ oa-search-attach-fail = PDF konnte nicht angehängt werden
 oa-search-creating = Eintrag wird erstellt und PDF angehängt…
 oa-search-create-ok = Eintrag erstellt: { $title }
 oa-search-related-ok = Related «{ $title }» · PDF angehängt={ $attached }
+oa-search-hint-no-target = Kein Eintrag ausgewählt — zuerst in Zotero wählen
+oa-search-hint-no-pdf = Trefferzeile mit PDF auswählen
+oa-search-hint-no-hit = Zuerst suchen, dann eine Zeile wählen
 pdf-download-url-menu = Attach PDF from URL…
 pdf-embed-metadata-menu = Zotero-Metadaten in PDF einbetten (alle aktualisieren)
 pdf-embed-metadata-missing-menu = Metadaten nur für fehlende/fehlgeschlagene PDFs einbetten

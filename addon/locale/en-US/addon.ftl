@@ -45,6 +45,9 @@ oa-search-attach-fail = Could not attach PDF
 oa-search-creating = Creating item and attaching PDF…
 oa-search-create-ok = Created item: { $title }
 oa-search-related-ok = Related item «{ $title }» · PDF attached={ $attached }
+oa-search-hint-no-target = No item selected — select a Zotero item first
+oa-search-hint-no-pdf = Select a result row that has a PDF
+oa-search-hint-no-hit = Run a search, then select a row
 pdf-download-url-menu = Attach PDF from URL…
 pdf-embed-metadata-menu = Embed Zotero metadata into PDF (refresh all)
 pdf-embed-metadata-missing-menu = Embed metadata only for missing/failed PDFs

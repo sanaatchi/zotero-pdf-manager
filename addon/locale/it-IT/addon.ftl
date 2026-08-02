@@ -44,6 +44,9 @@ oa-search-attach-fail = Impossibile allegare il PDF
 oa-search-creating = Creazione elemento e allegato PDF…
 oa-search-create-ok = Elemento creato: { $title }
 oa-search-related-ok = Related «{ $title }» · PDF allegato={ $attached }
+oa-search-hint-no-target = Nessun elemento selezionato — seleziona in Zotero
+oa-search-hint-no-pdf = Seleziona una riga con PDF
+oa-search-hint-no-hit = Esegui una ricerca, poi seleziona una riga
 pdf-download-url-menu = Attach PDF from URL…
 pdf-embed-metadata-menu = Incorpora i metadati Zotero nel PDF (aggiorna tutti)
 pdf-embed-metadata-missing-menu = Incorpora i metadati solo per i PDF mancanti/falliti

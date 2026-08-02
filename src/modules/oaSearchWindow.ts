@@ -1,4 +1,4 @@
-// @ajan: cursor · @etiket: katman-2, oa-search, window
+// @ajan: cursor · @etiket: katman-2, oa-search, window, btn-labels
 /**
  * Independent OA Search popup (openDialog) — federated results + attach actions.
  */
@@ -16,6 +16,29 @@ import {
 } from "./oaSearchActions";
 
 const WINDOW_ID = `${config.addonRef}-oa-search`;
+
+/** Hard fallbacks — Fluent must never wipe button captions to empty. */
+const LABEL_FALLBACK: Record<string, string> = {
+  "oa-search-title": "OA Arama",
+  "oa-search-run": "Ara",
+  "oa-search-attach": "Seçiliye ekle",
+  "oa-search-create": "Yeni öğe + PDF",
+  "oa-search-related": "Seçiliye ekle + Related",
+  "oa-search-target-none":
+    "Seçili yok — yeni öğe / ilişki için Zotero’da bir kayıt seçin",
+  "oa-search-ready": "Sorgu girip Ara’ya basın",
+  "oa-search-empty": "Sonuç yok",
+  "oa-search-need-query": "Başlık, DOI, ISBN veya yazar girin",
+  "oa-search-hint-no-target": "Seçili öğe yok — Zotero’da bir kayıt seçin",
+  "oa-search-hint-no-pdf": "PDF’si olan bir sonuç satırı seçin",
+  "oa-search-hint-no-hit": "Önce arama yapın, sonra bir satır seçin",
+  "oa-search-attaching": "PDF indirilip ekleniyor…",
+  "oa-search-attach-ok": "PDF seçili öğeye eklendi",
+  "oa-search-attach-fail": "PDF eklenemedi",
+  "oa-search-creating": "Öğe oluşturuluyor…",
+  "oa-search-searching": "Kaynaklarda aranıyor…",
+  "pdf-federated-no-sources": "İndirme kaynağı açık değil (tercihler)",
+};
 
 type OaSearchWindowState = NonNullable<typeof addon.data.oaSearch> & {
   hits: OaPdfHit[];
@@ -51,6 +74,22 @@ function firstSelectedRegular(): Zotero.Item | null {
   return items[0] || null;
 }
 
+/** Locale with non-empty fallback (never blank out button labels). */
+function uiString(key: string, args?: Record<string, unknown>): string {
+  const fallback = LABEL_FALLBACK[key] || key;
+  try {
+    const s = String(
+      (args ? getString(key, { args }) : getString(key)) || "",
+    ).trim();
+    if (!s) return fallback;
+    // Missing Fluent → prefixed key echo
+    if (s === `${config.addonRef}-${key}`) return fallback;
+    return s;
+  } catch {
+    return fallback;
+  }
+}
+
 function waitForWindowLoad(win: Window): Promise<void> {
   return new Promise((resolve) => {
     if (win.document.readyState === "complete") {
@@ -76,22 +115,77 @@ function setStatus(doc: Document, text: string, isError = false): void {
   el.classList.toggle("error", isError);
 }
 
+function setButtonLabel(
+  el: Element | null,
+  key: string,
+  fallbackAttr?: string,
+): void {
+  if (!el) return;
+  const fromAttr = fallbackAttr
+    ? String(el.getAttribute(fallbackAttr) || "").trim()
+    : "";
+  const text = uiString(key) || fromAttr || LABEL_FALLBACK[key] || key;
+  el.textContent = text;
+  el.setAttribute("aria-label", text);
+}
+
 function refreshTargetBand(doc: Document, item: Zotero.Item | null): void {
   const el = doc.getElementById(`${config.addonRef}-oa-target`);
   if (!el) return;
   if (item) {
-    const title = String(item.getField("title") || `#${item.id}`);
-    el.textContent = getString("oa-search-target", {
-      args: { title: title.slice(0, 120) },
-    });
+    const title = String(item.getField("title") || `#${item.id}`).slice(0, 120);
+    el.textContent = uiString("oa-search-target", { title });
+    if (!String(el.textContent || "").trim()) {
+      el.textContent = `Seçili: ${title}`;
+    }
     el.classList.add("has-item");
   } else {
-    el.textContent = getString("oa-search-target-none");
+    el.textContent = uiString("oa-search-target-none");
     el.classList.remove("has-item");
   }
 }
 
+/** Prefer live Zotero selection so attach enables after pane click. */
+function syncTargetFromPane(
+  doc: Document,
+  state: OaSearchWindowState,
+): Zotero.Item | null {
+  const live = firstSelectedRegular();
+  if (live) state.targetItem = live;
+  refreshTargetBand(doc, state.targetItem);
+  return state.targetItem;
+}
+
+function applyChromeLabels(doc: Document): void {
+  const title = doc.getElementById(`${config.addonRef}-oa-title`);
+  if (title) title.textContent = uiString("oa-search-title");
+  doc.title = uiString("oa-search-title");
+  setButtonLabel(
+    doc.getElementById(`${config.addonRef}-oa-search`),
+    "oa-search-run",
+    "data-label",
+  );
+  setButtonLabel(
+    doc.getElementById(`${config.addonRef}-oa-attach`),
+    "oa-search-attach",
+    "data-label",
+  );
+  setButtonLabel(
+    doc.getElementById(`${config.addonRef}-oa-create`),
+    "oa-search-create",
+    "data-label",
+  );
+  setButtonLabel(
+    doc.getElementById(`${config.addonRef}-oa-related`),
+    "oa-search-related",
+    "data-label",
+  );
+}
+
 function updateActionButtons(doc: Document, state: OaSearchWindowState): void {
+  syncTargetFromPane(doc, state);
+  applyChromeLabels(doc);
+
   const hit = state.selectedIndex >= 0 ? state.hits[state.selectedIndex] : null;
   const hasPdf = Boolean(hit && String(hit.pdfUrl || "").trim());
   const hasTarget = Boolean(state.targetItem);
@@ -104,9 +198,25 @@ function updateActionButtons(doc: Document, state: OaSearchWindowState): void {
   const related = doc.getElementById(
     `${config.addonRef}-oa-related`,
   ) as HTMLButtonElement | null;
-  if (attach) attach.disabled = !(hasPdf && hasTarget);
-  if (create) create.disabled = !hasPdf;
-  if (related) related.disabled = !(hasPdf && hasTarget);
+
+  if (attach) {
+    attach.disabled = !(hasPdf && hasTarget);
+    attach.title = !state.hits.length
+      ? uiString("oa-search-hint-no-hit")
+      : !hasTarget
+        ? uiString("oa-search-hint-no-target")
+        : !hasPdf
+          ? uiString("oa-search-hint-no-pdf")
+          : "";
+  }
+  if (create) {
+    create.disabled = !hasPdf;
+    create.title = !hasPdf ? uiString("oa-search-hint-no-pdf") : "";
+  }
+  if (related) {
+    related.disabled = !(hasPdf && hasTarget);
+    related.title = attach?.title || "";
+  }
 }
 
 function renderHits(doc: Document, state: OaSearchWindowState): void {
@@ -115,7 +225,7 @@ function renderHits(doc: Document, state: OaSearchWindowState): void {
   tbody.innerHTML = "";
   if (!state.hits.length) {
     tbody.innerHTML = `<tr><td colspan="5" class="muted">${esc(
-      getString("oa-search-empty"),
+      uiString("oa-search-empty"),
     )}</td></tr>`;
     updateActionButtons(doc, state);
     return;
@@ -179,9 +289,10 @@ function prefillFromItem(doc: Document, item: Zotero.Item | null): void {
 async function runSearch(win: Window): Promise<void> {
   const doc = win.document;
   const state = getState();
+  syncTargetFromPane(doc, state);
   const sources = enabledFederatedSourceIds();
   if (!sources.length) {
-    setStatus(doc, getString("pdf-federated-no-sources"), true);
+    setStatus(doc, uiString("pdf-federated-no-sources"), true);
     return;
   }
   const text = (
@@ -197,11 +308,11 @@ async function runSearch(win: Window): Promise<void> {
     doc.getElementById(`${config.addonRef}-oa-authors`) as HTMLInputElement
   )?.value?.trim();
   if (!text && !doi && !isbn && !authors) {
-    setStatus(doc, getString("oa-search-need-query"), true);
+    setStatus(doc, uiString("oa-search-need-query"), true);
     return;
   }
 
-  setStatus(doc, getString("oa-search-searching"));
+  setStatus(doc, uiString("oa-search-searching"));
   state.hits = [];
   state.selectedIndex = -1;
   renderHits(doc, state);
@@ -212,28 +323,32 @@ async function runSearch(win: Window): Promise<void> {
       { profile: "full", totalLimit: 25 },
     );
     state.hits = Array.isArray(body.hits) ? body.hits : [];
-    state.selectedIndex = state.hits.length ? 0 : -1;
+    // Prefer first downloadable hit so Attach enables immediately.
+    let sel = state.hits.findIndex((h) => String(h.pdfUrl || "").trim());
+    if (sel < 0) sel = state.hits.length ? 0 : -1;
+    state.selectedIndex = sel;
     renderHits(doc, state);
     const errBits = Object.entries(body.errors || {})
       .map(([sid, err]) => `${sid}: ${err}`)
       .join("; ");
-    const base = getString("oa-search-results", {
-      args: { count: state.hits.length },
-    });
-    setStatus(
-      doc,
-      errBits ? `${base} — ${errBits}` : base,
-      Boolean(errBits) && !state.hits.length,
-    );
+    const base = uiString("oa-search-results", { count: state.hits.length });
+    let status = errBits ? `${base} — ${errBits}` : base;
+    if (state.hits.length && !hasSelectedPdf(state)) {
+      status = `${status} · ${uiString("oa-search-hint-no-pdf")}`;
+    } else if (state.hits.length && !state.targetItem) {
+      status = `${status} · ${uiString("oa-search-hint-no-target")}`;
+    }
+    setStatus(doc, status, Boolean(errBits) && !state.hits.length);
   } catch (e) {
     const msg = e instanceof Error ? e.message : String(e);
-    setStatus(
-      doc,
-      getString("oa-search-error", { args: { message: msg } }),
-      true,
-    );
+    setStatus(doc, uiString("oa-search-error", { message: msg }), true);
     ztoolkit.log("OA search window failed", e);
   }
+}
+
+function hasSelectedPdf(state: OaSearchWindowState): boolean {
+  const hit = state.selectedIndex >= 0 ? state.hits[state.selectedIndex] : null;
+  return Boolean(hit && String(hit.pdfUrl || "").trim());
 }
 
 async function withBusy(doc: Document, fn: () => Promise<void>): Promise<void> {
@@ -260,6 +375,11 @@ async function withBusy(doc: Document, fn: () => Promise<void>): Promise<void> {
 
 function wireActions(win: Window): void {
   const doc = win.document;
+  if (doc.documentElement.getAttribute("data-oa-wired") === "1") {
+    updateActionButtons(doc, getState());
+    return;
+  }
+  doc.documentElement.setAttribute("data-oa-wired", "1");
   const state = getState();
 
   doc
@@ -282,20 +402,34 @@ function wireActions(win: Window): void {
     });
   }
 
+  win.addEventListener("focus", () => {
+    updateActionButtons(doc, state);
+  });
+
   doc
     .getElementById(`${config.addonRef}-oa-attach`)
     ?.addEventListener("click", () => {
       void withBusy(doc, async () => {
+        syncTargetFromPane(doc, state);
         const hit = state.hits[state.selectedIndex];
         const item = state.targetItem;
-        if (!hit || !item) return;
-        setStatus(doc, getString("oa-search-attaching"));
+        if (!hit || !item) {
+          setStatus(
+            doc,
+            !item
+              ? uiString("oa-search-hint-no-target")
+              : uiString("oa-search-hint-no-pdf"),
+            true,
+          );
+          return;
+        }
+        setStatus(doc, uiString("oa-search-attaching"));
         const ok = await attachHitToItem(item, hit);
         setStatus(
           doc,
           ok
-            ? getString("oa-search-attach-ok")
-            : getString("oa-search-attach-fail"),
+            ? uiString("oa-search-attach-ok")
+            : uiString("oa-search-attach-fail"),
           !ok,
         );
       });
@@ -305,18 +439,22 @@ function wireActions(win: Window): void {
     .getElementById(`${config.addonRef}-oa-create`)
     ?.addEventListener("click", () => {
       void withBusy(doc, async () => {
+        syncTargetFromPane(doc, state);
         const hit = state.hits[state.selectedIndex];
-        if (!hit) return;
+        if (!hit || !String(hit.pdfUrl || "").trim()) {
+          setStatus(doc, uiString("oa-search-hint-no-pdf"), true);
+          return;
+        }
         const libraryID =
           state.targetItem?.libraryID ?? Zotero.Libraries.userLibraryID;
-        setStatus(doc, getString("oa-search-creating"));
+        setStatus(doc, uiString("oa-search-creating"));
         const item = await createItemFromHit(hit, libraryID, {
           attachPdf: true,
         });
         setStatus(
           doc,
-          getString("oa-search-create-ok", {
-            args: { title: String(item.getField("title") || "").slice(0, 80) },
+          uiString("oa-search-create-ok", {
+            title: String(item.getField("title") || "").slice(0, 80),
           }),
         );
       });
@@ -326,21 +464,29 @@ function wireActions(win: Window): void {
     .getElementById(`${config.addonRef}-oa-related`)
     ?.addEventListener("click", () => {
       void withBusy(doc, async () => {
+        syncTargetFromPane(doc, state);
         const hit = state.hits[state.selectedIndex];
         const item = state.targetItem;
-        if (!hit || !item) return;
-        setStatus(doc, getString("oa-search-attaching"));
+        if (!hit || !item) {
+          setStatus(
+            doc,
+            !item
+              ? uiString("oa-search-hint-no-target")
+              : uiString("oa-search-hint-no-pdf"),
+            true,
+          );
+          return;
+        }
+        setStatus(doc, uiString("oa-search-attaching"));
         const { attachmentOk, relatedItem } = await attachToSelectedWithRelated(
           item,
           hit,
         );
         setStatus(
           doc,
-          getString("oa-search-related-ok", {
-            args: {
-              attached: attachmentOk ? "yes" : "no",
-              title: String(relatedItem?.getField("title") || "").slice(0, 80),
-            },
+          uiString("oa-search-related-ok", {
+            attached: attachmentOk ? "yes" : "no",
+            title: String(relatedItem?.getField("title") || "").slice(0, 80),
           }),
           !attachmentOk,
         );
@@ -355,36 +501,21 @@ export async function initOaSearchWindow(win: Window): Promise<void> {
   state.hits = [];
   state.selectedIndex = -1;
 
-  doc.title = getString("oa-search-title");
-  const title = doc.getElementById(`${config.addonRef}-oa-title`);
-  if (title) title.textContent = getString("oa-search-title");
-
-  const labels: Array<[string, string]> = [
-    [`${config.addonRef}-oa-search`, "oa-search-run"],
-    [`${config.addonRef}-oa-attach`, "oa-search-attach"],
-    [`${config.addonRef}-oa-create`, "oa-search-create"],
-    [`${config.addonRef}-oa-related`, "oa-search-related"],
-  ];
-  for (const [id, key] of labels) {
-    const el = doc.getElementById(id);
-    if (el) el.textContent = getString(key);
-  }
-
+  applyChromeLabels(doc);
   refreshTargetBand(doc, state.targetItem);
   prefillFromItem(doc, state.targetItem);
   renderHits(doc, state);
-  setStatus(doc, getString("oa-search-ready"));
+  setStatus(doc, uiString("oa-search-ready"));
   wireActions(win);
+  updateActionButtons(doc, state);
 }
 
 export async function openOaSearchWindow(): Promise<void> {
   const state = getState();
   if (isWindowAlive(state.window)) {
-    state.targetItem = firstSelectedRegular();
     try {
-      refreshTargetBand(state.window!.document, state.targetItem);
-      prefillFromItem(state.window!.document, state.targetItem);
       updateActionButtons(state.window!.document, state);
+      prefillFromItem(state.window!.document, state.targetItem);
     } catch {
       /* ignore */
     }
