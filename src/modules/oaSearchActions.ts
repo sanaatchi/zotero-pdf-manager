@@ -1,4 +1,4 @@
-// @ajan: cursor · @etiket: katman-2, oa-search, actions, skip-validate
+// @ajan: cursor · @etiket: katman-2, oa-search, actions, multi-job-progress
 /**
  * OA Search popup actions: attach hit PDF, create item from hit, Related Items.
  * Pure field mapping is unit-tested; Zotero I/O stays async.
@@ -133,6 +133,7 @@ export async function attachHitToItem(
         landingUrl: hit.landingUrl || undefined,
         pdfUrl: url,
       },
+      label: String(hit.title || item.getDisplayTitle() || "").trim(),
     });
     if (!bytes) return false;
     // Explicit OA Search pick — trust like attachPdfFromUrl (validate: false).

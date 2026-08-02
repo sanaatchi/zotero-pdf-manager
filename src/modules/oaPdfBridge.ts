@@ -660,6 +660,10 @@ export async function fetchOaPdfViaBridge(opts: {
   pdfUrl?: string;
   extra?: Record<string, unknown>;
   onProgress?: (loaded: number, total: number) => void;
+  /** ProgressWindow line label (item title). */
+  label?: string;
+  /** Isolate concurrent downloads; auto-generated when omitted. */
+  progressJob?: string;
 }): Promise<Uint8Array | null> {
   const base = resolveOaBridgeUrl();
   const endpoint = `${base}/pdf-fetch`;
@@ -667,11 +671,25 @@ export async function fetchOaPdfViaBridge(opts: {
   const timeout =
     src === "libgen" ? OA_FETCH_TIMEOUT_LIBGEN_MS : OA_FETCH_TIMEOUT_MS;
 
-  const { startBridgeFetchProgressPoll, reportDownloadProgress } =
-    await import("../utils/downloadProgress");
-  const stopPoll = startBridgeFetchProgressPoll(base, (p) => {
-    opts.onProgress?.(p.loaded, p.total);
+  const {
+    startBridgeFetchProgressPoll,
+    reportDownloadProgress,
+    newDownloadJobId,
+    registerDownloadJob,
+    finishDownloadJob,
+  } = await import("../utils/downloadProgress");
+  const jobId = String(opts.progressJob || "").trim() || newDownloadJobId();
+  registerDownloadJob(jobId, {
+    source: src || "oa",
+    title: String(opts.label || opts.pdfUrl || "").trim(),
   });
+  const stopPoll = startBridgeFetchProgressPoll(
+    base,
+    (p) => {
+      opts.onProgress?.(p.loaded, p.total);
+    },
+    { jobId },
+  );
 
   let xhr: any;
   try {
@@ -681,6 +699,7 @@ export async function fetchOaPdfViaBridge(opts: {
         source: opts.source,
         pdfUrl: opts.pdfUrl || "",
         extra: opts.extra || {},
+        progressJob: jobId,
       }),
       responseType: "arraybuffer",
       timeout,
@@ -690,7 +709,7 @@ export async function fetchOaPdfViaBridge(opts: {
           req.addEventListener("progress", (ev: ProgressEvent) => {
             const loaded = Number(ev.loaded || 0);
             const total = ev.lengthComputable ? Number(ev.total || 0) : 0;
-            reportDownloadProgress(loaded, total);
+            reportDownloadProgress(loaded, total, jobId);
             opts.onProgress?.(loaded, total);
           });
         } catch {
@@ -700,6 +719,7 @@ export async function fetchOaPdfViaBridge(opts: {
     });
   } catch (e) {
     stopPoll();
+    finishDownloadJob(jobId, { ok: false });
     throw new Error(
       `oa_pdf köprü fetch kapalı (${base}): ${
         e instanceof Error ? e.message : String(e)
@@ -721,11 +741,18 @@ export async function fetchOaPdfViaBridge(opts: {
     } catch {
       detail = `HTTP ${status}`;
     }
+    finishDownloadJob(jobId, { ok: false });
     throw new Error(`oa_pdf fetch ${opts.source}: ${detail}`);
   }
-  if (!xhr?.response) return null;
+  if (!xhr?.response) {
+    finishDownloadJob(jobId, { ok: false });
+    return null;
+  }
   const bytes = new Uint8Array(xhr.response as ArrayBuffer);
-  if (bytes.length < 5) return null;
+  if (bytes.length < 5) {
+    finishDownloadJob(jobId, { ok: false });
+    return null;
+  }
   // %PDF
   if (
     bytes[0] !== 0x25 ||
@@ -733,9 +760,11 @@ export async function fetchOaPdfViaBridge(opts: {
     bytes[2] !== 0x44 ||
     bytes[3] !== 0x46
   ) {
+    finishDownloadJob(jobId, { ok: false });
     return null;
   }
-  reportDownloadProgress(bytes.length, bytes.length);
+  reportDownloadProgress(bytes.length, bytes.length, jobId);
+  finishDownloadJob(jobId, { ok: true });
   return bytes;
 }
 

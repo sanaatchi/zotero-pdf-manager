@@ -1,4 +1,4 @@
-// @ajan: cursor · @etiket: katman-2, python-pdf-sources, fetch-via-bridge
+// @ajan: cursor · @etiket: katman-2, python-pdf-sources, multi-job-progress
 /**
  * Online PDF sources backed by Kutuphane `oa_pdf_search` (8756 bridge).
  * Old in-plugin scrape/mirror logic was removed — discovery is Python-only.
@@ -149,6 +149,7 @@ export class OaPdfPythonSource implements PDFSource {
             landingUrl: hit.landingUrl || undefined,
             pdfUrl: url,
           },
+          label: String(item.getDisplayTitle() || ""),
         });
         if (!bytes) {
           ztoolkit.log(`oa_pdf ${this.id} bridge fetch empty`, url);

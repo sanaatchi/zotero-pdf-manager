@@ -118,6 +118,7 @@ async function attachHit(item: Zotero.Item, hit: OaPdfHit): Promise<boolean> {
         landingUrl: hit.landingUrl || undefined,
         pdfUrl: url,
       },
+      label: String(hit.title || item.getDisplayTitle() || "").trim(),
     });
     if (!bytes) return false;
     const att = await downloadAndAttach(item, url, {

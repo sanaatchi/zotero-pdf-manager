@@ -1,4 +1,4 @@
-// @ajan: cursor · @etiket: katman-2, pdfDownload, download-progress, tr-doi-unpaywall
+// @ajan: cursor · @etiket: katman-2, pdfDownload, multi-job-progress, parallel
 import {
   ALL_SOURCES,
   downloadAndAttach,
@@ -30,11 +30,7 @@ import {
   looksTurkish,
   prioritizeSourcesForItem,
 } from "./sourcePriority";
-import {
-  formatDownloadPercent,
-  setDownloadProgressHandler,
-  throttleProgress,
-} from "../utils/downloadProgress";
+import { mapPool } from "../utils/downloadProgress";
 
 export {
   resolveOaDownloadsDir,
@@ -263,100 +259,71 @@ export async function downloadPdfForSelectedItems() {
   }
 
   const skipExisting = getPref("pdf.skipExisting") ?? true;
-  const progress = new ztoolkit.ProgressWindow(config.addonName, {
-    closeOnClick: true,
-    closeTime: -1,
-  });
-  progress
-    .createLine({
-      text: getString("pdf-start", { args: { count: items.length } }),
-      type: "default",
-      progress: 0,
-    })
-    .show();
+  // Per-download ProgressWindow lines come from fetchOaPdfViaBridge (multi-job).
+  // Keep a short summary toast for the batch result.
+  notify(getString("pdf-start", { args: { count: items.length } }), "default");
 
   let success = 0;
   let skipped = 0;
   let failed = 0;
   const reports: ItemReport[] = [];
-  let currentSource = "";
-  let currentTitle = "";
+  const CONCURRENCY = Math.min(3, Math.max(1, items.length));
 
-  setDownloadProgressHandler(
-    throttleProgress((p) => {
-      const pctLabel = formatDownloadPercent(p);
-      const bar =
-        p.percent != null
-          ? p.percent
-          : Math.round((reports.length / Math.max(1, items.length)) * 100);
-      progress.changeLine({
-        text: getString("pdf-downloading", {
-          args: {
-            source: currentSource || "…",
-            title: currentTitle,
-            percent: pctLabel,
-          },
-        }),
-        progress: bar,
-      });
-    }),
-  );
+  type ItemOutcome = {
+    success?: boolean;
+    skipped?: boolean;
+    failed?: boolean;
+    report: ItemReport;
+  };
 
-  try {
-    for (let i = 0; i < items.length; i++) {
-      const item = items[i];
-      const title = item.getDisplayTitle();
-      currentTitle = title;
-
-      if (skipExisting && hasPDFAttachment(item)) {
-        skipped++;
-        reports.push({
+  const outcomes = await mapPool(items, CONCURRENCY, async (item) => {
+    const title = item.getDisplayTitle();
+    if (skipExisting && hasPDFAttachment(item)) {
+      return {
+        skipped: true,
+        report: {
           itemID: item.id,
           title,
-          result: "skipped",
+          result: "skipped" as const,
           note: "Zaten PDF eki var",
-          attempts: [],
-        });
+          attempts: [] as SourceAttempt[],
+        },
+      };
+    }
+
+    await ensureDOI(item);
+
+    const attempts: SourceAttempt[] = [];
+    let attached: unknown | null = null;
+    let attachedSource: string | undefined;
+    const sources = orderedSourcesForItem(item);
+    for (const src of sources) {
+      if (!src.supportsItem(item)) {
+        attempts.push({ source: src.id, outcome: "unsupported" });
         continue;
       }
-
-      await ensureDOI(item);
-
-      const attempts: SourceAttempt[] = [];
-      let attached: unknown | null = null;
-      let attachedSource: string | undefined;
-      const sources = orderedSourcesForItem(item);
-      for (const src of sources) {
-        if (!src.supportsItem(item)) {
-          attempts.push({ source: src.id, outcome: "unsupported" });
-          continue;
+      try {
+        const result = await src.tryAttach(item);
+        if (result) {
+          attempts.push({ source: src.id, outcome: "attached" });
+          attached = result;
+          attachedSource = src.id;
+          break;
         }
-        currentSource = src.id;
-        progress.changeLine({
-          text: getString("pdf-trying", { args: { source: src.id, title } }),
-          progress: Math.round((i / items.length) * 100),
-        });
-        try {
-          const result = await src.tryAttach(item);
-          if (result) {
-            attempts.push({ source: src.id, outcome: "attached" });
-            attached = result;
-            attachedSource = src.id;
-            break;
-          }
-          attempts.push({ source: src.id, outcome: "no-match" });
-        } catch (e) {
-          if (isAttachStoppedError(e)) {
-            attempts.push({
-              source: src.id,
-              outcome: e.reason === "review" ? "rejected" : "error",
-              reason: e.reason,
-            });
-            failed++;
-            reports.push({
+        attempts.push({ source: src.id, outcome: "no-match" });
+      } catch (e) {
+        if (isAttachStoppedError(e)) {
+          attempts.push({
+            source: src.id,
+            outcome: e.reason === "review" ? "rejected" : "error",
+            reason: e.reason,
+          });
+          return {
+            failed: true,
+            report: {
               itemID: item.id,
               title,
-              result: "failed",
+              result: "failed" as const,
               note:
                 e.reason === "review"
                   ? isBook(item)
@@ -364,60 +331,62 @@ export async function downloadPdfForSelectedItems() {
                     : "PDF review quarantine — cascade stopped"
                   : "Erase failed — cascade stopped; file kept",
               attempts,
-            });
-            attached = "stopped";
-            break;
-          }
-          if (isContentMismatchError(e)) {
-            attempts.push({
-              source: src.id,
-              outcome: "rejected",
-              reason: (e as Error).message,
-            });
-            continue;
-          }
+            },
+          };
+        }
+        if (isContentMismatchError(e)) {
           attempts.push({
             source: src.id,
-            outcome: "error",
-            reason: (e as Error)?.message || String(e),
+            outcome: "rejected",
+            reason: (e as Error).message,
           });
-          ztoolkit.log(`Source ${src.id} failed`, e);
+          continue;
         }
-      }
-
-      if (attached === "stopped") {
-        // already counted in failed + reports
-      } else if (attached) {
-        await maybeEmbedMetadata(item, attached as Zotero.Item);
-        success++;
-        reports.push({
-          itemID: item.id,
-          title,
-          result: "added",
-          attachedSource,
-          attempts,
+        attempts.push({
+          source: src.id,
+          outcome: "error",
+          reason: (e as Error)?.message || String(e),
         });
-      } else {
-        failed++;
-        reports.push({
-          itemID: item.id,
-          title,
-          result: "failed",
-          attempts,
-          note: failureHint(item, attempts),
-        });
+        ztoolkit.log(`Source ${src.id} failed`, e);
       }
     }
-  } finally {
-    setDownloadProgressHandler(null);
+
+    if (attached) {
+      await maybeEmbedMetadata(item, attached as Zotero.Item);
+      return {
+        success: true,
+        report: {
+          itemID: item.id,
+          title,
+          result: "added" as const,
+          attachedSource,
+          attempts,
+        },
+      };
+    }
+    return {
+      failed: true,
+      report: {
+        itemID: item.id,
+        title,
+        result: "failed" as const,
+        attempts,
+        note: failureHint(item, attempts),
+      },
+    };
+  });
+
+  for (const o of outcomes as ItemOutcome[]) {
+    reports.push(o.report);
+    if (o.skipped) skipped++;
+    else if (o.success) success++;
+    else failed++;
   }
 
-  progress.changeLine({
-    text: getString("pdf-done", { args: { success, skipped, failed } }),
-    type: success > 0 ? "success" : "default",
-    progress: 100,
-  });
-  progress.startCloseTimer(5000);
+  notify(
+    getString("pdf-done", { args: { success, skipped, failed } }),
+    success > 0 ? "success" : "default",
+  );
 
   await openDownloadReport(reports);
 }
