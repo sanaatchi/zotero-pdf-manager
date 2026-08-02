@@ -1,12 +1,23 @@
-// @ajan: cursor · @etiket: katman-2, oa-pdf-bridge, libgen-trust
+// @ajan: cursor · @etiket: katman-2, oa-pdf-bridge, loopback, ssrf
 /**
  * Katman-2 → Kutuphane köprü (8756) `oa_pdf_search` client.
  * Online PDF discovery runs in Python; this module only POSTs queries.
+ * LibGen book PDFs: long fetch timeout (keys refresh + multi-minute download).
+ * Bridge base URL is loopback-only (same SSRF policy as K1/K3).
  */
 import { getPref } from "../utils/prefs";
 import { normalizeDOI } from "../utils/metadataNormalize";
+import {
+  DEFAULT_OA_BRIDGE_URL,
+  isAllowedOaBridgeUrl,
+  normalizeOaBridgeUrl,
+} from "../utils/oaBridgeUrl";
 
-export const DEFAULT_OA_BRIDGE_URL = "http://127.0.0.1:8756";
+export {
+  DEFAULT_OA_BRIDGE_URL,
+  isAllowedOaBridgeUrl,
+  normalizeOaBridgeUrl,
+};
 
 export type OaPdfHit = {
   source: string;
@@ -27,6 +38,7 @@ export type OaPdfSearchRequest = {
   arxivId?: string;
   pmid?: string;
   pmcid?: string;
+  authors?: string;
   limit?: number;
 };
 
@@ -48,9 +60,7 @@ function itemDOI(item: Zotero.Item): string {
 }
 
 export function resolveOaBridgeUrl(): string {
-  const raw = String(getPref("pdf.oaBridgeUrl") || "").trim();
-  const url = (raw || DEFAULT_OA_BRIDGE_URL).replace(/\/+$/, "");
-  return url || DEFAULT_OA_BRIDGE_URL;
+  return normalizeOaBridgeUrl(String(getPref("pdf.oaBridgeUrl") || ""));
 }
 
 /** Build search fields from a Zotero item for one oa_pdf_search source id. */
@@ -83,10 +93,36 @@ export function buildOaSearchRequest(
     extra.match(/Tez\s*No\s*:\s*(\d{5,})/i)?.[1] ||
     "";
 
-  const text =
+  let text =
     sourceId === "yoktez" && yokNo && !title.includes(yokNo)
       ? `${title} ${yokNo}`.trim()
       : title;
+
+  let authors = "";
+  try {
+    const creators = item.getCreators() as Array<{
+      lastName?: string;
+      firstName?: string;
+      name?: string;
+    }>;
+    authors = (creators || [])
+      .slice(0, 3)
+      .map((c) =>
+        String(c.name || [c.firstName, c.lastName].filter(Boolean).join(" ")).trim(),
+      )
+      .filter(Boolean)
+      .join("; ");
+  } catch {
+    /* ignore */
+  }
+
+  // LibGen: core title before colon + author surnames (long subtitles miss catalog).
+  if (sourceId === "libgen" && title) {
+    const colon = title.search(/\s*[:—–]\s*/);
+    if (colon >= 8) {
+      text = title.slice(0, colon).trim();
+    }
+  }
 
   return {
     source: sourceId,
@@ -96,6 +132,7 @@ export function buildOaSearchRequest(
     arxivId,
     pmid,
     pmcid,
+    authors,
     limit,
   };
 }
@@ -117,6 +154,7 @@ export async function searchOaPdfBridge(
         arxivId: req.arxivId || "",
         pmid: req.pmid || "",
         pmcid: req.pmcid || "",
+        authors: req.authors || "",
         limit: req.limit ?? 5,
       }),
       responseType: "text",
@@ -281,6 +319,10 @@ export function trustedPdfUrlsFromHits(
  * Fetch PDF bytes through the Kutuphane bridge for every oa_pdf_search
  * download source (YÖK session, DergiPark, PMC, Sci-Hub, LibGen, …).
  */
+/** LibGen scanned books can take several minutes (md5 key refresh + stream). */
+const OA_FETCH_TIMEOUT_MS = 180_000;
+const OA_FETCH_TIMEOUT_LIBGEN_MS = 600_000;
+
 export async function fetchOaPdfViaBridge(opts: {
   source: string;
   pdfUrl?: string;
@@ -288,6 +330,9 @@ export async function fetchOaPdfViaBridge(opts: {
 }): Promise<Uint8Array | null> {
   const base = resolveOaBridgeUrl();
   const endpoint = `${base}/pdf-fetch`;
+  const src = String(opts.source || "").toLowerCase();
+  const timeout =
+    src === "libgen" ? OA_FETCH_TIMEOUT_LIBGEN_MS : OA_FETCH_TIMEOUT_MS;
   let xhr: any;
   try {
     xhr = await (Zotero.HTTP as any).request("POST", endpoint, {
@@ -298,7 +343,7 @@ export async function fetchOaPdfViaBridge(opts: {
         extra: opts.extra || {},
       }),
       responseType: "arraybuffer",
-      timeout: 180000,
+      timeout,
       successCodes: false,
     });
   } catch (e) {

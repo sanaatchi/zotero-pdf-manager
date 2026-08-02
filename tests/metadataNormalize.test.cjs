@@ -1,4 +1,4 @@
-// @ajan: cursor · @etiket: katman-2, format-metadata, test
+// @ajan: cursor · @etiket: katman-2, format-metadata, b4-lint, test
 const assert = require("node:assert/strict");
 const path = require("node:path");
 const { test } = require("node:test");
@@ -83,6 +83,72 @@ test("pages connector and title trailing-dot helpers", () => {
   assert.equal(normalizePagesConnector("12~34+56"), "12-34, 56");
   assert.equal(stripTitleTrailingDot("A Study."), "A Study");
   assert.equal(stripTitleTrailingDot("Dr. Who"), "Dr. Who");
+});
+
+test("B4: thesis type, zeros, language, planFieldNormalizations", () => {
+  const {
+    normalizeThesisType,
+    removeLeadingZeros,
+    guessLanguageTag,
+    planFieldNormalizations,
+  } = loadNormalize();
+  assert.equal(normalizeThesisType("Ph.D."), "Doctoral dissertation");
+  assert.equal(normalizeThesisType("yüksek lisans"), "Yüksek Lisans Tezi");
+  assert.equal(removeLeadingZeros("007-012"), "7-12");
+  assert.equal(guessLanguageTag("Varlık ve Zaman"), "tr-TR");
+  assert.equal(guessLanguageTag("Being and Time"), "en-US");
+  const patches = planFieldNormalizations({
+    title: "Tez Başlığı.",
+    language: "",
+    pages: "001~010",
+    doi: "DOI: 10.1000/XYZ",
+    thesisType: "doktora",
+    itemType: "thesis",
+  });
+  const byField = Object.fromEntries(patches.map((p) => [p.field, p.to]));
+  assert.equal(byField.title, "Tez Başlığı");
+  assert.equal(byField.language, "tr-TR");
+  assert.equal(byField.pages, "1-10");
+  assert.equal(byField.DOI, "10.1000/xyz");
+  assert.equal(byField.thesisType, "Doktora Tezi");
+});
+
+test("B4b: pages-range order, expand helpers, creators-case, extra order", () => {
+  const {
+    normalizePagesRangeOrder,
+    shouldExpandPagesFromPdf,
+    generatePagesRange,
+    normalizeCreatorCase,
+    reorderExtraField,
+    planFieldNormalizations,
+  } = loadNormalize();
+  assert.equal(normalizePagesRangeOrder("34–12"), "12-34");
+  assert.equal(normalizePagesRangeOrder("001~010"), "1-10");
+  assert.equal(shouldExpandPagesFromPdf("12"), true);
+  assert.equal(shouldExpandPagesFromPdf("12-34"), false);
+  assert.equal(shouldExpandPagesFromPdf("1234"), false);
+  assert.equal(generatePagesRange("12", 5), "12-16");
+  const creators = normalizeCreatorCase([
+    { fieldMode: 0, firstName: "JOHN", lastName: "DOE" },
+    { fieldMode: 0, firstName: "jane", lastName: "smith" },
+    { fieldMode: 1, lastName: "UNESCO" },
+  ]);
+  assert.equal(creators[0].firstName, "John");
+  assert.equal(creators[0].lastName, "Doe");
+  assert.equal(creators[1].firstName, "Jane");
+  assert.equal(creators[1].lastName, "Smith");
+  assert.equal(creators[2].lastName, "UNESCO");
+  const extra = reorderExtraField(
+    "Note: keep\nKutuphane-KP: KP000001\nCitation Key: doe2020\nDOI: 10.1/x",
+  );
+  assert.ok(extra);
+  assert.equal(
+    extra.split("\n")[0],
+    "Citation Key: doe2020",
+  );
+  assert.match(extra.split("\n")[1], /^Kutuphane-KP:/);
+  const patches = planFieldNormalizations({ pages: "34-12" });
+  assert.equal(patches.find((p) => p.field === "pages")?.to, "12-34");
 });
 
 test("compareMetadata treats ISBN-10↔13 as a match", () => {

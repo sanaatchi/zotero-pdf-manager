@@ -1,4 +1,4 @@
-<!-- @ajan: cursor · @etiket: katman-2, readme, pdf-manager -->
+<!-- @ajan: cursor · @etiket: katman-2, readme, policy-note -->
 
 # Zotero PDF Manager
 
@@ -49,14 +49,17 @@ Do **not** merge the three addons. Data flows 1 → 2 → 3.
 2. Zotero → Tools → Add-ons → gear → Install Add-on From File…
 3. Set **watch roots** and OA prefs under Preferences → Zotero PDF Manager.
 
-## Policy note (Sci-Hub / LibGen)
+## Policy note (Sci-Hub / LibGen / YÖKTez)
 
-**Accepted policy (Katman 2):** Automatic OA fallback never contacts Sci-Hub or
-LibGen. Those adapters remain in the public XPI for **manual, opt-in** use only
-(`pdf.scihubEnabled` / `pdf.libgenEnabled`, default **off**) and are **not** in
-the default `sourceOrder`. Enable them only if you accept the legal/policy risk
-in your jurisdiction; the project does not encourage circumvention of access
-controls.
+**Automatic OA** (`AUTOMATIC_ONLINE_SOURCE_IDS`) contacts only **DergiPark** and
+**PMC**. It never calls Sci-Hub, LibGen, proxy, or YÖKTez.
+
+**Manual Download / attach** may use LibGen, Sci-Hub, and YÖKTez when their prefs
+are enabled. Stock `prefs.js` currently ships those adapters **enabled** and
+listed in `sourceOrder` for the manual cascade — that is *not* the automatic
+path. Disable them in Preferences if you do not accept the legal/policy risk.
+YÖKTez for theses is intentional on the **manual** path until an explicit auto
+policy is chosen (see `CURSOR-KATMAN-2-EKSIKLER-RAPORU.md` G1).
 
 ## Build / test
 

@@ -1,4 +1,4 @@
-<!-- @ajan: cursor · @etiket: katman-2, pdf-manager, otomasyon, referans-port, eksik-raporu -->
+<!-- @ajan: cursor · @etiket: katman-2, pdf-manager, eksik-raporu, b4-lint, b5-dup-report -->
 
 # Katman 2 — Zotero PDF Manager planı
 
@@ -10,7 +10,7 @@
 | Alan    | Değer                                                   |
 | ------- | ------------------------------------------------------- |
 | addonID | `zotero-pdf-manager@ibrahimyildiz.art`                  |
-| Sürüm   | 1.0.34 (`package.json`)                                 |
+| Sürüm   | 1.0.49 (`package.json`)                                 |
 | Girdi   | Katman 1’den organize PDF’ler + mevcut Zotero kayıtları |
 | Çıktı   | Tutarlı ek + metadata → Katman 3 (LibRart)              |
 
@@ -58,7 +58,9 @@
 | `pdfContentMetadata`        | ✅        | pdf-lib gömülü alanlar + Crossref                    |
 | `automationAudit`           | ✅ P2-6   | Denetim raporu + dry-run                             |
 | `duplicateAttachmentMerger` | ✅        | Yinelenen ek                                         |
-| `metadataNormalize`         | ✅        | format-metadata selective (DOI/ISBN/pages/title)     |
+| `attachmentDelete`          | ✅ B1     | Linked ek disk silme + trash (delitemwithatt)        |
+| `metadataNormalize`         | ✅ B4a–c  | pages-range, creators-case, Extra sıra + menü        |
+| `duplicateItemReport`       | ✅ B5     | DOI/ISBN/KP aday raporu (yazma yok); Zoplicate yan XPI |
 
 ---
 
@@ -89,10 +91,9 @@ Port kaynağı: [`PDFMANAGER-REFERANS-PORT.md`](PDFMANAGER-REFERANS-PORT.md).
 
 ## Sonraki adım (Katman 2)
 
-1. **P2-1…P2-6 tamam** — günlük kullanım + dry-run doğrulama
-2. **format-metadata → metadataCheck** — ✅ selective port (`metadataNormalize`)
-3. Manuel Zotero kabul: [`ZOTERO-KABUL-CHECKLIST.md`](ZOTERO-KABUL-CHECKLIST.md)
-4. Katman 1 handoff: linked base = Kütüphane `Kitaplar/` veya OneDrive kök
+1. **G1** YÖKTez otomatik OA politikası (karar) — bkz. eksikler
+2. **G2** checklist v1.0.49 hazır — Bölüm A ✅; Bölüm B Zotero smoke kullanıcı
+3. İsteğe bağlı P3: univ/edition lint, `tr-TR` locale, Attanger menü rename
 
 ---
 
@@ -100,6 +101,8 @@ Port kaynağı: [`PDFMANAGER-REFERANS-PORT.md`](PDFMANAGER-REFERANS-PORT.md).
 
 | Tarih      | Ajan   | Özet                                                       |
 | ---------- | ------ | ---------------------------------------------------------- |
+| 2026-08-02 | cursor | Derin analiz: G1–G10; doküman hijyeni G3–G5              |
+| 2026-08-02 | cursor | B4b/c + B5: pages/creators/extra + dup rapor; v1.0.49     |
 | 2026-07-30 | cursor | format-metadata selective → metadataNormalize/Check        |
 | 2026-07-29 | cursor | P2-6 audit UI / dry-run polish                             |
 | 2026-07-29 | cursor | P2-5 orphanMode + gated autoCreate                         |

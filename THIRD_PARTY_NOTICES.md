@@ -1,4 +1,4 @@
-<!-- @ajan: cursor · @etiket: katman-2, lisans, notices, provenance -->
+<!-- @ajan: cursor · @etiket: katman-2, lisans, notices, provenance, b4-lint -->
 
 # Third-Party Notices
 
@@ -86,5 +86,31 @@ Identifier / light field normalization in `metadataNormalize.ts` and
 https://github.com/northword/zotero-format-metadata  
 Pinned review SHA: `39db0a31f5848329d2c34ffe3470bbcabb3ffc34`
 
-AGPL-3.0. Only DOI prefix strip, pages connector, title trailing-dot, and
-ISBN-10↔13 equivalence were ported — not the full rule engine.
+AGPL-3.0. Selective ports include DOI prefix strip, pages connector/range,
+title trailing-dot, ISBN-10↔13, language/thesis/zeros helpers, creators-case,
+and Extra field reorder. Journal abbreviation was **not** ported. Not the
+full rule engine.
+
+## Delete Item With Attachment (selective / behavior)
+
+Linked-file disk unlink + attachment trash menus adapt the safety posture of:
+
+https://github.com/redleafnew/delitemwithatt  
+Pinned review SHA: `d2eaeedb40619f4d2fbe0b7b615016c01e85bdbd`
+
+GPL-3.0. Local mirror: `referanslar/katman-2/ek-silme/delitemwithatt`.
+Ported behavior only (confirm → unlink LINKED_FILE → trash attachment /
+optional parent item). Language/export/collection wipe features were **not**
+ported. Attribution: `src/modules/attachmentDelete.ts`,
+`src/utils/attachmentDeletePlan.ts`, `PDFMANAGER-VENDOR.md`.
+
+## Zoplicate (companion XPI — not vendored)
+
+Item-level duplicate merge is **not** embedded. Install Zoplicate alongside
+PDF Manager when master-merge UX is needed:
+
+https://github.com/ChenglongMa/zoplicate  
+Local mirror review SHA: `6e93d9fc53d14e8c971b74882d9ac55295374a37`
+
+AGPL-3.0. PDF Manager only ships a read-only DOI/ISBN/KP candidate report
+(`duplicateItemReport.ts`).

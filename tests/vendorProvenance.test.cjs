@@ -36,6 +36,11 @@ const PINNED = [
     sha: "39db0a31f5848329d2c34ffe3470bbcabb3ffc34",
     spdx: "AGPL",
   },
+  {
+    name: "delitemwithatt",
+    sha: "d2eaeedb40619f4d2fbe0b7b615016c01e85bdbd",
+    spdx: "GPL-3.0",
+  },
 ];
 
 test("vendor table pins full SHAs and notices echo them", () => {
@@ -71,6 +76,7 @@ test("vendor table pins full SHAs and notices echo them", () => {
   assert.match(vendor, /pdfReconciler\.ts/);
   assert.match(vendor, /oaDownloadPath\.ts/);
   assert.match(vendor, /metadataNormalize\.ts/);
+  assert.match(vendor, /attachmentDelete\.ts/);
 });
 
 test("prefs expose libraryBatchSize for scale scans", () => {

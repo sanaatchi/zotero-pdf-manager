@@ -1,3 +1,4 @@
+/* @ajan: cursor · @etiket: katman-2, menu, b4-lint, b5-dup-report */
 /*eslint no-constant-condition: ["error", { "checkLoops": false }]*/
 import { getString } from "../utils/locale";
 import { config } from "../../package.json";
@@ -21,6 +22,12 @@ import { checkMetadataForSelectedItems } from "./metadataCheck";
 import { fillMetadataFromSelectedPDFFilenames } from "./filenameMetadata";
 import { mergeDuplicatePDFAttachments } from "./duplicateAttachmentMerger";
 import { researchMetadataForSelectedPDFs } from "./pdfContentMetadata";
+import {
+  deleteAttachmentsAndItemsForSelection,
+  deleteAttachmentsForSelectedItems,
+} from "./attachmentDelete";
+import { normalizeMetadataForSelectedItems } from "./metadataNormalizeApply";
+import { reportDuplicateItemsForSelection } from "./duplicateItemReportApply";
 import {
   monitorChangedAttachmentItems,
   removeDuplicateFileLinks,
@@ -714,6 +721,16 @@ export default class Menu {
         },
         {
           tag: "menuitem",
+          label: getString("pdf-normalize-metadata-menu"),
+          icon: addon.data.icons.downloadPdf,
+          getVisibility: () =>
+            ZoteroPane.getSelectedItems().some((item) => item.isRegularItem()),
+          commandListener: async () => {
+            await normalizeMetadataForSelectedItems();
+          },
+        },
+        {
+          tag: "menuitem",
           label: getString("pdf-filename-metadata-menu"),
           icon: addon.data.icons.downloadPdf,
           getVisibility: () =>
@@ -736,6 +753,59 @@ export default class Menu {
             ),
           commandListener: async () => {
             await mergeDuplicatePDFAttachments();
+          },
+        },
+        {
+          tag: "menuitem",
+          label: getString("pdf-dup-report-menu"),
+          icon: addon.data.icons.downloadPdf,
+          getVisibility: () =>
+            ZoteroPane.getSelectedItems().filter((item) => item.isRegularItem())
+              .length >= 2,
+          commandListener: async () => {
+            await reportDuplicateItemsForSelection();
+          },
+        },
+        {
+          tag: "menuitem",
+          label: getString("pdf-delete-att-keep-menu"),
+          icon: addon.data.icons.downloadPdf,
+          getVisibility: () =>
+            ZoteroPane.getSelectedItems().some(
+              (item) =>
+                item.isRegularItem() ||
+                (item.isAttachment() && Boolean(item.parentItemID)),
+            ),
+          commandListener: async () => {
+            await deleteAttachmentsForSelectedItems({
+              deleteLinkedFiles: false,
+            });
+          },
+        },
+        {
+          tag: "menuitem",
+          label: getString("pdf-delete-att-files-menu"),
+          icon: addon.data.icons.downloadPdf,
+          getVisibility: () =>
+            ZoteroPane.getSelectedItems().some(
+              (item) =>
+                item.isRegularItem() ||
+                (item.isAttachment() && Boolean(item.parentItemID)),
+            ),
+          commandListener: async () => {
+            await deleteAttachmentsForSelectedItems({
+              deleteLinkedFiles: true,
+            });
+          },
+        },
+        {
+          tag: "menuitem",
+          label: getString("pdf-delete-item-att-menu"),
+          icon: addon.data.icons.downloadPdf,
+          getVisibility: () =>
+            ZoteroPane.getSelectedItems().some((item) => item.isRegularItem()),
+          commandListener: async () => {
+            await deleteAttachmentsAndItemsForSelection();
           },
         },
         {

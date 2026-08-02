@@ -1,9 +1,12 @@
-<!-- @ajan: cursor · @etiket: katman-2, referans-port, lisans -->
+<!-- @ajan: cursor · @etiket: katman-2, referans-port, b5-zoplicate -->
 
 # Zotero PDF Manager — referans eklenti entegrasyon planı
 
 **Bu belge:** `../referanslar/` altındaki üçüncü parti eklentilerden **Katman 2** PDF Manager’a
 kod taşıma — lisans, yasaklar, hangi upstream’in nereye gideceği.
+
+**Kuratör kök (2026-08):** `../referanslar/katman-2/` — kategori klasörleri:
+`ek-dosya`, `metadata-linter`, `yinelenen`, `ek-silme`, `cnki-metadata`.
 
 Otomasyon fazları (**P2-1…P2-6**): [`AUTOMATION_PLAN.md`](AUTOMATION_PLAN.md) · Katman özeti:
 [`KATMAN-2-PLAN.md`](KATMAN-2-PLAN.md) · Fiili vendor tablo: [`PDFMANAGER-VENDOR.md`](PDFMANAGER-VENDOR.md)
@@ -47,15 +50,17 @@ LibRart (Katman 3) port planı **değil** → `../kaynak/LIBRART-REFERANS-PORT.m
 | Öncelik | Referans                 | Lisans                                      | Hedef modül                                      | Yöntem                                           |
 | ------- | ------------------------ | ------------------------------------------- | ------------------------------------------------ | ------------------------------------------------ |
 | **P0**  | `zotero-attanger`        | AGPL-3.0-or-later                           | `pdfReconciler`, eşik/debounce, match            | selective port                                   |
-| **P1**  | `zotero-watch-folder`    | GPL-3.0-only                                | `folderIndex` polling, `orphanProcessor` inbox   | selective (mtime/kuyruk; canlı FS watcher değil) |
-| **P1**  | `zotmoov`                | GPL-3.0                                     | linked-file / base-dir disiplini                 | selective / behavior                             |
-| **P2**  | `zotero-format-metadata` | AGPL                                        | `metadataCheck` kuralları                        | selective                                        |
+| **P1**  | `katman-1/klasor-izleme` (watch-folder) | GPL-3.0-only                     | `folderIndex` polling, `orphanProcessor` inbox   | selective (mtime/kuyruk; canlı FS watcher değil) |
+| **P1**  | `katman-2/ek-dosya/zotmoov` | GPL-3.0                                  | linked-file / base-dir disiplini                 | selective / behavior                             |
+| **P1**  | `katman-2/ek-silme/delitemwithatt` | GPL-3.0                           | `attachmentDelete` linked unlink                 | selective / behavior ✅ v1.0.47                  |
+| **P2**  | `katman-2/metadata-linter/zotero-format-metadata` | AGPL             | `metadataCheck` kuralları                        | selective                                        |
 | **P2**  | `zotero-zotadata`        | LICENSE=MIT / pkg=AGPL → **AGPL gibi işle** | `pdfDownload` OA şelale                          | selective (Sci-Hub hariç)                        |
-| **P3**  | `zoplicate`              | AGPL                                        | öğe merge UX (`duplicateAttachmentMerger` geniş) | selective / behavior                             |
+| **B5**  | `katman-2/yinelenen/zoplicate` | AGPL                               | **yan XPI** (merge); PDF Manager ince DOI/ISBN/KP rapor | companion + thin report (no merge port)          |
 | **P3**  | `zotero-arxiv-workflow`  | AGPL                                        | preprint↔yayın merge                             | selective / behavior                             |
+| Skip    | `katman-2/cnki-metadata/jasminum` | —                                | —                                                | CNKI; TR arşiv önceliği düşük                    |
 | Skip    | `zotero-file`            | AGPL                                        | —                                                | behavior-only (Attanger tercih)                  |
 | Skip    | `zotero-scipdf`          | AGPL                                        | —                                                | behavior-only opt-in                             |
-| Yasak   | `zotero-ocr`             | AGPL                                        | —                                                | **Katman 1 sınırı**                              |
+| Yasak   | OCR (`katman-1/ocr`)     | AGPL                                        | —                                                | **Katman 1 sınırı**                              |
 
 Mevcut notices: `zotero-attachment-scanner` (MIT) → [`THIRD_PARTY_NOTICES.md`](THIRD_PARTY_NOTICES.md).
 
@@ -69,11 +74,14 @@ Mevcut notices: `zotero-attachment-scanner` (MIT) → [`THIRD_PARTY_NOTICES.md`]
 | `pdfReconciler`             | ✅ P2-2/P2-3 | **attanger** eşik + settle + drain coalesce              |
 | `orphanProcessor`           | ✅ P2-5      | watch-folder (orphanMode + gated autoCreate)             |
 | `attachmentScanner`         | ✅           | attachment-scanner (MIT, notices)                        |
-| `metadataCheck`             | P2           | format-metadata                                          |
+| `metadataCheck`             | ✅ selective | format-metadata                                          |
 | `pdfDownload`               | ✅ P2-4      | zotadata (OA only → downloads/)                          |
-| `duplicateAttachmentMerger` | P3           | zoplicate / arxiv-workflow                               |
+| `attachmentDelete`          | ✅ B1        | delitemwithatt (linked unlink + trash)                   |
+| `duplicateAttachmentMerger` | ✅ PDF-att   | annotation-safe PDF merge (öğe merge = Zoplicate yan XPI)  |
 | `automationAudit`           | ✅ P2-6      | mevcut + filtre/özet/dry-run + geri alınabilir etiketler |
-| `pdfContentMetadata`        | P2-1+        | pdf-lib (bağımlılık) + format-metadata fikirleri         |
+| `pdfContentMetadata`        | ✅           | pdf-lib + Crossref; menüde manuel                           |
+| `metadataNormalize`         | ✅ B4a–c     | format-metadata selective                                |
+| `duplicateItemReport`       | ✅ B5        | DOI/ISBN/KP aday; Zoplicate companion                    |
 
 ```mermaid
 flowchart LR
@@ -150,6 +158,5 @@ DOI/ISBN/tez kapısı; manuel düğme serbest; v1.0.26.
 **Tamamlandı (P2-6):** denetim raporu filtre/özet/dry-run banner; geri alınabilir
 etiket listesi; clear audit; manuel dry-run sonrası audit açılır; v1.0.27.
 
-**Katman 2 otomasyon P2-1…P2-6 tamam.** format-metadata selective port tamam
-(`metadataNormalize` + `metadataCheck` + validation). Sonraki: manuel Zotero
-checklist / Katman 1 handoff.
+**Katman 2 otomasyon P2-1…P2-6 + B1–B5 tamam (v1.0.49).** Sonraki: G1 YÖKTez
+auto politikası · G2 manuel kabul checklist v1.0.49 · isteğe bağlı P3 lint.
