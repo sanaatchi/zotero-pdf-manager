@@ -1,9 +1,11 @@
-// @ajan: cursor · @etiket: katman-2, p1, publish, update-hash, provenance
+// @ajan: cursor · @etiket: katman-2, publish, prune-5, update-hash
 /**
  * Publish a release to the PUBLIC dist repo so Zotero can auto-update.
  *
  * All subprocesses use arg-array execFileSync (no shell). Notes are a single
  * argv value. Provenance JSON links source commit ↔ XPI sha512.
+ * After publish, keep only KEEP_VERSIONED_RELEASES (5) versioned tags; the
+ * rolling `update` release is never deleted.
  *
  * Usage:
  *   npm run gh-release
@@ -19,6 +21,8 @@ import { tmpdir } from "node:os";
 const DIST_REPO = "sanaatchi/zotero-pdf-manager-releases";
 const SOURCE_REPO = "sanaatchi/zotero-pdf-manager";
 const UPDATE_RELEASE = "update";
+/** Keep this many versioned (v*) releases; always preserve `update`. */
+const KEEP_VERSIONED_RELEASES = 5;
 const isWin = process.platform === "win32";
 const npmBin = isWin ? "npm.cmd" : "npm";
 const ghBin = "gh";
@@ -256,6 +260,74 @@ function verifyPublicDownload(updateHash) {
   }
 }
 
+/**
+ * After publish: keep the newest KEEP_VERSIONED_RELEASES tags matching /^v/,
+ * delete older versioned releases (+ tags). Never touch `update`.
+ */
+export function selectReleasesToPrune(
+  tagsNewestFirst,
+  keep = KEEP_VERSIONED_RELEASES,
+) {
+  const versioned = tagsNewestFirst.filter((t) => /^v\d/.test(String(t)));
+  return versioned.slice(Math.max(0, keep));
+}
+
+function pruneOldVersionedReleases() {
+  console.log(
+    `\n=== Prune: keep ${KEEP_VERSIONED_RELEASES} versioned + '${UPDATE_RELEASE}' ===`,
+  );
+  let raw;
+  try {
+    raw = capture("gh", [
+      "release",
+      "list",
+      "--repo",
+      DIST_REPO,
+      "--limit",
+      "100",
+      "--json",
+      "tagName,createdAt",
+    ]);
+  } catch (e) {
+    console.warn("Release list failed; skip prune", e.message || e);
+    return;
+  }
+  let rows;
+  try {
+    rows = JSON.parse(raw);
+  } catch (e) {
+    console.warn("Release list JSON parse failed; skip prune", e.message || e);
+    return;
+  }
+  const sorted = [...rows].sort(
+    (a, b) => new Date(b.createdAt) - new Date(a.createdAt),
+  );
+  const drop = selectReleasesToPrune(
+    sorted.map((r) => r.tagName),
+    KEEP_VERSIONED_RELEASES,
+  );
+  if (!drop.length) {
+    console.log("Nothing to prune");
+    return;
+  }
+  for (const t of drop) {
+    console.log(`Deleting old release ${t}`);
+    try {
+      run(ghBin, [
+        "release",
+        "delete",
+        t,
+        "--repo",
+        DIST_REPO,
+        "--yes",
+        "--cleanup-tag",
+      ]);
+    } catch (e) {
+      console.warn(`Failed to delete ${t}:`, e.message || e);
+    }
+  }
+}
+
 function main() {
   console.log(`\n=== Gates for ${tag} (${SOURCE_REPO}) ===`);
   assertCleanTree();
@@ -294,6 +366,7 @@ function main() {
   ensureUpdateRelease(body);
   publishUpdateJsonToBranch(body);
   verifyPublicDownload(updateHash);
+  pruneOldVersionedReleases();
 
   console.log(`\nDone. ${tag}`);
   console.log(`XPI: ${updateLink}`);
