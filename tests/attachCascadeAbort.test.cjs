@@ -57,7 +57,8 @@ test("validation + cascade: AttachStoppedError stops further sources", () => {
     "utf8",
   );
   assert.match(source, /class AttachStoppedError/);
-  // mismatch/unverifiable detach successfully → ContentMismatchError (cascade may continue).
+  // mismatch detach successfully → ContentMismatchError (cascade may continue).
+  // unverifiable keeps the attachment (#pdf-review).
   // Only erase-failed keeps the Zotero link and stops the cascade.
   assert.doesNotMatch(source, /throw new AttachStoppedError\("review"/);
   assert.match(source, /throw new AttachStoppedError\("erase-failed"/);

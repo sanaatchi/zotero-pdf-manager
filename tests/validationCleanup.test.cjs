@@ -4,7 +4,7 @@ const fs = require("node:fs");
 const path = require("node:path");
 const { test } = require("node:test");
 
-test("validation verdicts: match clears review; mismatch/unverifiable detach link keep disk", () => {
+test("validation verdicts: match clears review; mismatch detaches; unverifiable keeps", () => {
   const source = fs.readFileSync(
     path.join(process.cwd(), "src/modules/pdfSources.ts"),
     "utf8",
@@ -17,6 +17,10 @@ test("validation verdicts: match clears review; mismatch/unverifiable detach lin
   assert.match(source, /Rejected PDF \(\$\{verdict\}\)/);
   assert.match(source, /renameRejectedPdfOnDisk/);
   assert.match(source, /Never IOUtils\.remove the PDF/);
+  assert.match(
+    source,
+    /unverifiable[\s\S]*?keeping attachment \(#pdf-review\)/,
+  );
   assert.doesNotMatch(source, /AttachStoppedError\("review"/);
   // Detach Zotero link only — do not delete the persisted download.
   assert.match(source, /await opts\.attachment\.eraseTx\(\)/);
@@ -24,6 +28,8 @@ test("validation verdicts: match clears review; mismatch/unverifiable detach lin
     source,
     /await opts\.attachment\.eraseTx\(\);[\s\S]*?IOUtils\.remove\(opts\.persistedPath\)/,
   );
+  // Storage rescue before erase.
+  assert.match(source, /rejected storage PDF rescue/);
 });
 
 test("cleanupRejectedAttachment does not delete file when erase fails", async () => {

@@ -140,3 +140,26 @@ test("article validation stays stricter than books", () => {
     "mismatch",
   );
 });
+
+test("article validation rejects Golub name-only PDF without mercenaries", () => {
+  const { decideContentValidation, distinctiveTitleCoverage } = loadModule();
+  const itemTitle = "The mercenaries: an interview with Leon Golub";
+  const turkishEssay =
+    "Leon Golub resimlerinde bellek olarak fotograf kullanimi interview leon golub";
+  const coverage = distinctiveTitleCoverage(itemTitle, turkishEssay);
+  assert.ok(coverage < 1, "mercenaries missing → coverage < 1");
+  assert.equal(
+    decideContentValidation({
+      kind: "other",
+      textChars: 500,
+      titleHit: 0.8,
+      score: 1.2,
+      hasIdConflict: false,
+      hasIdMatch: false,
+      authorExpected: true,
+      authorFound: true,
+      distinctiveCoverage: coverage,
+    }),
+    "mismatch",
+  );
+});

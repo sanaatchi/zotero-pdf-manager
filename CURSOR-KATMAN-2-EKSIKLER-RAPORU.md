@@ -2,7 +2,7 @@
 
 # Cursor — Katman 2 Eksikler Raporu
 
-**Tarih:** 2026-08-02 · **Sürüm:** PDF Manager **v1.0.54**  
+**Tarih:** 2026-08-02 · **Sürüm:** PDF Manager **v1.0.55**  
 **Analiz:** ürün ↔ `referanslar/katman-2/` ↔ GitHub (Attanger, Zotadata, Zoplicate,
 ZotAssets, File Utility, Attachment Scanner, ozefe/yoktez).
 

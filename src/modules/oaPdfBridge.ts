@@ -1,4 +1,4 @@
-// @ajan: cursor · @etiket: katman-2, oa-pdf-bridge, short-title-guard
+// @ajan: cursor · @etiket: katman-2, oa-pdf-bridge, distinctive-title-trust
 /**
  * Katman-2 → Kutuphane köprü (8756) `oa_pdf_search` client.
  * Online PDF discovery runs in Python; this module only POSTs queries.
@@ -271,23 +271,31 @@ const TITLE_STOP = new Set([
   "into",
   "upon",
   "between",
+  "uzerine",
+  "hakkinda",
+  "icinde",
+  "arasinda",
+  "through",
+  "towards",
+  "against",
 ]);
 
 /**
- * Mid-band scores (0.45–0.8) need a distinctive query token (≥7, not stop)
- * present in the hit title — blocks "Interview with Todd Golub" for a
- * Leon Golub Mercenaries interview.
+ * Mid-band scores (0.45–0.8) need every distinctive query token (≥7, not stop)
+ * present in the hit title — blocks "Interview with Todd Golub" and Turkish
+ * Golub essays that only share the artist name.
  */
 function titleTrustOk(itemTitle: string, hitTitle: string): boolean {
   const ov = titleMatchScore(itemTitle, hitTitle);
-  if (ov >= 0.8) return true;
   if (ov < 0.45) return false;
   const hitToks = new Set(normTokens(hitTitle));
   const distinctive = normTokens(itemTitle).filter(
     (t) => t.length >= 7 && !TITLE_STOP.has(t),
   );
   if (!distinctive.length) return ov >= 0.6;
-  return distinctive.some((t) => hitToks.has(t));
+  // ALL distinctive tokens required (e.g. "mercenaries" must appear).
+  if (!distinctive.every((t) => hitToks.has(t))) return false;
+  return ov >= 0.45;
 }
 
 export type HitTrustContext = {
@@ -313,14 +321,22 @@ export function filterTrustedHits(
     if (!url) continue;
     const hitDoi = normalizeDOI(String(hit.doi || ""));
     const doiMatch = !!(itemDoi && hitDoi && itemDoi === hitDoi);
-    const ov = titleMatchScore(itemTitle, String(hit.title || ""));
+    const hitTitle = String(hit.title || "");
+    const ov = titleMatchScore(itemTitle, hitTitle);
+    // DOI match is not enough alone: a wrong DOI on the item (or Unpaywall
+    // returning another Golub paper) must still pass the title gate.
     if (doiMatch) {
+      if (itemTitle && hitTitle && !titleTrustOk(itemTitle, hitTitle)) {
+        continue;
+      }
       scored.push({ hit, rank: 1 + ov });
       continue;
     }
-    // Sci-Hub pages are DOI-addressed; trust when the item already has a DOI
-    // (wrong DOI is a separate ensureDOI problem).
+    // Sci-Hub is DOI-keyed; still require title when both sides have one.
     if (ctx.sourceId === "scihub" && itemDoi) {
+      if (itemTitle && hitTitle && !titleTrustOk(itemTitle, hitTitle)) {
+        continue;
+      }
       scored.push({ hit, rank: 0.9 });
       continue;
     }

@@ -1,4 +1,4 @@
-// @ajan: cursor · @etiket: katman-2, content-validate, fail-closed
+// @ajan: cursor · @etiket: katman-2, content-validate, distinctive-title
 import { getString } from "../utils/locale";
 import { getPref } from "../utils/prefs";
 import {
@@ -25,6 +25,7 @@ import {
   releaseDownloadPathReservation,
   reserveUniqueDownloadPath,
   resolveOaDownloadsDir,
+  sanitizeDownloadBasename,
   shouldCleanupPersistedDownload,
 } from "./oaDownloadPath";
 
@@ -255,6 +256,54 @@ function tokenize(s: string): string[] {
     .filter((w) => w.length > 3);
 }
 
+/** Generic words ignored when judging distinctive title evidence in PDF text. */
+const CONTENT_TITLE_STOP = new Set([
+  "interview",
+  "conversation",
+  "research",
+  "analysis",
+  "study",
+  "article",
+  "review",
+  "about",
+  "with",
+  "from",
+  "into",
+  "upon",
+  "between",
+  "that",
+  "this",
+  "uzerine",
+  "hakkinda",
+  "icinde",
+  "arasinda",
+  "through",
+  "towards",
+  "against",
+]);
+
+/**
+ * Distinctive title tokens (≥7 chars, not stop) that must appear in PDF text
+ * for an article "match" — prevents another Golub essay matching via name only.
+ */
+export function distinctiveTitleTokens(title: string): string[] {
+  return tokenize(title).filter(
+    (t) => t.length >= 7 && !CONTENT_TITLE_STOP.has(t),
+  );
+}
+
+export function distinctiveTitleCoverage(
+  title: string,
+  rawText: string,
+): number {
+  const need = distinctiveTitleTokens(title);
+  if (!need.length) return 1;
+  const text = normalizeSearchText(rawText);
+  if (!text) return 0;
+  const hit = need.filter((t) => text.includes(t)).length;
+  return hit / need.length;
+}
+
 function titleSimilar(a: string, b: string): boolean {
   const ta = new Set(tokenize(a));
   const tb = new Set(tokenize(b));
@@ -325,12 +374,12 @@ function scoreText(item: Zotero.Item, rawText: string): number {
  * metadata.
  *
  * - match: extractable text supports the item
- * - mismatch: extractable text conflicts — reject / erase
- * - unverifiable: too little extractable text — download path still erases
+ * - mismatch: extractable text conflicts — detach Zotero link; keep disk copy
+ * - unverifiable: too little extractable text / PDFWorker failure — **keep**
+ *   attachment and tag `#pdf-review` (do not erase downloaded PDFs)
  * - skipped: validation pref off
  *
- * Books: ISBN/DOI conflict → erase. Strong title/score or ISBN match → keep.
- * Weak / wrong evidence → erase (do not quarantine-keep wrong OA catalogs).
+ * Books: ISBN/DOI conflict → mismatch. Strong title/score or ISBN match → keep.
  */
 export type ContentValidation =
   "match" | "mismatch" | "unverifiable" | "skipped";
@@ -347,6 +396,11 @@ export function decideContentValidation(input: {
   hasIdMatch: boolean;
   authorExpected: boolean;
   authorFound: boolean;
+  /**
+   * 0–1 share of distinctive title tokens (≥7, not stop) found in PDF.
+   * Articles require 1.0 so a different Golub paper cannot match on name alone.
+   */
+  distinctiveCoverage?: number;
 }): ContentValidation {
   if (input.textChars < 50) return "unverifiable";
   if (input.hasIdConflict) return "mismatch";
@@ -355,7 +409,12 @@ export function decideContentValidation(input: {
   if (input.kind === "book" && input.authorExpected && !input.authorFound) {
     return "mismatch";
   }
-  if (input.score >= 0.6) return "match";
+  if (input.score >= 0.6) {
+    if (input.kind !== "book" && (input.distinctiveCoverage ?? 1) < 1) {
+      return "mismatch";
+    }
+    return "match";
+  }
 
   if (input.kind === "book") {
     // Solid title evidence → keep; otherwise erase wrong catalogs/books.
@@ -363,7 +422,8 @@ export function decideContentValidation(input: {
     return "mismatch";
   }
 
-  // Articles / other: stricter auto-accept to cut wrong-paper attaches.
+  // Articles / other: require full distinctive-token coverage + title evidence.
+  if ((input.distinctiveCoverage ?? 1) < 1) return "mismatch";
   if (input.score >= 0.45 && input.titleHit >= 0.5) return "match";
   return "mismatch";
 }
@@ -432,6 +492,10 @@ export async function validateAttachmentContentDetailed(
       hasIdMatch: hasIdentifierMatch(structured),
       authorExpected: surname.length > 2,
       authorFound,
+      distinctiveCoverage: distinctiveTitleCoverage(
+        String(item.getField("title") || ""),
+        text,
+      ),
     });
 
     // Local LLM (Ollama via 8756 bridge) when enabled and text is usable.
@@ -525,6 +589,8 @@ async function removeAutomationTag(
  * Detach rejected PDF from the Zotero item (erase attachment / link only).
  * Keep the on-disk PDF and rename it so orphan import can recreate a source
  * from labelled filename metadata (title=/author=/year=).
+ * Storage (imported) attachments are copied into downloads/ before erase so
+ * the bytes are never lost with Zotero's storage file.
  */
 export async function cleanupRejectedAttachment(opts: {
   attachment: Zotero.Item;
@@ -537,6 +603,40 @@ export async function cleanupRejectedAttachment(opts: {
     (opts.persistedPath || "").trim() ||
     ((await opts.attachment.getFilePathAsync?.()) as string) ||
     "";
+
+  // Imported/storage attach: rescue a copy under downloads/ before eraseTx
+  // deletes Zotero's storage blob.
+  if (diskPath && !opts.persistedPath) {
+    try {
+      const roots = getWatchRoots();
+      const dir = resolveOaDownloadsDir(roots);
+      if (dir && (await IOUtils.exists(diskPath))) {
+        await IOUtils.makeDirectory(dir, {
+          createAncestors: true,
+          ignoreExisting: true,
+        });
+        const stem = sanitizeDownloadBasename(
+          (PathUtils.split(diskPath).pop() as string)?.replace(/\.pdf$/i, "") ||
+            `rejected-item-${opts.attachment.id || "x"}`,
+        );
+        const dest = await reserveUniqueDownloadPath(
+          dir,
+          `${stem}-rejected`,
+          async (p) => !!(await IOUtils.exists(p)),
+        );
+        try {
+          await IOUtils.copy(diskPath, dest);
+          diskPath = dest;
+          releaseDownloadPathReservation(dest);
+        } catch (e) {
+          releaseDownloadPathReservation(dest);
+          ztoolkit.log("rejected storage PDF rescue copy failed", e);
+        }
+      }
+    } catch (e) {
+      ztoolkit.log("rejected storage PDF rescue skipped", e);
+    }
+  }
 
   if (diskPath && (opts.pdfText || "").trim()) {
     try {
@@ -699,9 +799,17 @@ export async function downloadAndAttach(
       await removeAutomationTag(item, "#pdf-quarantine");
       return attachment;
     }
-    // mismatch OR unverifiable: detach link, keep+rename PDF on disk.
+    // Scanned / image-only / PDFWorker failure: keep the downloaded PDF.
+    if (verdict === "unverifiable") {
+      ztoolkit.log(
+        `PDF content unverifiable for ${item.id} — keeping attachment (#pdf-review)`,
+      );
+      await tagItem(item, "#pdf-review");
+      return attachment;
+    }
+    // mismatch: detach Zotero link; keep+rename (or rescue) PDF on disk.
     ztoolkit.log(
-      `Rejected PDF (${verdict}) for ${item.id} — detach link, rename on disk`,
+      `Rejected PDF (${verdict}) for ${item.id} — detach link, keep disk copy`,
     );
     const cleaned = await cleanupRejectedAttachment({
       attachment,
@@ -715,9 +823,7 @@ export async function downloadAndAttach(
       throw new AttachStoppedError("erase-failed", attachment);
     }
     throw new ContentMismatchError(
-      verdict === "unverifiable"
-        ? "PDF metni okunamadı / doğrulanamadı — Zotero eki kaldırıldı (dosya diskte yeniden adlandırıldı)"
-        : "PDF içeriği künye ile uyuşmadı — Zotero eki kaldırıldı (dosya diskte orphan-hazır adla bırakıldı)",
+      "PDF içeriği künye ile uyuşmadı — Zotero eki kaldırıldı (dosya diskte orphan-hazır adla bırakıldı)",
     );
   }
   return attachment;
@@ -977,6 +1083,23 @@ export class LocalFolderSource implements PDFSource {
         const words = new Set(f.norm.split(/\s+/).filter(Boolean));
         const hit =
           titleTokens.filter((t) => words.has(t)).length / titleTokens.length;
+        const distinctive = distinctiveTitleTokens(rawTitle);
+        const distHit = distinctive.filter(
+          (t) => words.has(t) || f.norm.includes(t),
+        ).length;
+        const distRatio = distinctive.length ? distHit / distinctive.length : 1;
+        // <50% distinctive → reject (e.g. name-only Golub PDF).
+        if (distRatio < 0.5) {
+          return {
+            f,
+            score: 0,
+            fine: 0,
+            hit: 0,
+            authorMatch: false,
+            distRatio,
+            skip: true,
+          };
+        }
         const authorMatch =
           !!surname && surname.length > 2 && f.norm.includes(surname);
         const yearMatch = !!year && f.norm.includes(year);
@@ -1000,9 +1123,17 @@ export class LocalFolderSource implements PDFSource {
         const fine =
           titleTokensAll.filter((t) => words.has(t)).length /
           titleTokensAll.length;
-        return { f, score, fine, hit, authorMatch };
+        return {
+          f,
+          score,
+          fine,
+          hit,
+          authorMatch,
+          distRatio,
+          skip: false,
+        };
       })
-      .filter((s) => s.score >= review || s.hit >= 0.5)
+      .filter((s) => !s.skip && (s.score >= review || s.hit >= 0.5))
       .sort((a, b) => b.score - a.score || b.fine - a.fine);
 
     if (!scored.length) return { status: "none" };
@@ -1018,7 +1149,11 @@ export class LocalFolderSource implements PDFSource {
     }
 
     const best = scored[0];
-    const decision = classifyMatchConfidence(best.score, autoAttach, review);
+    let decision = classifyMatchConfidence(best.score, autoAttach, review);
+    // Auto-attach only when every distinctive title token is present.
+    if (decision === "attach" && (best.distRatio ?? 1) < 1) {
+      decision = "review";
+    }
     if (decision === "attach") {
       return { status: "matched", file: best.f, score: best.score };
     }

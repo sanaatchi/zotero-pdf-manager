@@ -66,8 +66,9 @@ test("filterTrustedHits keeps DOI match and drops weak titles", () => {
 
 test("filterTrustedHits allows scihub when item has DOI", () => {
   const { filterTrustedHits } = loadBridge();
+  // Empty hit title → DOI-keyed Sci-Hub still trusted (title gate N/A).
   const trusted = filterTrustedHits(
-    [{ source: "scihub", title: "x", pdfUrl: "https://sci-hub.se/p.pdf" }],
+    [{ source: "scihub", title: "", pdfUrl: "https://sci-hub.se/p.pdf" }],
     { title: "Anything", doi: "10.1000/x", sourceId: "scihub" },
   );
   assert.equal(trusted.length, 1);
@@ -109,4 +110,22 @@ test("filterTrustedHits drops short name-only titles (Golub reverse containment)
   );
   assert.equal(trusted.length, 1);
   assert.equal(trusted[0].pdfUrl, "https://example.com/right.pdf");
+});
+
+test("filterTrustedHits drops Turkish Golub essay even with matching wrong DOI", () => {
+  const { filterTrustedHits } = loadBridge();
+  const itemTitle = "The mercenaries: an interview with Leon Golub";
+  const trusted = filterTrustedHits(
+    [
+      {
+        source: "doi",
+        title:
+          "LEON GOLUB RESIMLERINDE BIR TUR BELLEK OLARAK FOTOGRAFIN KULLANIMI",
+        pdfUrl: "https://www.idildergisi.com/makale/pdf/1457710450.pdf",
+        doi: "10.7816/idil-05-21-04",
+      },
+    ],
+    { title: itemTitle, doi: "10.7816/idil-05-21-04" },
+  );
+  assert.equal(trusted.length, 0);
 });
