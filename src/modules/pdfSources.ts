@@ -1,4 +1,4 @@
-// @ajan: cursor · @etiket: katman-2, content-validate, distinctive-title
+// @ajan: cursor · @etiket: katman-2, content-audit, force-validate, distinctive-title
 import { getString } from "../utils/locale";
 import { getPref } from "../utils/prefs";
 import {
@@ -454,16 +454,23 @@ export function isContentMismatchError(e: unknown): e is ContentMismatchError {
 export async function validateAttachmentContent(
   item: Zotero.Item,
   attachmentID: number,
+  opts: { force?: boolean } = {},
 ): Promise<ContentValidation> {
-  const detailed = await validateAttachmentContentDetailed(item, attachmentID);
+  const detailed = await validateAttachmentContentDetailed(
+    item,
+    attachmentID,
+    opts,
+  );
   return detailed.verdict;
 }
 
 export async function validateAttachmentContentDetailed(
   item: Zotero.Item,
   attachmentID: number,
+  opts: { force?: boolean } = {},
 ): Promise<{ verdict: ContentValidation; pdfText: string }> {
-  if (!getPref("pdf.validateContent")) {
+  // Manual content-audit menus pass force=true so prefs off still scan.
+  if (!opts.force && !getPref("pdf.validateContent")) {
     return { verdict: "skipped", pdfText: "" };
   }
   try {

@@ -129,3 +129,35 @@ test("filterTrustedHits drops Turkish Golub essay even with matching wrong DOI",
   );
   assert.equal(trusted.length, 0);
 });
+
+test("filterTrustedHits drops Eğitim Örgütlerinde Makyavelist/Çevik false friends", () => {
+  const { filterTrustedHits } = loadBridge();
+  const itemTitle = "Eğitim örgütlerinde kültürel liderlik ve meslek ahlakı";
+  const trusted = filterTrustedHits(
+    [
+      {
+        source: "doi",
+        title:
+          "Eğitim Örgütlerinde Makyavelist Liderlik: Değerlendirme ve İncelenmesi",
+        pdfUrl: "https://example.com/makyavelist.pdf",
+        doi: "10.51460/baebd.1595660",
+      },
+      {
+        source: "doi",
+        title:
+          "Eğitim Örgütlerinde Çevik Liderlik: Bir Ölçek Geliştirme Çalışması",
+        pdfUrl: "https://example.com/cevik.pdf",
+        doi: "10.51460/baebd.1503632",
+      },
+      {
+        source: "doi",
+        title: "Eğitim örgütlerinde kültürel liderlik ve meslek ahlakı",
+        pdfUrl: "https://example.com/right.pdf",
+        doi: "10.14527/3954",
+      },
+    ],
+    { title: itemTitle, doi: "" },
+  );
+  assert.equal(trusted.length, 1);
+  assert.equal(trusted[0].pdfUrl, "https://example.com/right.pdf");
+});

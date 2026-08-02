@@ -1,4 +1,4 @@
-/* @ajan: cursor · @etiket: katman-2, menu, b4-lint, b5-dup-report */
+/* @ajan: cursor · @etiket: katman-2, menu, content-audit */
 /*eslint no-constant-condition: ["error", { "checkLoops": false }]*/
 import { getString } from "../utils/locale";
 import { config } from "../../package.json";
@@ -35,6 +35,7 @@ import {
   scanOrphanFiles,
   scanSelectedAttachments,
 } from "./attachmentScanner";
+import { auditSelectedPdfContent } from "./pdfContentAudit";
 
 const filenameExtRE = /\.[^.]+$/;
 const ATTANGER_MENU_ID = "zpdfmanager-menu";
@@ -823,6 +824,20 @@ export default class Menu {
           },
         },
         { tag: "menuseparator" },
+        {
+          tag: "menuitem",
+          label: getString("pdf-content-audit-menu"),
+          icon: addon.data.icons.downloadPdf,
+          getVisibility: () =>
+            ZoteroPane.getSelectedItems().some(
+              (item) =>
+                item.isRegularItem() ||
+                (item.isAttachment() && Boolean(item.parentItemID)),
+            ),
+          commandListener: async () => {
+            await auditSelectedPdfContent();
+          },
+        },
         {
           tag: "menuitem",
           label: getString("scanner-scan-selected"),

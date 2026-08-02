@@ -93,5 +93,6 @@ test("summarizeAuditEvents counts outcomes and dry-run banner works", () => {
   assert.match(html, /Dry-run is ON/);
   assert.match(auditEventsToText(events), /\[planned\]/);
   assert.ok(REVERSIBLE_AUTOMATION_TAGS.includes("#pdf-review"));
+  assert.ok(REVERSIBLE_AUTOMATION_TAGS.includes("#pdf-mismatch"));
   assert.ok(REVERSIBLE_AUTOMATION_TAGS.includes("#pdf-quarantine"));
 });
