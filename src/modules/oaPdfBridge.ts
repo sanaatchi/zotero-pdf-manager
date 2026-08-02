@@ -1,4 +1,4 @@
-// @ajan: cursor · @etiket: katman-2, oa-pdf-bridge, allow-web-search, fanout-rank
+// @ajan: cursor · @etiket: katman-2, oa-pdf-bridge, fetch-progress, allow-web-search
 /**
  * Katman-2 → Kutuphane köprü (8756) `oa_pdf_search` client.
  * Online PDF discovery runs in Python; this module only POSTs queries.
@@ -659,12 +659,20 @@ export async function fetchOaPdfViaBridge(opts: {
   source: string;
   pdfUrl?: string;
   extra?: Record<string, unknown>;
+  onProgress?: (loaded: number, total: number) => void;
 }): Promise<Uint8Array | null> {
   const base = resolveOaBridgeUrl();
   const endpoint = `${base}/pdf-fetch`;
   const src = String(opts.source || "").toLowerCase();
   const timeout =
     src === "libgen" ? OA_FETCH_TIMEOUT_LIBGEN_MS : OA_FETCH_TIMEOUT_MS;
+
+  const { startBridgeFetchProgressPoll, reportDownloadProgress } =
+    await import("../utils/downloadProgress");
+  const stopPoll = startBridgeFetchProgressPoll(base, (p) => {
+    opts.onProgress?.(p.loaded, p.total);
+  });
+
   let xhr: any;
   try {
     xhr = await (Zotero.HTTP as any).request("POST", endpoint, {
@@ -677,14 +685,28 @@ export async function fetchOaPdfViaBridge(opts: {
       responseType: "arraybuffer",
       timeout,
       successCodes: false,
+      requestObserver: (req: XMLHttpRequest) => {
+        try {
+          req.addEventListener("progress", (ev: ProgressEvent) => {
+            const loaded = Number(ev.loaded || 0);
+            const total = ev.lengthComputable ? Number(ev.total || 0) : 0;
+            reportDownloadProgress(loaded, total);
+            opts.onProgress?.(loaded, total);
+          });
+        } catch {
+          /* ignore */
+        }
+      },
     });
   } catch (e) {
+    stopPoll();
     throw new Error(
       `oa_pdf köprü fetch kapalı (${base}): ${
         e instanceof Error ? e.message : String(e)
       }`,
     );
   }
+  stopPoll();
   const status = Number(xhr?.status || 0);
   if (status && (status < 200 || status >= 300)) {
     let detail = "";
@@ -713,6 +735,7 @@ export async function fetchOaPdfViaBridge(opts: {
   ) {
     return null;
   }
+  reportDownloadProgress(bytes.length, bytes.length);
   return bytes;
 }
 

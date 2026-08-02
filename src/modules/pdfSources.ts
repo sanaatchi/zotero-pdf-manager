@@ -1,4 +1,4 @@
-// @ajan: cursor · @etiket: katman-2, content-audit, force-validate, distinctive-title
+// @ajan: cursor · @etiket: katman-2, pdf-sources, download-progress, content-audit
 import { getString } from "../utils/locale";
 import { getPref } from "../utils/prefs";
 import {
@@ -194,16 +194,33 @@ export function absoluteURL(base: string, ref: string): string {
 async function httpGet(
   url: string,
   responseType: "text" | "arraybuffer" = "text",
+  opts: {
+    onProgress?: (loaded: number, total: number) => void;
+  } = {},
 ): Promise<any> {
   throwIfRunAborted();
   const signal = getActiveAbortSignal();
   const cancelRef: { fn: (() => void) | null } = { fn: null };
+  const { reportDownloadProgress } = await import("../utils/downloadProgress");
   const request = (Zotero.HTTP as any).request("GET", url, {
     responseType,
     timeout: 60000,
     successCodes: false,
     cancellerReceiver: (cancel: () => void) => {
       cancelRef.fn = cancel;
+    },
+    requestObserver: (xhr: XMLHttpRequest) => {
+      if (responseType !== "arraybuffer") return;
+      try {
+        xhr.addEventListener("progress", (ev: ProgressEvent) => {
+          const loaded = Number(ev.loaded || 0);
+          const total = ev.lengthComputable ? Number(ev.total || 0) : 0;
+          reportDownloadProgress(loaded, total);
+          opts.onProgress?.(loaded, total);
+        });
+      } catch {
+        /* ignore */
+      }
     },
   });
   const invokeCancel = () => {
@@ -223,10 +240,13 @@ async function httpGet(
   }
 }
 
-export async function fetchPdfBytes(url: string): Promise<Uint8Array | null> {
+export async function fetchPdfBytes(
+  url: string,
+  opts: { onProgress?: (loaded: number, total: number) => void } = {},
+): Promise<Uint8Array | null> {
   try {
     throwIfRunAborted();
-    const xhr = await httpGet(url, "arraybuffer");
+    const xhr = await httpGet(url, "arraybuffer", opts);
     throwIfRunAborted();
     if (!xhr || !xhr.response) return null;
     const bytes = new Uint8Array(xhr.response as ArrayBuffer);
@@ -688,6 +708,7 @@ export async function downloadAndAttach(
     forceImport?: boolean;
     /** Pre-fetched PDF bytes (e.g. YÖK via bridge session). */
     bytes?: Uint8Array | null;
+    onProgress?: (loaded: number, total: number) => void;
   } = {},
 ): Promise<unknown | null> {
   throwIfRunAborted();
@@ -696,7 +717,7 @@ export async function downloadAndAttach(
       ? looksLikePDF(opts.bytes)
         ? opts.bytes
         : null
-      : await fetchPdfBytes(url);
+      : await fetchPdfBytes(url, { onProgress: opts.onProgress });
   throwIfRunAborted();
   if (!bytes) return null;
 

@@ -1,4 +1,4 @@
-// @ajan: cursor · @etiket: katman-2, oa-search, window, search-btn-fix
+// @ajan: cursor · @etiket: katman-2, oa-search, window, download-progress
 /**
  * Independent OA Search popup (openDialog) — federated results + attach actions.
  * UX: per-search source picker, PDF-only filter, keyboard nav, double-click apply,
@@ -7,6 +7,11 @@
  */
 import { config } from "../../package.json";
 import { getString } from "../utils/locale";
+import {
+  formatDownloadPercent,
+  setDownloadProgressHandler,
+  throttleProgress,
+} from "../utils/downloadProgress";
 import {
   allFederatedSourceIds,
   FEDERATED_SOURCE_LABEL,
@@ -45,6 +50,7 @@ const LABEL_FALLBACK: Record<string, string> = {
   "oa-search-hint-no-pdf": "PDF’si olan bir sonuç satırı seçin",
   "oa-search-hint-no-hit": "Önce arama yapın, sonra bir satır seçin",
   "oa-search-attaching": "PDF indirilip ekleniyor…",
+  "oa-search-attaching-pct": "PDF indiriliyor… {percent}",
   "oa-search-attach-ok": "PDF seçili öğeye eklendi",
   "oa-search-attach-fail": "PDF eklenemedi",
   "oa-search-creating": "Öğe oluşturuluyor…",
@@ -124,17 +130,42 @@ function firstSelectedRegular(): Zotero.Item | null {
 }
 
 function uiString(key: string, args?: Record<string, unknown>): string {
-  const fallback = LABEL_FALLBACK[key] || key;
+  const fallbackTpl = LABEL_FALLBACK[key] || key;
+  const applyArgs = (tpl: string): string => {
+    if (!args) return tpl;
+    return tpl.replace(/\{(\w+)\}/g, (_, name: string) =>
+      args[name] != null ? String(args[name]) : "",
+    );
+  };
   try {
     const s = String(
       (args ? getString(key, { args }) : getString(key)) || "",
     ).trim();
-    if (!s) return fallback;
-    if (s === `${config.addonRef}-${key}`) return fallback;
+    if (!s) return applyArgs(fallbackTpl);
+    if (s === `${config.addonRef}-${key}`) return applyArgs(fallbackTpl);
     return s;
   } catch {
-    return fallback;
+    return applyArgs(fallbackTpl);
   }
+}
+
+function withDownloadStatus(
+  doc: Document,
+  baseKey: string,
+  run: () => Promise<void>,
+): Promise<void> {
+  setStatus(doc, uiString(baseKey));
+  setDownloadProgressHandler(
+    throttleProgress((p) => {
+      setStatus(
+        doc,
+        uiString("oa-search-attaching-pct", {
+          percent: formatDownloadPercent(p),
+        }),
+      );
+    }),
+  );
+  return run().finally(() => setDownloadProgressHandler(null));
 }
 
 function waitForWindowLoad(win: Window): Promise<void> {
@@ -653,26 +684,29 @@ async function applyPrimaryAction(
   }
   await withBusy(doc, async () => {
     if (state.targetItem) {
-      setStatus(doc, uiString("oa-search-attaching"));
-      const ok = await attachHitToItem(state.targetItem, hit);
-      setStatus(
-        doc,
-        ok
-          ? uiString("oa-search-attach-ok")
-          : uiString("oa-search-attach-fail"),
-        !ok,
-      );
+      await withDownloadStatus(doc, "oa-search-attaching", async () => {
+        const ok = await attachHitToItem(state.targetItem!, hit);
+        setStatus(
+          doc,
+          ok
+            ? uiString("oa-search-attach-ok")
+            : uiString("oa-search-attach-fail"),
+          !ok,
+        );
+      });
       return;
     }
     const libraryID = Zotero.Libraries.userLibraryID;
     setStatus(doc, uiString("oa-search-creating"));
-    const item = await createItemFromHit(hit, libraryID, { attachPdf: true });
-    setStatus(
-      doc,
-      uiString("oa-search-create-ok", {
-        title: String(item.getField("title") || "").slice(0, 80),
-      }),
-    );
+    await withDownloadStatus(doc, "oa-search-attaching", async () => {
+      const item = await createItemFromHit(hit, libraryID, { attachPdf: true });
+      setStatus(
+        doc,
+        uiString("oa-search-create-ok", {
+          title: String(item.getField("title") || "").slice(0, 80),
+        }),
+      );
+    });
   });
 }
 
@@ -872,14 +906,16 @@ function wireActions(win: Window): void {
           return;
         }
         setStatus(doc, uiString("oa-search-attaching"));
-        const ok = await attachHitToItem(item, hit);
-        setStatus(
-          doc,
-          ok
-            ? uiString("oa-search-attach-ok")
-            : uiString("oa-search-attach-fail"),
-          !ok,
-        );
+        await withDownloadStatus(doc, "oa-search-attaching", async () => {
+          const ok = await attachHitToItem(item, hit);
+          setStatus(
+            doc,
+            ok
+              ? uiString("oa-search-attach-ok")
+              : uiString("oa-search-attach-fail"),
+            !ok,
+          );
+        });
       });
     });
 
@@ -896,15 +932,17 @@ function wireActions(win: Window): void {
         const libraryID =
           state.targetItem?.libraryID ?? Zotero.Libraries.userLibraryID;
         setStatus(doc, uiString("oa-search-creating"));
-        const item = await createItemFromHit(hit, libraryID, {
-          attachPdf: true,
+        await withDownloadStatus(doc, "oa-search-attaching", async () => {
+          const item = await createItemFromHit(hit, libraryID, {
+            attachPdf: true,
+          });
+          setStatus(
+            doc,
+            uiString("oa-search-create-ok", {
+              title: String(item.getField("title") || "").slice(0, 80),
+            }),
+          );
         });
-        setStatus(
-          doc,
-          uiString("oa-search-create-ok", {
-            title: String(item.getField("title") || "").slice(0, 80),
-          }),
-        );
       });
     });
 
@@ -926,18 +964,18 @@ function wireActions(win: Window): void {
           return;
         }
         setStatus(doc, uiString("oa-search-attaching"));
-        const { attachmentOk, relatedItem } = await attachToSelectedWithRelated(
-          item,
-          hit,
-        );
-        setStatus(
-          doc,
-          uiString("oa-search-related-ok", {
-            attached: attachmentOk ? "yes" : "no",
-            title: String(relatedItem?.getField("title") || "").slice(0, 80),
-          }),
-          !attachmentOk,
-        );
+        await withDownloadStatus(doc, "oa-search-attaching", async () => {
+          const { attachmentOk, relatedItem } =
+            await attachToSelectedWithRelated(item, hit);
+          setStatus(
+            doc,
+            uiString("oa-search-related-ok", {
+              attached: attachmentOk ? "yes" : "no",
+              title: String(relatedItem?.getField("title") || "").slice(0, 80),
+            }),
+            !attachmentOk,
+          );
+        });
       });
     });
 }
