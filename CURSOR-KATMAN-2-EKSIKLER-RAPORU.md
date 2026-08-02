@@ -2,7 +2,7 @@
 
 # Cursor — Katman 2 Eksikler Raporu
 
-**Tarih:** 2026-08-02 · **Sürüm:** PDF Manager **v1.0.50**  
+**Tarih:** 2026-08-02 · **Sürüm:** PDF Manager **v1.0.51**  
 **Analiz:** ürün ↔ `referanslar/katman-2/` ↔ GitHub (Attanger, Zotadata, Zoplicate,
 ZotAssets, File Utility, Attachment Scanner, ozefe/yoktez).
 
@@ -48,6 +48,8 @@ selective/behavior mevcut.
 | ID | Öncelik | Madde | Kanıt | Öneri |
 |----|---------|-------|-------|-------|
 | **G0** | ✅ | OA bridge SSRF loopback | `oaBridgeUrl.ts` v1.0.50 — K1/K3 parity |
+| **G0b** | ✅ | Delete confirm: empty parent folder | `formatDeleteConfirmLines` + locale footer · **v1.0.51** |
+| **G0c** | ✅ | KP helper DRY mirror | `src/utils/kpToken.ts` = K1 `normalizeKp` · **v1.0.51** |
 | **G1** | **P2** | Otomatik OA’da **YÖKTez yok** | `pdfDownload.ts` `AUTOMATIC_ONLINE_SOURCE_IDS = ["dergipark","pmc"]`; tez `sourcePriority` → yalnız `yoktez` (manuel) | Politika kararı: (A) tez için gated auto `yoktez` **veya** (B) “tez = yalnızca manuel Download” diye kilitle |
 | **G2** | ✅ ajan / ⬜ UI | Checklist **v1.0.49** yenilendi | `ZOTERO-KABUL-CHECKLIST.md` — Bölüm A otomatik ✅ (209 test); Bölüm B Zotero smoke kullanıcı | Kullanıcı B1–B8 işaretleyince tam kapanır |
 | **G3** | ✅ | README Sci-Hub/LibGen metin | düzeltildi 2026-08-02 | auto yasak / manuel prefs ayrı |

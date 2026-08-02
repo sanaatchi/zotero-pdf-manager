@@ -89,3 +89,28 @@ test("plans disk unlink for linked files only", () => {
   assert.equal(plan.linkedFileCount, 2);
   assert.equal(plan.otherAttachmentCount, 1);
 });
+
+test("confirm lines mention empty parent folder cleanup", () => {
+  const {
+    LINK_MODE_LINKED_FILE,
+    planAttachmentDeletion,
+    formatDeleteConfirmLines,
+  } = loadModule();
+  const plan = planAttachmentDeletion(
+    [
+      {
+        attachmentId: 1,
+        parentItemId: 10,
+        linkMode: LINK_MODE_LINKED_FILE,
+        path: "D:/lib/a.pdf",
+        contentType: "application/pdf",
+      },
+    ],
+    { deleteLinkedFiles: true },
+  );
+  const lines = formatDeleteConfirmLines(plan, { deleteLinkedFiles: true });
+  assert.ok(
+    lines.some((l) => /empty.*folder|parent folder/i.test(l)),
+    `expected empty-folder note, got: ${lines.join(" | ")}`,
+  );
+});

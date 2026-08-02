@@ -1,4 +1,4 @@
-// @ajan: cursor · @etiket: katman-2, b1-delete-att, delitemwithatt, plan
+// @ajan: cursor · @etiket: katman-2, b1-delete-att, delitemwithatt, plan, empty-dir
 /**
  * Pure attachment-delete planning (delitemwithatt behavior, selective).
  * No Zotero globals — unit-testable.
@@ -101,6 +101,11 @@ function formatDeleteConfirmLines(
     }
     if (plan.unlinkPaths.length > maxPaths) {
       lines.push(`  …and ${plan.unlinkPaths.length - maxPaths} more`);
+    }
+    if (plan.unlinkPaths.length > 0) {
+      lines.push(
+        "if a parent folder becomes empty after delete, it is also removed",
+      );
     }
   } else {
     lines.push("disk linked files will be kept");

@@ -27,6 +27,8 @@ test("extractKpToken normalizes KP padding", () => {
   assert.equal(extractKpToken("Kutuphane-KP: KP42"), "KP000042");
   assert.equal(extractKpToken("no key"), null);
   assert.equal(extractKpToken("KP1234567"), null);
+  assert.equal(extractKpToken("KP100000"), null);
+  assert.equal(extractKpToken("KP99999"), "KP099999");
 });
 
 test("findDuplicateGroups clusters DOI / ISBN10↔13 / KP", () => {

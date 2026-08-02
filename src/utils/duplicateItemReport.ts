@@ -9,6 +9,7 @@ import {
   normalizeISBNDigits,
   isbnsEquivalent,
 } from "./metadataNormalize";
+import { extractKpFromText } from "./kpToken";
 
 export type DupItemSnap = {
   itemId: number;
@@ -25,17 +26,9 @@ export type DupGroup = {
   titles: string[];
 };
 
-const KP_RE = /\bKP0*\d{1,6}\b/i;
-/** Align with kitap_arsiv.context.MAX_LIBRARY_PDFS / K1 kpRegistry */
-const MAX_LIBRARY_PDFS = 99_999;
-
+/** @deprecated Prefer extractKpFromText from kpToken — kept for callers. */
 export function extractKpToken(text: string | null | undefined): string | null {
-  if (!text) return null;
-  const m = String(text).match(KP_RE);
-  if (!m) return null;
-  const num = Number(String(m[0]).replace(/\D/g, ""));
-  if (!Number.isFinite(num) || num < 1 || num > MAX_LIBRARY_PDFS) return null;
-  return `KP${String(num).padStart(6, "0")}`;
+  return extractKpFromText(text);
 }
 
 export function findDuplicateGroups(items: DupItemSnap[]): DupGroup[] {
