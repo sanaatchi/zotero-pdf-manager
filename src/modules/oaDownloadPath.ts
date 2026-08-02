@@ -1,8 +1,10 @@
-// @ajan: cursor · @etiket: katman-2, p1, oa-downloads, no-overwrite
+// @ajan: cursor · @etiket: katman-2, oa-downloads, reuse-primary
 /**
  * Pure helpers for P2-4: persist OA PDFs under `{watchRoot}/downloads/`.
  * Inspired by zotadata's download-to-disk discipline (AGPL-like); no Sci-Hub.
  * P1: in-process path reservation so parallel downloads cannot pick the same target.
+ * Re-downloads of the same item reuse the primary path (overwrite) instead of
+ * accumulating ``stem-<timestamp>.pdf`` copies.
  */
 
 /** Paths reserved by an in-flight OA write (same process). */
@@ -32,18 +34,37 @@ export function buildOaDownloadBasename(
   const doi = (fields.doi || "")
     .trim()
     .replace(/^https?:\/\/(dx\.)?doi\.org\//i, "");
+  const src = sanitizeDownloadBasename(sourceId);
+  const id =
+    typeof fields.itemID === "number" && Number.isFinite(fields.itemID)
+      ? fields.itemID
+      : null;
   if (doi.length > 5) {
-    return sanitizeDownloadBasename(doi.replace(/\//g, "_"));
+    const stem = sanitizeDownloadBasename(doi.replace(/\//g, "_"));
+    // Pin item id when present so two library items sharing a DOI still get
+    // distinct paths; re-download of the same item reuses the same file.
+    return id != null
+      ? sanitizeDownloadBasename(`${stem}-${src}-i${id}`)
+      : stem;
   }
   const title = sanitizeDownloadBasename(fields.title || "");
-  const idPart =
-    typeof fields.itemID === "number" && Number.isFinite(fields.itemID)
-      ? `item-${fields.itemID}`
-      : "item";
-  const base = title || idPart;
-  const src = sanitizeDownloadBasename(sourceId);
+  const base = title || (id != null ? `item-${id}` : "item");
+  // Always include item id for DOI-less names — same title + source must not
+  // spawn stem-timestamp.pdf on every retry, and must not overwrite siblings.
+  if (id != null) {
+    return sanitizeDownloadBasename(`${base}-${src}-i${id}`);
+  }
   return sanitizeDownloadBasename(`${base}-${src}`);
 }
+
+export type ReserveDownloadOpts = {
+  /**
+   * When true, return the primary ``stem.pdf`` even if it already exists
+   * (caller will overwrite). Only unique-ify when another in-flight download
+   * already reserved that path.
+   */
+  reuseExisting?: boolean;
+};
 
 export function uniqueDownloadPath(
   dir: string,
@@ -72,7 +93,9 @@ export function reserveUniqueDownloadPath(
   basename: string,
   existsAsync: (path: string) => Promise<boolean>,
   now = Date.now(),
+  opts: ReserveDownloadOpts = {},
 ): Promise<string> {
+  const reuseExisting = !!opts.reuseExisting;
   const run = reserveChain.then(async () => {
     const sep = dir.includes("\\") ? "\\" : "/";
     const stem = sanitizeDownloadBasename(basename);
@@ -88,7 +111,15 @@ export function reserveUniqueDownloadPath(
       return true;
     };
     const primary = `${dir}${sep}${stem}.pdf`;
-    if (await tryPath(primary)) return primary;
+    if (reuseExisting) {
+      // Re-download same item: overwrite primary instead of stem-timestamp.pdf.
+      if (!reservedPaths.has(primary)) {
+        reservedPaths.add(primary);
+        return primary;
+      }
+    } else if (await tryPath(primary)) {
+      return primary;
+    }
     let n = now;
     for (let i = 0; i < 80; i++) {
       const alt = `${dir}${sep}${stem}-${n}.pdf`;

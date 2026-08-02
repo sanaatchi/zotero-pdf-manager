@@ -39,14 +39,14 @@ test("OA download basename prefers DOI and sanitizes", () => {
   } = loadModule();
   assert.equal(
     buildOaDownloadBasename(
-      { doi: "10.1000/ABC/12", title: "Ignore" },
+      { doi: "10.1000/ABC/12", title: "Ignore", itemID: 42 },
       "arxiv",
     ),
-    "10.1000_ABC_12",
+    "10.1000_ABC_12-arxiv-i42",
   );
   assert.equal(
     buildOaDownloadBasename({ title: "Hello: World?", itemID: 7 }, "pmc"),
-    "Hello_ World_-pmc",
+    "Hello_ World_-pmc-i7",
   );
   assert.equal(sanitizeDownloadBasename('a<>b:"c'), "a__b__c");
   assert.equal(
@@ -71,6 +71,31 @@ test("parallel reserveUniqueDownloadPath never returns the same path", async () 
   ]);
   assert.equal(new Set([a, b, c]).size, 3);
   for (const p of [a, b, c]) releaseDownloadPathReservation(p);
+});
+
+test("reuseExisting reuses primary path even when file exists", async () => {
+  const { reserveUniqueDownloadPath, releaseDownloadPathReservation } =
+    loadModule();
+  const existing = new Set(["D:\\d\\book-yoktez-i9.pdf"]);
+  const existsAsync = async (p) => existing.has(p);
+  const a = await reserveUniqueDownloadPath(
+    "D:\\d",
+    "book-yoktez-i9",
+    existsAsync,
+    1000,
+    { reuseExisting: true },
+  );
+  assert.equal(a, "D:\\d\\book-yoktez-i9.pdf");
+  releaseDownloadPathReservation(a);
+  // Without reuseExisting, occupied primary → timestamp alt.
+  const b = await reserveUniqueDownloadPath(
+    "D:\\d",
+    "book-yoktez-i9",
+    existsAsync,
+    1000,
+  );
+  assert.equal(b, "D:\\d\\book-yoktez-i9-1000.pdf");
+  releaseDownloadPathReservation(b);
 });
 
 test("exists probe failure is fail-closed (path not reserved as free)", async () => {

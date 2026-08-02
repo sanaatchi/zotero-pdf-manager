@@ -1,4 +1,4 @@
-// @ajan: cursor · @etiket: katman-2, pdf-sources, validate-tag-only, content-audit
+// @ajan: cursor · @etiket: katman-2, pdf-sources, validate-tag-only, reuse-download
 import { getString } from "../utils/locale";
 import { getPref } from "../utils/prefs";
 import {
@@ -761,11 +761,21 @@ export async function downloadAndAttach(
           // Fail-closed: exists probe must succeed and return false.
           return !!(await IOUtils.exists(p));
         },
+        Date.now(),
+        { reuseExisting: true },
       );
       const partial = oaPartialTempPath(persistedPath);
       try {
         await IOUtils.write(partial, bytes);
-        // noOverwrite: never clobber an existing final PDF if reservation raced.
+        // Primary path is reserved for this item — overwrite prior copy so
+        // downloads/ does not accumulate stem-<timestamp>.pdf retries.
+        if (await IOUtils.exists(persistedPath)) {
+          try {
+            await IOUtils.remove(persistedPath);
+          } catch (e) {
+            ztoolkit.log("OA download overwrite remove failed", persistedPath, e);
+          }
+        }
         await IOUtils.move(partial, persistedPath, { noOverwrite: true });
         finalCreatedByThisRun = true;
       } catch (e) {
@@ -895,9 +905,18 @@ export async function relocateImportedPdfToDownloads(
     dir,
     basename,
     async (p) => !!(await IOUtils.exists(p)),
+    Date.now(),
+    { reuseExisting: true },
   );
 
   try {
+    if (await IOUtils.exists(dest)) {
+      try {
+        await IOUtils.remove(dest);
+      } catch (e) {
+        ztoolkit.log("relocate: overwrite remove failed", dest, e);
+      }
+    }
     await IOUtils.copy(srcPath, dest, { noOverwrite: true });
   } catch (e) {
     releaseDownloadPathReservation(dest);
