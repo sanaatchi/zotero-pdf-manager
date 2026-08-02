@@ -209,7 +209,12 @@ export function planFieldNormalizations(opts: {
 export function shouldExpandPagesFromPdf(pages: string): boolean {
   const p = String(pages || "").trim();
   if (!p) return false;
-  if (p.includes("-") || p.includes(",") || p.includes("–") || p.includes("—")) {
+  if (
+    p.includes("-") ||
+    p.includes(",") ||
+    p.includes("–") ||
+    p.includes("—")
+  ) {
     return false;
   }
   if (p.length > 3) return false;
@@ -299,10 +304,13 @@ export function normalizeCreatorCase(
   });
 }
 
-export type ExtraLine = { kind: "kv"; key: string; value: string } | { kind: "raw"; text: string };
+export type ExtraLine =
+  { kind: "kv"; key: string; value: string } | { kind: "raw"; text: string };
 
 export function parseExtraLines(extra: string): ExtraLine[] {
-  const lines = String(extra || "").replace(/\r\n/g, "\n").split("\n");
+  const lines = String(extra || "")
+    .replace(/\r\n/g, "\n")
+    .split("\n");
   const out: ExtraLine[] = [];
   for (const line of lines) {
     if (!line.trim()) continue;
@@ -323,7 +331,9 @@ export function serializeExtraLines(lines: ExtraLine[]): string {
  * B4c: Citation Key first, then Kutuphane-* keys, then other kv A–Z, raw last.
  */
 export function sortExtraLines(lines: ExtraLine[]): ExtraLine[] {
-  const kv = lines.filter((l): l is Extract<ExtraLine, { kind: "kv" }> => l.kind === "kv");
+  const kv = lines.filter(
+    (l): l is Extract<ExtraLine, { kind: "kv" }> => l.kind === "kv",
+  );
   const raw = lines.filter((l) => l.kind === "raw");
   const collator = new Intl.Collator("en", { sensitivity: "base" });
   const rank = (key: string): number => {

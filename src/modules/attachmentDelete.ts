@@ -167,9 +167,8 @@ async function deleteAttachmentsForSelectedItems(opts: {
 async function deleteAttachmentsAndItemsForSelection(): Promise<void> {
   const pane = Zotero.getActiveZoteroPane?.() ?? null;
   const selected =
-    pane
-      ?.getSelectedItems?.()
-      ?.filter((i: Zotero.Item) => i.isRegularItem()) ?? [];
+    pane?.getSelectedItems?.()?.filter((i: Zotero.Item) => i.isRegularItem()) ??
+    [];
   if (!selected.length) {
     alertDialog(getString("pdf-delete-att-empty"));
     return;

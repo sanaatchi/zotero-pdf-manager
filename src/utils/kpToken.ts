@@ -13,7 +13,10 @@ export { normalizeKp, extractKpFromText };
 
 function normalizeKp(raw: string | null | undefined): string | null {
   if (!raw) return null;
-  const m = String(raw).trim().toUpperCase().match(/\bKP0*(\d{1,6})\b/);
+  const m = String(raw)
+    .trim()
+    .toUpperCase()
+    .match(/\bKP0*(\d{1,6})\b/);
   if (!m) return null;
   const num = Number(m[1]);
   if (!Number.isFinite(num) || num < 1 || num > MAX_LIBRARY_PDFS) return null;

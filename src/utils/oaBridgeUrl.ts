@@ -25,9 +25,7 @@ export function isAllowedOaBridgeUrl(baseUrl: string): boolean {
 /**
  * Normalize pref/raw bridge base. Non-loopback → safe default (no remote SSRF).
  */
-export function normalizeOaBridgeUrl(
-  raw: string | null | undefined,
-): string {
+export function normalizeOaBridgeUrl(raw: string | null | undefined): string {
   const url = String(raw || "")
     .trim()
     .replace(/\/+$/, "");

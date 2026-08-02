@@ -48,11 +48,8 @@ test("hitNeedsBridgeFetch true for dergipark and yoktez pdf hits", () => {
 });
 
 test("oaBridgeUrl rejects non-loopback (SSRF gate, K1/K3 parity)", () => {
-  const {
-    isAllowedOaBridgeUrl,
-    normalizeOaBridgeUrl,
-    DEFAULT_OA_BRIDGE_URL,
-  } = loadBridge();
+  const { isAllowedOaBridgeUrl, normalizeOaBridgeUrl, DEFAULT_OA_BRIDGE_URL } =
+    loadBridge();
   assert.equal(isAllowedOaBridgeUrl("http://127.0.0.1:8756"), true);
   assert.equal(isAllowedOaBridgeUrl("http://localhost:8756/"), true);
   assert.equal(isAllowedOaBridgeUrl("https://evil.example/pdf"), false);

@@ -1,4 +1,5 @@
 <!-- @ajan: cursor · @etiket: katman-2, otomasyon, durum-banner -->
+
 # Zotero PDF Manager — Tam Otomasyon Planı
 
 > **Durum (2026-08 / v1.0.49):** P2-1…P2-6 **teslim**. Otomatik online OA =

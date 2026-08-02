@@ -69,9 +69,8 @@ function creatorsChanged(
 async function normalizeMetadataForSelectedItems(): Promise<void> {
   const pane = Zotero.getActiveZoteroPane?.() ?? null;
   const items =
-    pane
-      ?.getSelectedItems?.()
-      ?.filter((i: Zotero.Item) => i.isRegularItem()) ?? [];
+    pane?.getSelectedItems?.()?.filter((i: Zotero.Item) => i.isRegularItem()) ??
+    [];
   if (!items.length) {
     ztoolkit.getGlobal("alert")(getString("pdf-normalize-empty"));
     return;

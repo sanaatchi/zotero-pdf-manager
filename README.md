@@ -56,7 +56,7 @@ Do **not** merge the three addons. Data flows 1 → 2 → 3.
 
 **Manual Download / attach** may use LibGen, Sci-Hub, and YÖKTez when their prefs
 are enabled. Stock `prefs.js` currently ships those adapters **enabled** and
-listed in `sourceOrder` for the manual cascade — that is *not* the automatic
+listed in `sourceOrder` for the manual cascade — that is _not_ the automatic
 path. Disable them in Preferences if you do not accept the legal/policy risk.
 YÖKTez for theses is intentional on the **manual** path until an explicit auto
 policy is chosen (see `CURSOR-KATMAN-2-EKSIKLER-RAPORU.md` G1).

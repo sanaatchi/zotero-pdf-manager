@@ -142,10 +142,7 @@ test("B4b: pages-range order, expand helpers, creators-case, extra order", () =>
     "Note: keep\nKutuphane-KP: KP000001\nCitation Key: doe2020\nDOI: 10.1/x",
   );
   assert.ok(extra);
-  assert.equal(
-    extra.split("\n")[0],
-    "Citation Key: doe2020",
-  );
+  assert.equal(extra.split("\n")[0], "Citation Key: doe2020");
   assert.match(extra.split("\n")[1], /^Kutuphane-KP:/);
   const patches = planFieldNormalizations({ pages: "34-12" });
   assert.equal(patches.find((p) => p.field === "pages")?.to, "12-34");

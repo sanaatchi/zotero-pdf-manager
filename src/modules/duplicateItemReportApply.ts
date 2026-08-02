@@ -37,9 +37,8 @@ function snapFromItem(item: Zotero.Item): DupItemSnap {
 async function reportDuplicateItemsForSelection(): Promise<void> {
   const pane = Zotero.getActiveZoteroPane?.() ?? null;
   const items =
-    pane
-      ?.getSelectedItems?.()
-      ?.filter((i: Zotero.Item) => i.isRegularItem()) ?? [];
+    pane?.getSelectedItems?.()?.filter((i: Zotero.Item) => i.isRegularItem()) ??
+    [];
   if (!items.length) {
     alertDialog(getString("pdf-dup-report-empty"));
     return;

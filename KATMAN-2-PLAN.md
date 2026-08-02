@@ -44,22 +44,22 @@
 
 ## Mevcut modüller
 
-| Modül                       | Durum     | Rol                                                  |
-| --------------------------- | --------- | ---------------------------------------------------- |
-| `attachmentScanner`         | ✅        | Ek tarama                                            |
-| `metadataCheck`             | ✅        | Metadata doğrulama                                   |
-| `pdfMetadata`               | ✅        | PDF metadata okuma/yazma                             |
-| `metadataClean`             | ✅        | Temizleme                                            |
-| `downloadReport`            | ✅        | İndirme raporu                                       |
-| `pdfDownload`               | ✅ P2-4   | OA → downloads/ + indeks                             |
-| `folderIndex`               | ✅ P2-1   | Çok-kök kalıcı indeks + linked-base + doi/isbn/title |
-| `pdfReconciler`             | ✅ P2-2/3 | Reconcile + eşikler + add coalesce                   |
-| `orphanProcessor`           | ✅ P2-5   | Öksüz PDF (mode + güvenli autoCreate)                |
-| `pdfContentMetadata`        | ✅        | pdf-lib gömülü alanlar + Crossref                    |
-| `automationAudit`           | ✅ P2-6   | Denetim raporu + dry-run                             |
-| `duplicateAttachmentMerger` | ✅        | Yinelenen ek                                         |
-| `attachmentDelete`          | ✅ B1     | Linked ek disk silme + trash (delitemwithatt)        |
-| `metadataNormalize`         | ✅ B4a–c  | pages-range, creators-case, Extra sıra + menü        |
+| Modül                       | Durum     | Rol                                                    |
+| --------------------------- | --------- | ------------------------------------------------------ |
+| `attachmentScanner`         | ✅        | Ek tarama                                              |
+| `metadataCheck`             | ✅        | Metadata doğrulama                                     |
+| `pdfMetadata`               | ✅        | PDF metadata okuma/yazma                               |
+| `metadataClean`             | ✅        | Temizleme                                              |
+| `downloadReport`            | ✅        | İndirme raporu                                         |
+| `pdfDownload`               | ✅ P2-4   | OA → downloads/ + indeks                               |
+| `folderIndex`               | ✅ P2-1   | Çok-kök kalıcı indeks + linked-base + doi/isbn/title   |
+| `pdfReconciler`             | ✅ P2-2/3 | Reconcile + eşikler + add coalesce                     |
+| `orphanProcessor`           | ✅ P2-5   | Öksüz PDF (mode + güvenli autoCreate)                  |
+| `pdfContentMetadata`        | ✅        | pdf-lib gömülü alanlar + Crossref                      |
+| `automationAudit`           | ✅ P2-6   | Denetim raporu + dry-run                               |
+| `duplicateAttachmentMerger` | ✅        | Yinelenen ek                                           |
+| `attachmentDelete`          | ✅ B1     | Linked ek disk silme + trash (delitemwithatt)          |
+| `metadataNormalize`         | ✅ B4a–c  | pages-range, creators-case, Extra sıra + menü          |
 | `duplicateItemReport`       | ✅ B5     | DOI/ISBN/KP aday raporu (yazma yok); Zoplicate yan XPI |
 
 ---
@@ -101,8 +101,8 @@ Port kaynağı: [`PDFMANAGER-REFERANS-PORT.md`](PDFMANAGER-REFERANS-PORT.md).
 
 | Tarih      | Ajan   | Özet                                                       |
 | ---------- | ------ | ---------------------------------------------------------- |
-| 2026-08-02 | cursor | Derin analiz: G1–G10; doküman hijyeni G3–G5              |
-| 2026-08-02 | cursor | B4b/c + B5: pages/creators/extra + dup rapor; v1.0.49     |
+| 2026-08-02 | cursor | Derin analiz: G1–G10; doküman hijyeni G3–G5                |
+| 2026-08-02 | cursor | B4b/c + B5: pages/creators/extra + dup rapor; v1.0.49      |
 | 2026-07-30 | cursor | format-metadata selective → metadataNormalize/Check        |
 | 2026-07-29 | cursor | P2-6 audit UI / dry-run polish                             |
 | 2026-07-29 | cursor | P2-5 orphanMode + gated autoCreate                         |

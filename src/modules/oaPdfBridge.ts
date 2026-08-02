@@ -13,11 +13,7 @@ import {
   normalizeOaBridgeUrl,
 } from "../utils/oaBridgeUrl";
 
-export {
-  DEFAULT_OA_BRIDGE_URL,
-  isAllowedOaBridgeUrl,
-  normalizeOaBridgeUrl,
-};
+export { DEFAULT_OA_BRIDGE_URL, isAllowedOaBridgeUrl, normalizeOaBridgeUrl };
 
 export type OaPdfHit = {
   source: string;
@@ -108,7 +104,9 @@ export function buildOaSearchRequest(
     authors = (creators || [])
       .slice(0, 3)
       .map((c) =>
-        String(c.name || [c.firstName, c.lastName].filter(Boolean).join(" ")).trim(),
+        String(
+          c.name || [c.firstName, c.lastName].filter(Boolean).join(" "),
+        ).trim(),
       )
       .filter(Boolean)
       .join("; ");

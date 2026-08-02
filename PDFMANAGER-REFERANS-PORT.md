@@ -47,20 +47,20 @@ LibRart (Katman 3) port planı **değil** → `../kaynak/LIBRART-REFERANS-PORT.m
 
 ## 3. Port karar matrisi
 
-| Öncelik | Referans                 | Lisans                                      | Hedef modül                                      | Yöntem                                           |
-| ------- | ------------------------ | ------------------------------------------- | ------------------------------------------------ | ------------------------------------------------ |
-| **P0**  | `zotero-attanger`        | AGPL-3.0-or-later                           | `pdfReconciler`, eşik/debounce, match            | selective port                                   |
-| **P1**  | `katman-1/klasor-izleme` (watch-folder) | GPL-3.0-only                     | `folderIndex` polling, `orphanProcessor` inbox   | selective (mtime/kuyruk; canlı FS watcher değil) |
-| **P1**  | `katman-2/ek-dosya/zotmoov` | GPL-3.0                                  | linked-file / base-dir disiplini                 | selective / behavior                             |
-| **P1**  | `katman-2/ek-silme/delitemwithatt` | GPL-3.0                           | `attachmentDelete` linked unlink                 | selective / behavior ✅ v1.0.47                  |
-| **P2**  | `katman-2/metadata-linter/zotero-format-metadata` | AGPL             | `metadataCheck` kuralları                        | selective                                        |
-| **P2**  | `zotero-zotadata`        | LICENSE=MIT / pkg=AGPL → **AGPL gibi işle** | `pdfDownload` OA şelale                          | selective (Sci-Hub hariç)                        |
-| **B5**  | `katman-2/yinelenen/zoplicate` | AGPL                               | **yan XPI** (merge); PDF Manager ince DOI/ISBN/KP rapor | companion + thin report (no merge port)          |
-| **P3**  | `zotero-arxiv-workflow`  | AGPL                                        | preprint↔yayın merge                             | selective / behavior                             |
-| Skip    | `katman-2/cnki-metadata/jasminum` | —                                | —                                                | CNKI; TR arşiv önceliği düşük                    |
-| Skip    | `zotero-file`            | AGPL                                        | —                                                | behavior-only (Attanger tercih)                  |
-| Skip    | `zotero-scipdf`          | AGPL                                        | —                                                | behavior-only opt-in                             |
-| Yasak   | OCR (`katman-1/ocr`)     | AGPL                                        | —                                                | **Katman 1 sınırı**                              |
+| Öncelik | Referans                                          | Lisans                                      | Hedef modül                                             | Yöntem                                           |
+| ------- | ------------------------------------------------- | ------------------------------------------- | ------------------------------------------------------- | ------------------------------------------------ |
+| **P0**  | `zotero-attanger`                                 | AGPL-3.0-or-later                           | `pdfReconciler`, eşik/debounce, match                   | selective port                                   |
+| **P1**  | `katman-1/klasor-izleme` (watch-folder)           | GPL-3.0-only                                | `folderIndex` polling, `orphanProcessor` inbox          | selective (mtime/kuyruk; canlı FS watcher değil) |
+| **P1**  | `katman-2/ek-dosya/zotmoov`                       | GPL-3.0                                     | linked-file / base-dir disiplini                        | selective / behavior                             |
+| **P1**  | `katman-2/ek-silme/delitemwithatt`                | GPL-3.0                                     | `attachmentDelete` linked unlink                        | selective / behavior ✅ v1.0.47                  |
+| **P2**  | `katman-2/metadata-linter/zotero-format-metadata` | AGPL                                        | `metadataCheck` kuralları                               | selective                                        |
+| **P2**  | `zotero-zotadata`                                 | LICENSE=MIT / pkg=AGPL → **AGPL gibi işle** | `pdfDownload` OA şelale                                 | selective (Sci-Hub hariç)                        |
+| **B5**  | `katman-2/yinelenen/zoplicate`                    | AGPL                                        | **yan XPI** (merge); PDF Manager ince DOI/ISBN/KP rapor | companion + thin report (no merge port)          |
+| **P3**  | `zotero-arxiv-workflow`                           | AGPL                                        | preprint↔yayın merge                                    | selective / behavior                             |
+| Skip    | `katman-2/cnki-metadata/jasminum`                 | —                                           | —                                                       | CNKI; TR arşiv önceliği düşük                    |
+| Skip    | `zotero-file`                                     | AGPL                                        | —                                                       | behavior-only (Attanger tercih)                  |
+| Skip    | `zotero-scipdf`                                   | AGPL                                        | —                                                       | behavior-only opt-in                             |
+| Yasak   | OCR (`katman-1/ocr`)                              | AGPL                                        | —                                                       | **Katman 1 sınırı**                              |
 
 Mevcut notices: `zotero-attachment-scanner` (MIT) → [`THIRD_PARTY_NOTICES.md`](THIRD_PARTY_NOTICES.md).
 
@@ -68,20 +68,20 @@ Mevcut notices: `zotero-attachment-scanner` (MIT) → [`THIRD_PARTY_NOTICES.md`]
 
 ## 4. Modül → referans
 
-| PDF Manager modülü          | Durum        | Birincil referans                                        |
-| --------------------------- | ------------ | -------------------------------------------------------- |
-| `folderIndex`               | ✅ P2-1      | watch-folder + attanger + zotmoov (base-dir)             |
-| `pdfReconciler`             | ✅ P2-2/P2-3 | **attanger** eşik + settle + drain coalesce              |
-| `orphanProcessor`           | ✅ P2-5      | watch-folder (orphanMode + gated autoCreate)             |
-| `attachmentScanner`         | ✅           | attachment-scanner (MIT, notices)                        |
-| `metadataCheck`             | ✅ selective | format-metadata                                          |
-| `pdfDownload`               | ✅ P2-4      | zotadata (OA only → downloads/)                          |
-| `attachmentDelete`          | ✅ B1        | delitemwithatt (linked unlink + trash)                   |
-| `duplicateAttachmentMerger` | ✅ PDF-att   | annotation-safe PDF merge (öğe merge = Zoplicate yan XPI)  |
-| `automationAudit`           | ✅ P2-6      | mevcut + filtre/özet/dry-run + geri alınabilir etiketler |
-| `pdfContentMetadata`        | ✅           | pdf-lib + Crossref; menüde manuel                           |
-| `metadataNormalize`         | ✅ B4a–c     | format-metadata selective                                |
-| `duplicateItemReport`       | ✅ B5        | DOI/ISBN/KP aday; Zoplicate companion                    |
+| PDF Manager modülü          | Durum        | Birincil referans                                         |
+| --------------------------- | ------------ | --------------------------------------------------------- |
+| `folderIndex`               | ✅ P2-1      | watch-folder + attanger + zotmoov (base-dir)              |
+| `pdfReconciler`             | ✅ P2-2/P2-3 | **attanger** eşik + settle + drain coalesce               |
+| `orphanProcessor`           | ✅ P2-5      | watch-folder (orphanMode + gated autoCreate)              |
+| `attachmentScanner`         | ✅           | attachment-scanner (MIT, notices)                         |
+| `metadataCheck`             | ✅ selective | format-metadata                                           |
+| `pdfDownload`               | ✅ P2-4      | zotadata (OA only → downloads/)                           |
+| `attachmentDelete`          | ✅ B1        | delitemwithatt (linked unlink + trash)                    |
+| `duplicateAttachmentMerger` | ✅ PDF-att   | annotation-safe PDF merge (öğe merge = Zoplicate yan XPI) |
+| `automationAudit`           | ✅ P2-6      | mevcut + filtre/özet/dry-run + geri alınabilir etiketler  |
+| `pdfContentMetadata`        | ✅           | pdf-lib + Crossref; menüde manuel                         |
+| `metadataNormalize`         | ✅ B4a–c     | format-metadata selective                                 |
+| `duplicateItemReport`       | ✅ B5        | DOI/ISBN/KP aday; Zoplicate companion                     |
 
 ```mermaid
 flowchart LR
