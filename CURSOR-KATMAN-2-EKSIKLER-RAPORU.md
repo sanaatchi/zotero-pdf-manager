@@ -8,11 +8,11 @@ ZotAssets, File Utility, Attachment Scanner, ozefe/yoktez).
 
 ## Özet hüküm
 
-| Soru                      | Cevap                                                                 |
-| ------------------------- | --------------------------------------------------------------------- |
-| Açık **P1** ürün boşluğu? | **Yok** — P2-1…P2-6 + B1–B5 kapalı                                    |
-| Gerçek açık iş?           | **P2** politika/dokümantasyon + kabul checklist; isteğe bağlı P3 lint |
-| Yeni zorunlu XPI portu?   | **Yok** — GitHub taraması yeni P1 üretmedi                            |
+| Soru                      | Cevap                                           |
+| ------------------------- | ----------------------------------------------- |
+| Açık **P1** ürün boşluğu? | **Yok** — P2-1…P2-6 + B1–B5 + G0/G1 kapalı      |
+| Gerçek açık iş?           | Checklist Bölüm B (kullanıcı) + isteğe bağlı P3 |
+| Yeni zorunlu XPI portu?   | **Yok** — GitHub taraması yeni P1 üretmedi      |
 
 ---
 
@@ -45,26 +45,27 @@ selective/behavior mevcut.
 
 ## Açık — sıralı
 
-| ID      | Öncelik         | Madde                                                                | Kanıt                                                                                                                 | Öneri                                                                                                        |
-| ------- | --------------- | -------------------------------------------------------------------- | --------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------ |
-| **G0**  | ✅              | OA bridge SSRF loopback                                              | `oaBridgeUrl.ts` v1.0.50 — K1/K3 parity                                                                               |
-| **G0b** | ✅              | Delete confirm: empty parent folder                                  | `formatDeleteConfirmLines` + locale footer · **v1.0.51**                                                              |
-| **G0c** | ✅              | KP helper DRY mirror                                                 | `src/utils/kpToken.ts` = K1 `normalizeKp` · **v1.0.51**                                                               |
-| **G1**  | **P2**          | Otomatik OA’da **YÖKTez yok**                                        | `pdfDownload.ts` `AUTOMATIC_ONLINE_SOURCE_IDS = ["dergipark","pmc"]`; tez `sourcePriority` → yalnız `yoktez` (manuel) | Politika kararı: (A) tez için gated auto `yoktez` **veya** (B) “tez = yalnızca manuel Download” diye kilitle |
-| **G2**  | ✅ ajan / ⬜ UI | Checklist **v1.0.49** yenilendi                                      | `ZOTERO-KABUL-CHECKLIST.md` — Bölüm A otomatik ✅ (209 test); Bölüm B Zotero smoke kullanıcı                          | Kullanıcı B1–B8 işaretleyince tam kapanır                                                                    |
-| **G3**  | ✅              | README Sci-Hub/LibGen metin                                          | düzeltildi 2026-08-02                                                                                                 | auto yasak / manuel prefs ayrı                                                                               |
-| **G4**  | ✅              | REFERANS-PORT §4 stale                                               | düzeltildi                                                                                                            | merger + contentMetadata ✅                                                                                  |
-| **G5**  | ✅              | AUTOMATION_PLAN durum bandı                                          | eklendi                                                                                                               | teslim notu                                                                                                  |
-| **G6**  | **P3**          | `tr-TR` locale yok                                                   | `addon/locale/` = de / en-US / it-IT                                                                                  | İsteğe bağlı                                                                                                 |
-| **G7**  | **P3**          | format-metadata kalan (univ place, edition, preprint/webpage guard…) | rules dir vs `metadataNormalize.ts`                                                                                   | Düşük ROI; journal abbr skip kalır                                                                           |
-| **G8**  | **P3**          | Menü hâlâ “Attanger” markası                                         | `menu.ts`                                                                                                             | Kimlik cilası                                                                                                |
-| **G9**  | **P3**          | arxiv-workflow preprint↔published                                    | mirror yok                                                                                                            | EN preprint ağır değilse skip                                                                                |
-| **G10** | **P3**          | Çoklu ek rol (ZotAssets benzeri)                                     | GitHub: Lyz-623/ZotAssets                                                                                             | TR arşiv için zorunlu değil; araştırma notu                                                                  |
+| ID      | Öncelik         | Madde                                                                | Kanıt                                                                                        | Öneri                                       |
+| ------- | --------------- | -------------------------------------------------------------------- | -------------------------------------------------------------------------------------------- | ------------------------------------------- |
+| **G0**  | ✅              | OA bridge SSRF loopback                                              | `oaBridgeUrl.ts` v1.0.50 — K1/K3 parity                                                      |
+| **G0b** | ✅              | Delete confirm: empty parent folder                                  | `formatDeleteConfirmLines` + locale footer · **v1.0.51**                                     |
+| **G0c** | ✅              | KP helper DRY mirror                                                 | `src/utils/kpToken.ts` = K1 `normalizeKp` · **v1.0.51**                                      |
+| **G1**  | ✅              | YÖKTez auto politikası                                               | **B kilit:** tez = yalnız manuel; auto = dergipark+pmc (`AUTOMATIC_ONLINE_SOURCE_IDS`)       | dokümante 2026-08-02                        |
+| **G2**  | ✅ ajan / ⬜ UI | Checklist **v1.0.49** yenilendi                                      | `ZOTERO-KABUL-CHECKLIST.md` — Bölüm A otomatik ✅ (209 test); Bölüm B Zotero smoke kullanıcı | Kullanıcı B1–B8 işaretleyince tam kapanır   |
+| **G3**  | ✅              | README Sci-Hub/LibGen metin                                          | düzeltildi 2026-08-02                                                                        | auto yasak / manuel prefs ayrı              |
+| **G4**  | ✅              | REFERANS-PORT §4 stale                                               | düzeltildi                                                                                   | merger + contentMetadata ✅                 |
+| **G5**  | ✅              | AUTOMATION_PLAN durum bandı                                          | eklendi                                                                                      | teslim notu                                 |
+| **G6**  | **P3**          | `tr-TR` locale yok                                                   | `addon/locale/` = de / en-US / it-IT                                                         | İsteğe bağlı                                |
+| **G7**  | **P3**          | format-metadata kalan (univ place, edition, preprint/webpage guard…) | rules dir vs `metadataNormalize.ts`                                                          | Düşük ROI; journal abbr skip kalır          |
+| **G8**  | **P3**          | Menü hâlâ “Attanger” markası                                         | `menu.ts`                                                                                    | Kimlik cilası                               |
+| **G9**  | **P3**          | arxiv-workflow preprint↔published                                    | mirror yok                                                                                   | EN preprint ağır değilse skip               |
+| **G10** | **P3**          | Çoklu ek rol (ZotAssets benzeri)                                     | GitHub: Lyz-623/ZotAssets                                                                    | TR arşiv için zorunlu değil; araştırma notu |
 
 ### Yapılmaz (kilitli)
 
 - OCR / üç XPI birleştirme / zoplicate tam merge gömme / journal abbr / jasminum
 - Sci-Hub **otomatik** şelale (`AUTOMATIC_ONLINE_SOURCE_IDS`)
+- YÖKTez **otomatik** şelale — tez yalnız manuel Download (politika B)
 - watch-folder Mode 2/3 koleksiyon↔klasör aynalama
 
 ---

@@ -55,6 +55,7 @@ export {
  * Automatic OA: downloadable article DBs only.
  * Never: Sci-Hub/LibGen/proxy, or metadata-only doi/arxiv/s2/proquest.
  */
+// Politika B (kilit): YÖKTez asla otomatik şelalede değil — yalnız manuel menü.
 export const AUTOMATIC_ONLINE_SOURCE_IDS = ["dergipark", "pmc"] as const;
 
 export type AutomaticOnlineResult =

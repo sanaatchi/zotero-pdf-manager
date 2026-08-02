@@ -1,4 +1,4 @@
-// @ajan: cursor · @etiket: katman-2, format-metadata, b4-lint, normalize-apply, pages-range, creators-case, extra-order
+// @ajan: cursor · @etiket: katman-2, format-metadata, b4-lint, normalize-apply, prefer-const
 /**
  * Apply selective format-metadata field normalizations to selected items.
  * Includes pages-range (PDF length), creators-case, Extra reorder (B4c).
@@ -80,7 +80,7 @@ async function normalizeMetadataForSelectedItems(): Promise<void> {
   let patchCount = 0;
   for (const item of items) {
     const itemType = Zotero.ItemTypes.getName(item.itemTypeID);
-    let pagesValue = String(item.getField("pages") || "");
+    const pagesValue = String(item.getField("pages") || "");
     const patches = planFieldNormalizations({
       title: String(item.getField("title") || ""),
       language: String(item.getField("language") || ""),
