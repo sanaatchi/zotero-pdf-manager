@@ -78,6 +78,68 @@ test("createItemFieldsFromHit maps DOI article and ISBN book", () => {
   assert.deepEqual(relatedPairIds(2, 2), [2, 2]);
 });
 
+test("rankOaHits prefers PDF rows; filterOaHits drops landing-only", () => {
+  const result = esbuild.buildSync({
+    entryPoints: [path.join(process.cwd(), "src/modules/oaSearchWindow.ts")],
+    bundle: true,
+    platform: "node",
+    format: "cjs",
+    write: false,
+    logLevel: "silent",
+    external: [
+      "../utils/locale",
+      "./oaPdfBridge",
+      "./oaSearchActions",
+      "../../package.json",
+    ],
+  });
+  const module = { exports: {} };
+  const req = (id) => {
+    if (id.endsWith("package.json")) {
+      return { config: { addonName: "t", addonRef: "zpdfmanager" } };
+    }
+    if (id.includes("locale")) return { getString: (k) => k };
+    if (id.includes("oaPdfBridge")) {
+      return {
+        enabledFederatedSourceIds: () => ["doi"],
+        searchAllOaSourcesByQuery: async () => ({ hits: [] }),
+      };
+    }
+    if (id.includes("oaSearchActions")) {
+      return {
+        attachHitToItem: async () => false,
+        attachToSelectedWithRelated: async () => ({
+          attachmentOk: false,
+          relatedItem: null,
+        }),
+        createItemFromHit: async () => ({}),
+      };
+    }
+    return require(id);
+  };
+  new Function("module", "exports", "require", result.outputFiles[0].text)(
+    module,
+    module.exports,
+    req,
+  );
+  const { rankOaHits, filterOaHits } = module.exports;
+  const ranked = rankOaHits([
+    { source: "a", title: "no", score: 0.99 },
+    { source: "b", title: "yes", pdfUrl: "https://x/a.pdf", score: 0.5 },
+  ]);
+  assert.equal(ranked[0].source, "b");
+  assert.equal(
+    filterOaHits(
+      [
+        { source: "a", title: "no" },
+        { source: "b", title: "yes", pdfUrl: "https://x/a.pdf" },
+      ],
+      true,
+    ).length,
+    1,
+  );
+});
+
 test("OA search surface: xhtml + menubar + locales + menu wiring", () => {
   const root = process.cwd();
   const xhtml = fs.readFileSync(
@@ -87,6 +149,7 @@ test("OA search surface: xhtml + menubar + locales + menu wiring", () => {
   assert.match(xhtml, /zpdfmanager-oa-shell/);
   assert.match(xhtml, /zpdfmanager-oa-tbody/);
   assert.match(xhtml, /data-label="Seçiliye ekle"/);
+  assert.match(xhtml, /zpdfmanager-oa-pdf-only/);
 
   const win = fs.readFileSync(
     path.join(root, "src/modules/oaSearchWindow.ts"),
@@ -100,6 +163,9 @@ test("OA search surface: xhtml + menubar + locales + menu wiring", () => {
   assert.match(win, /LABEL_FALLBACK/);
   assert.match(win, /waitForOaDom/);
   assert.match(win, /bindSearchTrigger/);
+  assert.match(win, /filterOaHits/);
+  assert.match(win, /rankOaHits/);
+  assert.match(win, /applyPrimaryAction/);
   assert.match(
     win,
     /arama için gerekmez|selection is optional|Zotero selection is optional|gerekmez/,
@@ -131,6 +197,8 @@ test("OA search surface: xhtml + menubar + locales + menu wiring", () => {
     "oa-search-attach",
     "oa-search-create",
     "oa-search-related",
+    "oa-search-pdf-only",
+    "oa-search-dblclick-hint",
   ];
   for (const locale of ["en-US", "de", "it-IT"]) {
     const ftl = fs.readFileSync(

@@ -25,6 +25,7 @@ class Addon {
     };
     oaSearch?: {
       window?: Window;
+      rawHits?: unknown[];
       hits: Array<{
         source: string;
         title: string;
@@ -38,6 +39,11 @@ class Addon {
       }>;
       selectedIndex: number;
       targetItem: Zotero.Item | null;
+      pdfOnly?: boolean;
+      meta?: {
+        sourcesQueried: string[];
+        errors: Record<string, string>;
+      };
     };
     pdfReconciler?: {
       start: () => void;

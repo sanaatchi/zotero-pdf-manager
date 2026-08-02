@@ -46,6 +46,8 @@ oa-search-related-ok = Related «{ $title }» · PDF angehängt={ $attached }
 oa-search-hint-no-target = Kein Eintrag — für Anhängen / Related in Zotero wählen
 oa-search-hint-no-pdf = Trefferzeile mit PDF auswählen
 oa-search-hint-no-hit = Zuerst suchen, dann eine Zeile wählen
+oa-search-pdf-only = Nur PDF
+oa-search-dblclick-hint = Doppelklick: an Auswahl anhängen (oder Eintrag anlegen)
 oa-search-load-fail = OA-Suche-Fenster konnte nicht geladen werden
 pdf-download-url-menu = Attach PDF from URL…
 pdf-embed-metadata-menu = Zotero-Metadaten in PDF einbetten (alle aktualisieren)
