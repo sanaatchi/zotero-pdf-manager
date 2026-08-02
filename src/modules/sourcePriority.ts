@@ -1,8 +1,9 @@
-// @ajan: cursor · @etiket: katman-2, source-priority, yoktez-only-thesis, doi-unpaywall
+// @ajan: cursor · @etiket: katman-2, source-priority, tr-doi-unpaywall
 /**
  * Item-aware PDF source priority.
  *
- * Turkish journal articles → DergiPark only (no LibGen/Sci-Hub/…).
+ * Turkish journal articles → DergiPark first, then DOI/Unpaywall if the item
+ *   has a DOI (exact-match, no fuzzy title search risk); no LibGen/Sci-Hub/PMC.
  * Theses → YÖKTez only (no local/proxy/LibGen/…).
  * DergiPark itself only accepts journalArticle (scientific articles).
  *
@@ -32,7 +33,7 @@ export function itemHasDOI(item: Zotero.Item): boolean {
   }
 }
 
-/** True when language/title looks Turkish (DergiPark-only path). */
+/** True when language/title looks Turkish (DergiPark + optional Unpaywall path). */
 export function looksTurkish(item: Zotero.Item): boolean {
   try {
     const lang = String(item.getField("language") || "").trim();
@@ -94,9 +95,13 @@ export function prioritizeSourcesForItem(
   const article = isArticle(item);
   const book = isBook(item);
 
-  // Türkçe bilimsel makale → yalnızca DergiPark (başka online kaynak yok).
+  // Türkçe bilimsel makale → önce DergiPark, sonra (varsa) DOI/Unpaywall
+  // kesin eşleşmesi. LibGen/PMC/Sci-Hub gibi bulanık başlık aramaları hâlâ yok.
   if (journal && turkish) {
-    return ids.filter((id) => id === "dergipark");
+    const dergiFirst = ids.filter(
+      (id) => id === "dergipark" || (id === "doi" && hasDoi),
+    );
+    return moveToFrontAfterLocal(dergiFirst, "dergipark");
   }
 
   // Tez → yalnızca YÖKTez (local/proxy/LibGen vb. aranmaz).

@@ -55,6 +55,9 @@ Do **not** merge the three addons. Data flows 1 → 2 → 3.
 **DergiPark**, and **PMC** — CAPTCHA-free first. It never calls Sci-Hub, LibGen,
 proxy, YÖKTez, arXiv, S2, or ProQuest.
 
+**Turkish journal articles:** DergiPark first; if the item has a DOI, Unpaywall
+(`doi`) is also tried. LibGen/PMC/Sci-Hub stay blocked for that path.
+
 **Manual Download / attach** may use LibGen, Sci-Hub, and YÖKTez when their prefs
 are enabled. Stock `prefs.js` currently ships those adapters **enabled** and
 listed in `sourceOrder` for the manual cascade — that is _not_ the automatic

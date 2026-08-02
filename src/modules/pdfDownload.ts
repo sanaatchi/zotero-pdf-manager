@@ -1,4 +1,4 @@
-// @ajan: cursor · @etiket: katman-2, pdfDownload, yoktez-only-thesis, doi-auto
+// @ajan: cursor · @etiket: katman-2, pdfDownload, tr-doi-unpaywall, yoktez-only-thesis
 import {
   ALL_SOURCES,
   downloadAndAttach,
@@ -203,11 +203,13 @@ function failureHint(
   if (isScientificJournalArticle(item) && looksTurkish(item)) {
     if (!tried.has("dergipark")) {
       return (
-        "Türkçe makale: yalnızca DergiPark denenir. " +
+        "Türkçe makale: yalnızca DergiPark (+ DOI varsa Unpaywall) denenir. " +
         "Tercihler → PDF Manager → DergiPark’ı açın."
       );
     }
-    return "Türkçe makale: DergiPark’ta bulunamadı (başka kaynak aranmaz).";
+    return tried.has("doi")
+      ? "Türkçe makale: DergiPark ve Unpaywall’da bulunamadı (başka kaynak aranmaz)."
+      : "Türkçe makale: DergiPark’ta bulunamadı (DOI yok, Unpaywall denenmedi; başka kaynak aranmaz).";
   }
   if (isBook(item) && !tried.has("libgen")) {
     return (

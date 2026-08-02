@@ -1,3 +1,4 @@
+// @ajan: cursor · @etiket: katman-2, source-priority, tr-doi-unpaywall, test
 const assert = require("node:assert/strict");
 const { test } = require("node:test");
 const path = require("node:path");
@@ -72,6 +73,23 @@ test("Turkish journal article → dergipark only", () => {
       it,
     ),
     ["dergipark"],
+  );
+});
+
+test("Turkish journal article with DOI → dergipark first, then doi", () => {
+  const { prioritizeSourcesForItem } = loadPriority();
+  const it = item({
+    title: "Kant ve Nietzsche'de isteme kavramı",
+    doi: "10.5678/y",
+    type: "journalArticle",
+    typeId: 1,
+  });
+  assert.deepEqual(
+    prioritizeSourcesForItem(
+      ["doi", "dergipark", "pmc", "libgen", "scihub"],
+      it,
+    ),
+    ["dergipark", "doi"],
   );
 });
 

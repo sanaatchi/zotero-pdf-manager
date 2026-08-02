@@ -1,7 +1,8 @@
 // @ajan: cursor · @etiket: katman-2, prefs-migrate, dergipark-articles
 /**
  * One-time prefs: enable DergiPark; place it early in sourceOrder.
- * Turkish journal articles use DergiPark exclusively via sourcePriority.
+ * Turkish journal articles: DergiPark first; DOI/Unpaywall if item has DOI
+ * (sourcePriority) — LibGen/PMC/Sci-Hub still excluded.
  */
 import { getPref, setPref } from "../utils/prefs";
 
