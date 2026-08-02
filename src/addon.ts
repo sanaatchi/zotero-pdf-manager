@@ -40,6 +40,7 @@ class Addon {
       selectedIndex: number;
       targetItem: Zotero.Item | null;
       pdfOnly?: boolean;
+      selectedSources?: string[];
       meta?: {
         sourcesQueried: string[];
         errors: Record<string, string>;

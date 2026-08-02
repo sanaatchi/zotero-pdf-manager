@@ -1,4 +1,4 @@
-<!-- @ajan: cursor · @etiket: katman-2, oa-search, xhtml, ux -->
+<!-- @ajan: cursor · @etiket: katman-2, oa-search, xhtml, source-picker -->
 <html xmlns="http://www.w3.org/1999/xhtml">
   <head>
     <meta charset="utf-8" />
@@ -126,6 +126,61 @@
               margin: 0;
             }
 
+            .sources-row {
+              border: 1px solid var(--oa-border);
+              border-radius: 8px;
+              background: var(--oa-card);
+              padding: 8px 10px;
+              display: flex;
+              flex-direction: column;
+              gap: 6px;
+            }
+
+            .sources-head {
+              display: flex;
+              flex-wrap: wrap;
+              align-items: center;
+              gap: 8px;
+              font-size: 11px;
+              color: var(--oa-muted);
+            }
+
+            .sources-head .spacer {
+              flex: 1;
+            }
+
+            button.linkish {
+              background: transparent;
+              color: var(--oa-accent);
+              padding: 2px 6px;
+              border-radius: 4px;
+              font-size: 11px;
+            }
+
+            button.linkish:hover {
+              background: var(--oa-row-sel);
+            }
+
+            .sources {
+              display: flex;
+              flex-wrap: wrap;
+              gap: 6px 10px;
+            }
+
+            .sources label {
+              flex-direction: row;
+              align-items: center;
+              gap: 5px;
+              font-size: 12px;
+              color: var(--oa-fg);
+              cursor: pointer;
+              user-select: none;
+            }
+
+            .sources input {
+              margin: 0;
+            }
+
             .table-wrap {
               flex: 1;
               min-height: 0;
@@ -211,6 +266,29 @@
         <button id="zpdfmanager-oa-search" type="button" data-label="Ara">
           Ara
         </button>
+      </div>
+      <div class="sources-row">
+        <div class="sources-head">
+          <span id="zpdfmanager-oa-sources-label">Kaynaklar</span>
+          <span class="spacer"></span>
+          <button
+            id="zpdfmanager-oa-sources-all"
+            type="button"
+            class="linkish"
+            data-label="Tümü"
+          >
+            Tümü
+          </button>
+          <button
+            id="zpdfmanager-oa-sources-none"
+            type="button"
+            class="linkish"
+            data-label="Hiçbiri"
+          >
+            Hiçbiri
+          </button>
+        </div>
+        <div id="zpdfmanager-oa-sources" class="sources"></div>
       </div>
       <div class="actions">
         <button

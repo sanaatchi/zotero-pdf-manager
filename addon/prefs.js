@@ -118,6 +118,8 @@ pref("extensions.zotero.__addonRef__.pdf.proquestEnabled", false);
 pref("extensions.zotero.__addonRef__.pdf.proxyEnabled", false);
 pref("extensions.zotero.__addonRef__.pdf.proxyURL", "");
 pref("extensions.zotero.__addonRef__.pdf.oaBridgeUrl", "http://127.0.0.1:8756");
+// OA Search popup: last selected source ids (comma-separated). Empty → prefs-enabled.
+pref("extensions.zotero.__addonRef__.pdf.oaSearchSources", "");
 // Optional Ollama content check via bridge (/pdf-validate-content).
 pref("extensions.zotero.__addonRef__.pdf.validateContentLlm", true);
 pref("extensions.zotero.__addonRef__.pdf.metadataOnlySourcesMigratedV1", false);

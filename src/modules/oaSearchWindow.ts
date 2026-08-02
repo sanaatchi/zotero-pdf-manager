@@ -1,13 +1,16 @@
-// @ajan: cursor · @etiket: katman-2, oa-search, window, ux
+// @ajan: cursor · @etiket: katman-2, oa-search, window, source-picker
 /**
  * Independent OA Search popup (openDialog) — federated results + attach actions.
- * UX: PDF-only filter, keyboard nav, double-click apply, auto-search on open,
- * source/error summary. Selection optional for search.
+ * UX: per-search source picker, PDF-only filter, keyboard nav, double-click apply,
+ * auto-search on open, source/error summary. Selection optional for search.
  */
 import { config } from "../../package.json";
 import { getString } from "../utils/locale";
 import {
-  enabledFederatedSourceIds,
+  allFederatedSourceIds,
+  FEDERATED_SOURCE_LABEL,
+  loadOaSearchSourceSelection,
+  saveOaSearchSourceSelection,
   searchAllOaSourcesByQuery,
   type OaPdfHit,
 } from "./oaPdfBridge";
@@ -27,6 +30,10 @@ const LABEL_FALLBACK: Record<string, string> = {
   "oa-search-create": "Yeni öğe + PDF",
   "oa-search-related": "Seçiliye ekle + Related",
   "oa-search-pdf-only": "Yalnızca PDF",
+  "oa-search-sources": "Kaynaklar",
+  "oa-search-sources-all": "Tümü",
+  "oa-search-sources-none": "Hiçbiri",
+  "oa-search-need-sources": "En az bir arama kaynağı seçin",
   "oa-search-target-none":
     "Seçim yok (arama için gerekmez). Seçiliye ekle / Related için Zotero’da kayıt seçin",
   "oa-search-ready": "Sorgu yazıp Ara’ya basın — Zotero seçimi zorunlu değil",
@@ -59,6 +66,7 @@ type OaSearchWindowState = {
   selectedIndex: number;
   targetItem: Zotero.Item | null;
   pdfOnly: boolean;
+  selectedSources: string[];
   meta: OaSearchMeta;
 };
 
@@ -84,12 +92,16 @@ function getState(): OaSearchWindowState {
       selectedIndex: -1,
       targetItem: null,
       pdfOnly: true,
+      selectedSources: loadOaSearchSourceSelection(),
       meta: { sourcesQueried: [], errors: {} },
     };
   }
   const s = data.oaSearch;
   if (!Array.isArray(s.rawHits)) s.rawHits = [];
   if (typeof s.pdfOnly !== "boolean") s.pdfOnly = true;
+  if (!Array.isArray(s.selectedSources)) {
+    s.selectedSources = loadOaSearchSourceSelection();
+  }
   if (!s.meta) s.meta = { sourcesQueried: [], errors: {} };
   return s;
 }
@@ -296,6 +308,90 @@ function applyChromeLabels(doc: Document): void {
     `${config.addonRef}-oa-pdf-only-label`,
   );
   if (pdfOnlyLabel) pdfOnlyLabel.textContent = uiString("oa-search-pdf-only");
+  const sourcesLabel = doc.getElementById(
+    `${config.addonRef}-oa-sources-label`,
+  );
+  if (sourcesLabel) sourcesLabel.textContent = uiString("oa-search-sources");
+  setButtonLabel(
+    doc.getElementById(`${config.addonRef}-oa-sources-all`),
+    "oa-search-sources-all",
+    "data-label",
+  );
+  setButtonLabel(
+    doc.getElementById(`${config.addonRef}-oa-sources-none`),
+    "oa-search-sources-none",
+    "data-label",
+  );
+}
+
+function sourceLabel(id: string): string {
+  return FEDERATED_SOURCE_LABEL[id] || id;
+}
+
+function readSelectedSources(doc: Document): string[] {
+  const known = allFederatedSourceIds();
+  const out: string[] = [];
+  for (const id of known) {
+    const el = doc.getElementById(
+      `${config.addonRef}-oa-src-${id}`,
+    ) as HTMLInputElement | null;
+    if (el?.checked) out.push(id);
+  }
+  return out;
+}
+
+function persistSelectedSources(
+  doc: Document,
+  state: OaSearchWindowState,
+): string[] {
+  const selected = readSelectedSources(doc);
+  state.selectedSources = selected;
+  saveOaSearchSourceSelection(selected);
+  return selected;
+}
+
+function renderSourcePicker(doc: Document, state: OaSearchWindowState): void {
+  const host = doc.getElementById(`${config.addonRef}-oa-sources`);
+  if (!host) return;
+  const selected = new Set(
+    state.selectedSources.length
+      ? state.selectedSources
+      : loadOaSearchSourceSelection(),
+  );
+  host.innerHTML = "";
+  for (const id of allFederatedSourceIds()) {
+    const label = doc.createElement("label");
+    const input = doc.createElement("input");
+    input.type = "checkbox";
+    input.id = `${config.addonRef}-oa-src-${id}`;
+    input.value = id;
+    input.checked = selected.has(id);
+    input.addEventListener("change", () => {
+      persistSelectedSources(doc, state);
+    });
+    const span = doc.createElement("span");
+    span.textContent = sourceLabel(id);
+    label.appendChild(input);
+    label.appendChild(span);
+    host.appendChild(label);
+  }
+  state.selectedSources = [...selected].filter((id) =>
+    allFederatedSourceIds().includes(id),
+  );
+}
+
+function setAllSources(
+  doc: Document,
+  state: OaSearchWindowState,
+  on: boolean,
+): void {
+  for (const id of allFederatedSourceIds()) {
+    const el = doc.getElementById(
+      `${config.addonRef}-oa-src-${id}`,
+    ) as HTMLInputElement | null;
+    if (el) el.checked = on;
+  }
+  persistSelectedSources(doc, state);
 }
 
 function updateActionButtons(doc: Document, state: OaSearchWindowState): void {
@@ -524,11 +620,10 @@ async function runSearch(win: Window): Promise<void> {
   if (searchBtn) searchBtn.disabled = true;
 
   try {
-    const sources = enabledFederatedSourceIds();
+    const sources = persistSelectedSources(doc, state);
     if (!sources.length) {
-      ztoolkit.log(
-        "OA search: no prefs-enabled sources; bridge will use full profile",
-      );
+      setStatus(doc, uiString("oa-search-need-sources"), true);
+      return;
     }
 
     const { text, doi, isbn, authors } = readQuery(doc);
@@ -537,10 +632,10 @@ async function runSearch(win: Window): Promise<void> {
       return;
     }
 
-    const srcHint = sources.length
-      ? sources.join(", ")
-      : "doi, dergipark, pmc, …";
-    setStatus(doc, `${uiString("oa-search-searching")} (${srcHint})`);
+    setStatus(
+      doc,
+      `${uiString("oa-search-searching")} (${sources.join(", ")})`,
+    );
     state.rawHits = [];
     state.hits = [];
     state.selectedIndex = -1;
@@ -553,7 +648,7 @@ async function runSearch(win: Window): Promise<void> {
         {
           profile: "full",
           totalLimit: 40,
-          sources: sources.length ? sources : undefined,
+          sources,
         },
       );
       state.rawHits = Array.isArray(body.hits) ? body.hits : [];
@@ -633,6 +728,17 @@ function wireActions(win: Window): void {
   const state = getState();
 
   bindSearchTrigger(win, doc.getElementById(`${config.addonRef}-oa-search`));
+
+  doc
+    .getElementById(`${config.addonRef}-oa-sources-all`)
+    ?.addEventListener("click", () => {
+      setAllSources(doc, state, true);
+    });
+  doc
+    .getElementById(`${config.addonRef}-oa-sources-none`)
+    ?.addEventListener("click", () => {
+      setAllSources(doc, state, false);
+    });
 
   for (const id of [
     `${config.addonRef}-oa-q`,
@@ -775,11 +881,13 @@ export async function initOaSearchWindow(win: Window): Promise<void> {
   state.hits = [];
   state.selectedIndex = -1;
   state.pdfOnly = true;
+  state.selectedSources = loadOaSearchSourceSelection();
   state.meta = { sourcesQueried: [], errors: {} };
 
   applyChromeLabels(doc);
   refreshTargetBand(doc, state.targetItem);
   prefillFromItem(doc, state.targetItem);
+  renderSourcePicker(doc, state);
   renderHits(doc, state);
   setStatus(doc, uiString("oa-search-ready"));
   wireActions(win);

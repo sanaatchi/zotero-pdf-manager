@@ -101,6 +101,10 @@ test("rankOaHits prefers PDF rows; filterOaHits drops landing-only", () => {
     if (id.includes("locale")) return { getString: (k) => k };
     if (id.includes("oaPdfBridge")) {
       return {
+        allFederatedSourceIds: () => ["doi", "pmc"],
+        FEDERATED_SOURCE_LABEL: { doi: "DOI", pmc: "PMC" },
+        loadOaSearchSourceSelection: () => ["doi"],
+        saveOaSearchSourceSelection: () => {},
         enabledFederatedSourceIds: () => ["doi"],
         searchAllOaSourcesByQuery: async () => ({ hits: [] }),
       };
@@ -150,6 +154,8 @@ test("OA search surface: xhtml + menubar + locales + menu wiring", () => {
   assert.match(xhtml, /zpdfmanager-oa-tbody/);
   assert.match(xhtml, /data-label="Seçiliye ekle"/);
   assert.match(xhtml, /zpdfmanager-oa-pdf-only/);
+  assert.match(xhtml, /zpdfmanager-oa-sources/);
+  assert.match(xhtml, /zpdfmanager-oa-sources-all/);
 
   const win = fs.readFileSync(
     path.join(root, "src/modules/oaSearchWindow.ts"),
@@ -166,6 +172,9 @@ test("OA search surface: xhtml + menubar + locales + menu wiring", () => {
   assert.match(win, /filterOaHits/);
   assert.match(win, /rankOaHits/);
   assert.match(win, /applyPrimaryAction/);
+  assert.match(win, /renderSourcePicker/);
+  assert.match(win, /persistSelectedSources/);
+  assert.match(win, /oa-search-need-sources/);
   assert.match(
     win,
     /arama için gerekmez|selection is optional|Zotero selection is optional|gerekmez/,
@@ -189,6 +198,9 @@ test("OA search surface: xhtml + menubar + locales + menu wiring", () => {
     "utf8",
   );
   assert.match(bridge, /searchAllOaSourcesByQuery/);
+  assert.match(bridge, /loadOaSearchSourceSelection/);
+  assert.match(bridge, /saveOaSearchSourceSelection/);
+  assert.match(bridge, /allFederatedSourceIds/);
 
   const keys = [
     "pdf-manager-menu",
@@ -199,6 +211,8 @@ test("OA search surface: xhtml + menubar + locales + menu wiring", () => {
     "oa-search-related",
     "oa-search-pdf-only",
     "oa-search-dblclick-hint",
+    "oa-search-sources",
+    "oa-search-need-sources",
   ];
   for (const locale of ["en-US", "de", "it-IT"]) {
     const ftl = fs.readFileSync(

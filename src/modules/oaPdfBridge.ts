@@ -1,11 +1,11 @@
-// @ajan: cursor · @etiket: katman-2, oa-pdf-bridge, federated-search, fanout-fallback
+// @ajan: cursor · @etiket: katman-2, oa-pdf-bridge, federated-search, source-picker
 /**
  * Katman-2 → Kutuphane köprü (8756) `oa_pdf_search` client.
  * Online PDF discovery runs in Python; this module only POSTs queries.
  * LibGen book PDFs: long fetch timeout (keys refresh + multi-minute download).
  * Bridge base URL is loopback-only (same SSRF policy as K1/K3).
  */
-import { getPref } from "../utils/prefs";
+import { getPref, setPref } from "../utils/prefs";
 import { normalizeDOI } from "../utils/metadataNormalize";
 import {
   DEFAULT_OA_BRIDGE_URL,
@@ -220,6 +220,22 @@ export const FEDERATED_SOURCE_PREF: Record<string, string> = {
   libgen: "pdf.libgenEnabled",
 };
 
+/** Display labels for OA Search source picker (stable ids). */
+export const FEDERATED_SOURCE_LABEL: Record<string, string> = {
+  doi: "DOI",
+  dergipark: "DergiPark",
+  pmc: "PMC",
+  arxiv: "arXiv",
+  s2: "S2",
+  yoktez: "YÖK Tez",
+  scihub: "Sci-Hub",
+  libgen: "LibGen",
+};
+
+export function allFederatedSourceIds(): string[] {
+  return Object.keys(FEDERATED_SOURCE_PREF);
+}
+
 /** Enabled OA download source ids for federated search (prefs filter). */
 export function enabledFederatedSourceIds(): string[] {
   const out: string[] = [];
@@ -231,6 +247,47 @@ export function enabledFederatedSourceIds(): string[] {
     }
   }
   return out;
+}
+
+const OA_SEARCH_SOURCES_PREF = "pdf.oaSearchSources";
+
+/** Last OA Search window source selection (comma-separated ids). */
+export function loadOaSearchSourceSelection(): string[] {
+  const known = new Set(allFederatedSourceIds());
+  try {
+    const raw = String(getPref(OA_SEARCH_SOURCES_PREF) || "").trim();
+    if (raw) {
+      const picked = raw
+        .split(/[,;\s]+/)
+        .map((s) => s.trim().toLowerCase())
+        .filter((id) => known.has(id));
+      if (picked.length) return [...new Set(picked)];
+    }
+  } catch {
+    /* ignore */
+  }
+  const enabled = enabledFederatedSourceIds();
+  return enabled.length ? enabled : allFederatedSourceIds();
+}
+
+export function saveOaSearchSourceSelection(ids: string[]): void {
+  const known = new Set(allFederatedSourceIds());
+  const cleaned = [
+    ...new Set(
+      (ids || [])
+        .map((s) =>
+          String(s || "")
+            .trim()
+            .toLowerCase(),
+        )
+        .filter((id) => known.has(id)),
+    ),
+  ];
+  try {
+    setPref(OA_SEARCH_SOURCES_PREF, cleaned.join(","));
+  } catch {
+    /* ignore */
+  }
 }
 
 /**
