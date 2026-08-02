@@ -1,4 +1,4 @@
-<!-- @ajan: cursor · @etiket: katman-2, oa-search, xhtml, search-btn-fix -->
+<!-- @ajan: cursor · @etiket: katman-2, oa-search, multi-job-status -->
 <html xmlns="http://www.w3.org/1999/xhtml">
   <head>
     <meta charset="utf-8" />
@@ -246,6 +246,28 @@
             #zpdfmanager-oa-status.error {
               color: var(--oa-warn);
             }
+
+            #zpdfmanager-oa-dl-jobs {
+              margin-top: 6px;
+              display: flex;
+              flex-direction: column;
+              gap: 2px;
+              font-size: 11px;
+              color: var(--oa-muted);
+              font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+              max-height: 6.5em;
+              overflow: auto;
+            }
+
+            #zpdfmanager-oa-dl-jobs[hidden] {
+              display: none !important;
+            }
+
+            #zpdfmanager-oa-dl-jobs .oa-dl-job {
+              white-space: nowrap;
+              overflow: hidden;
+              text-overflow: ellipsis;
+            }
           ]]>
     </style>
   </head>
@@ -345,6 +367,7 @@
         </table>
       </div>
       <div id="zpdfmanager-oa-status"></div>
+      <div id="zpdfmanager-oa-dl-jobs" hidden="hidden"></div>
     </div>
   </body>
 </html>

@@ -1,17 +1,18 @@
-// @ajan: cursor · @etiket: katman-2, oa-search, window, manual-search
+// @ajan: cursor · @etiket: katman-2, oa-search, window, multi-job-status
 /**
  * Independent OA Search popup (openDialog) — federated results + attach actions.
  * UX: per-search source picker, PDF-only filter, keyboard nav, double-click apply,
  * source/error summary. Selection optional for search.
  * Search runs only on Ara (or Enter in query fields) — never auto on open.
  * Ara never stays disabled during long bridge calls (generation supersede).
+ * Concurrent downloads: status shows one segment per progressJob (not a single %).
  */
 import { config } from "../../package.json";
 import { getString } from "../utils/locale";
 import {
-  formatDownloadPercent,
-  setDownloadProgressHandler,
-  throttleProgress,
+  addJobProgressListener,
+  formatActiveJobsStatus,
+  snapshotActiveDownloadJobs,
 } from "../utils/downloadProgress";
 import {
   allFederatedSourceIds,
@@ -52,6 +53,7 @@ const LABEL_FALLBACK: Record<string, string> = {
   "oa-search-hint-no-hit": "Önce arama yapın, sonra bir satır seçin",
   "oa-search-attaching": "PDF indirilip ekleniyor…",
   "oa-search-attaching-pct": "PDF indiriliyor… {percent}",
+  "oa-search-attaching-jobs": "İndiriliyor: {jobs}",
   "oa-search-attach-ok": "PDF seçili öğeye eklendi",
   "oa-search-attach-fail": "PDF eklenemedi",
   "oa-search-creating": "Öğe oluşturuluyor…",
@@ -150,23 +152,55 @@ function uiString(key: string, args?: Record<string, unknown>): string {
   }
 }
 
+function paintDownloadJobsList(doc: Document): void {
+  const jobs = snapshotActiveDownloadJobs();
+  const jobsEl = doc.getElementById(`${config.addonRef}-oa-dl-jobs`);
+  if (!jobsEl) return;
+  jobsEl.replaceChildren();
+  if (!jobs.length) {
+    jobsEl.hidden = true;
+    return;
+  }
+  jobsEl.hidden = false;
+  for (const j of jobs) {
+    const row = doc.createElement("div");
+    row.className = "oa-dl-job";
+    const src = (j.source || "…").slice(0, 12);
+    const title = (j.title || "").slice(0, 40);
+    row.textContent = `[${src}] ${j.percent}${title ? ` — ${title}` : ""}`;
+    jobsEl.appendChild(row);
+  }
+}
+
+function renderDownloadJobsStatus(doc: Document, baseKey: string): void {
+  paintDownloadJobsList(doc);
+  const jobs = snapshotActiveDownloadJobs();
+  const compact = formatActiveJobsStatus(jobs);
+  if (compact) {
+    setStatus(doc, uiString("oa-search-attaching-jobs", { jobs: compact }));
+  } else {
+    setStatus(doc, uiString(baseKey));
+  }
+}
+
 function withDownloadStatus(
   doc: Document,
   baseKey: string,
   run: () => Promise<void>,
 ): Promise<void> {
   setStatus(doc, uiString(baseKey));
-  setDownloadProgressHandler(
-    throttleProgress((p) => {
-      setStatus(
-        doc,
-        uiString("oa-search-attaching-pct", {
-          percent: formatDownloadPercent(p),
-        }),
-      );
-    }),
-  );
-  return run().finally(() => setDownloadProgressHandler(null));
+  renderDownloadJobsStatus(doc, baseKey);
+  let lastPaint = 0;
+  const off = addJobProgressListener(() => {
+    const now = Date.now();
+    if (now - lastPaint < 120) return;
+    lastPaint = now;
+    renderDownloadJobsStatus(doc, baseKey);
+  });
+  return run().finally(() => {
+    off();
+    paintDownloadJobsList(doc);
+  });
 }
 
 function waitForWindowLoad(win: Window): Promise<void> {
@@ -781,6 +815,9 @@ async function runSearch(win: Window): Promise<void> {
 }
 
 async function withBusy(doc: Document, fn: () => Promise<void>): Promise<void> {
+  const state = getState() as OaSearchWindowState & { actionBusy?: boolean };
+  if (state.actionBusy) return;
+  state.actionBusy = true;
   const buttons = [
     `${config.addonRef}-oa-attach`,
     `${config.addonRef}-oa-create`,
@@ -793,6 +830,7 @@ async function withBusy(doc: Document, fn: () => Promise<void>): Promise<void> {
   try {
     await fn();
   } finally {
+    state.actionBusy = false;
     updateActionButtons(doc, getState());
     ensureSearchEnabled(doc);
   }
@@ -830,6 +868,28 @@ function wireActions(win: Window): void {
   }
   doc.documentElement.setAttribute("data-oa-wired", "1");
   const state = getState();
+
+  // Always mirror concurrent ProgressWindow jobs as separate rows in the popup.
+  {
+    let lastPaint = 0;
+    const offJobs = addJobProgressListener(() => {
+      if (!isWindowAlive(win)) {
+        offJobs();
+        return;
+      }
+      const now = Date.now();
+      if (now - lastPaint < 120) return;
+      lastPaint = now;
+      paintDownloadJobsList(doc);
+    });
+    win.addEventListener(
+      "unload",
+      () => {
+        offJobs();
+      },
+      { once: true },
+    );
+  }
 
   bindSearchTrigger(win, searchButton(doc));
 

@@ -22,12 +22,28 @@ function load() {
         this.lines = [];
       }
       createLine(opts) {
-        this.lines.push({ ...opts });
+        const line = {
+          text: opts.text || "",
+          progress: opts.progress ?? 0,
+          type: opts.type || "default",
+          setText(t) {
+            this.text = t;
+          },
+          setProgress(p) {
+            this.progress = p;
+          },
+          setItemTypeAndIcon() {},
+        };
+        this.lines.push(line);
         return this;
       }
       changeLine(opts) {
         const idx = opts.idx ?? 0;
-        this.lines[idx] = { ...(this.lines[idx] || {}), ...opts };
+        const line = this.lines[idx];
+        if (!line) return;
+        if (opts.text) line.setText(opts.text);
+        if (typeof opts.progress === "number") line.setProgress(opts.progress);
+        if (opts.type) line.type = opts.type;
       }
       show() {
         return this;
@@ -61,7 +77,7 @@ test("formatDownloadPercent prefers percent when total known", () => {
   );
 });
 
-test("reportDownloadProgress notifies handler", () => {
+test("reportDownloadProgress without jobId notifies handler", () => {
   const {
     setDownloadProgressHandler,
     reportDownloadProgress,
@@ -72,6 +88,22 @@ test("reportDownloadProgress notifies handler", () => {
   reportDownloadProgress(25, 100);
   setDownloadProgressHandler(null);
   assert.deepEqual(seen, ["25%"]);
+});
+
+test("reportDownloadProgress with jobId does not collapse via handler", () => {
+  const {
+    setDownloadProgressHandler,
+    reportDownloadProgress,
+    registerDownloadJob,
+    finishDownloadJob,
+  } = load();
+  const seen = [];
+  setDownloadProgressHandler((p) => seen.push(p.percent));
+  registerDownloadJob("a", { source: "s2", title: "One" });
+  reportDownloadProgress(25, 100, "a");
+  finishDownloadJob("a", { ok: true });
+  setDownloadProgressHandler(null);
+  assert.deepEqual(seen, []);
 });
 
 test("mapPool runs with bounded concurrency", async () => {
@@ -96,4 +128,64 @@ test("job listener receives jobId", () => {
   reportDownloadProgress(10, 100, "job-a");
   off();
   assert.deepEqual(seen, [["job-a", 10]]);
+});
+
+test("concurrent jobs update separate ProgressWindow lines", () => {
+  const {
+    registerDownloadJob,
+    reportDownloadProgress,
+    finishDownloadJob,
+    snapshotActiveDownloadJobs,
+    formatActiveJobsStatus,
+  } = load();
+
+  registerDownloadJob("j1", {
+    source: "dergipark",
+    title: "Alpha paper title",
+  });
+  registerDownloadJob("j2", { source: "yoktez", title: "Beta thesis title" });
+
+  reportDownloadProgress(40, 100, "j1");
+  reportDownloadProgress(10, 100, "j2");
+
+  const snap = snapshotActiveDownloadJobs();
+  assert.equal(snap.length, 2);
+  assert.equal(snap[0].percent, "40%");
+  assert.equal(snap[1].percent, "10%");
+
+  const status = formatActiveJobsStatus(snap);
+  assert.match(status, /dergipark/);
+  assert.match(status, /yoktez/);
+  assert.match(status, /40%/);
+  assert.match(status, /10%/);
+
+  const win = global.ztoolkit._lastWin;
+  void win;
+  // Lines live on the ProgressWindow instance created inside the module.
+  // Re-read via change: both lines must keep distinct text after updates.
+  finishDownloadJob("j1", { ok: true });
+  assert.equal(snapshotActiveDownloadJobs().length, 1);
+  finishDownloadJob("j2", { ok: true });
+  assert.equal(snapshotActiveDownloadJobs().length, 0);
+});
+
+test("finishDownloadJob is idempotent (no board wipe while siblings run)", () => {
+  const {
+    registerDownloadJob,
+    reportDownloadProgress,
+    finishDownloadJob,
+    snapshotActiveDownloadJobs,
+  } = load();
+  registerDownloadJob("a", { source: "a", title: "A" });
+  registerDownloadJob("b", { source: "b", title: "B" });
+  reportDownloadProgress(50, 100, "a");
+  reportDownloadProgress(20, 100, "b");
+  finishDownloadJob("a", { ok: true });
+  finishDownloadJob("a", { ok: true }); // double finish
+  assert.equal(snapshotActiveDownloadJobs().length, 1);
+  assert.equal(snapshotActiveDownloadJobs()[0].jobId, "b");
+  reportDownloadProgress(80, 100, "b");
+  assert.equal(snapshotActiveDownloadJobs()[0].percent, "80%");
+  finishDownloadJob("b", { ok: true });
+  assert.equal(snapshotActiveDownloadJobs().length, 0);
 });

@@ -42,6 +42,7 @@ oa-search-empty = No results
 oa-search-error = Search failed: { $message }
 oa-search-attaching = Downloading and attaching PDF…
 oa-search-attaching-pct = Downloading PDF… { $percent }
+oa-search-attaching-jobs = Downloading: { $jobs }
 oa-search-attach-ok = PDF attached to selected item
 oa-search-attach-fail = Could not attach PDF
 oa-search-creating = Creating item and attaching PDF…

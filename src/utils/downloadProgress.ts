@@ -1,7 +1,8 @@
 // @ajan: cursor · @etiket: katman-2, download-progress, multi-job
 /**
  * Format / throttle PDF download progress for ProgressWindow + OA Search status.
- * Concurrent fetches use progressJob ids → separate ProgressWindow lines.
+ * Concurrent fetches use progressJob ids → separate ProgressWindow lines
+ * (direct ItemProgress refs — avoid changeLine idx falling back to 0).
  */
 
 import { config } from "../../package.json";
@@ -12,6 +13,14 @@ export type DownloadProgress = {
   /** 0–100 when total known; otherwise null. */
   percent: number | null;
   jobId?: string;
+};
+
+export type ActiveDownloadJob = {
+  jobId: string;
+  source: string;
+  title: string;
+  percent: string;
+  progress: DownloadProgress | null;
 };
 
 type Handler = (p: DownloadProgress) => void;
@@ -53,8 +62,11 @@ export function reportDownloadProgress(
     if (jobId) {
       for (const fn of jobListeners) fn(jobId, info);
       updateDownloadJobLine(jobId, info);
+      // Per-job progress is rendered via board + job listeners — do not also
+      // feed the legacy single-line handler (it collapses concurrent jobs).
+    } else {
+      handler?.(info);
     }
-    handler?.(info);
   } catch {
     /* UI must never break the download */
   }
@@ -88,14 +100,23 @@ export function throttleProgress(fn: Handler, minIntervalMs = 200): Handler {
   };
 }
 
-type JobMeta = { source: string; title: string };
+type JobMeta = {
+  source: string;
+  title: string;
+  last: DownloadProgress | null;
+};
+
+type JobMetaInput = {
+  source: string;
+  title: string;
+};
 
 type ProgressBoard = {
   win: any;
-  lineIdx: Map<string, number>;
+  /** Native ItemProgress (or toolkit line) per job — never rely on idx alone. */
+  lineRef: Map<string, any>;
   meta: Map<string, JobMeta>;
-  active: number;
-  nextIdx: number;
+  active: Set<string>;
 };
 
 let board: ProgressBoard | null = null;
@@ -106,14 +127,13 @@ function ensureBoard(): ProgressBoard {
     closeOnClick: true,
     closeTime: -1,
   });
-  win.show();
   board = {
     win,
-    lineIdx: new Map(),
+    lineRef: new Map(),
     meta: new Map(),
-    active: 0,
-    nextIdx: 0,
+    active: new Set(),
   };
+  win.show();
   return board;
 }
 
@@ -126,47 +146,142 @@ function lineText(meta: JobMeta, p: DownloadProgress | null): string {
   return `[${src}] ${pct} — ${title}`;
 }
 
+function applyLine(
+  line: any,
+  text: string,
+  opts: { type?: string; progress?: number } = {},
+): void {
+  if (!line) return;
+  try {
+    if (typeof line.setText === "function") {
+      line.setText(text);
+    }
+    if (
+      typeof opts.progress === "number" &&
+      typeof line.setProgress === "function"
+    ) {
+      line.setProgress(opts.progress);
+    }
+    if (opts.type && typeof line.setItemTypeAndIcon === "function") {
+      const icon =
+        opts.type === "success"
+          ? "chrome://zotero/skin/tick.png"
+          : opts.type === "fail"
+            ? "chrome://zotero/skin/cross.png"
+            : "";
+      if (icon) line.setItemTypeAndIcon(icon);
+    }
+  } catch {
+    /* ProgressWindow may have closed */
+  }
+}
+
+/** Snapshot of in-flight jobs (OA Search multi-line status). */
+export function snapshotActiveDownloadJobs(): ActiveDownloadJob[] {
+  if (!board) return [];
+  const out: ActiveDownloadJob[] = [];
+  for (const jobId of board.active) {
+    const meta = board.meta.get(jobId);
+    if (!meta) continue;
+    out.push({
+      jobId,
+      source: meta.source,
+      title: meta.title,
+      percent: meta.last ? formatDownloadPercent(meta.last) : "…",
+      progress: meta.last,
+    });
+  }
+  return out;
+}
+
+/** One status line per active job (joined with " · " for compact footer). */
+export function formatActiveJobsStatus(
+  jobs: ActiveDownloadJob[] = snapshotActiveDownloadJobs(),
+): string {
+  if (!jobs.length) return "";
+  return jobs
+    .map((j) => {
+      const src = (j.source || "…").slice(0, 12);
+      const title = (j.title || "").slice(0, 22);
+      return `[${src}] ${j.percent}${title ? ` ${title}` : ""}`;
+    })
+    .join(" · ");
+}
+
 /** Register a ProgressWindow line for a concurrent download job. */
-export function registerDownloadJob(jobId: string, meta: JobMeta): void {
+export function registerDownloadJob(jobId: string, meta: JobMetaInput): void {
   const b = ensureBoard();
+  const prev = b.meta.get(jobId);
   b.meta.set(jobId, {
-    source: meta.source || "…",
-    title: meta.title || "",
+    source: meta.source || prev?.source || "…",
+    title: meta.title || prev?.title || "",
+    last: prev?.last ?? null,
   });
-  if (!b.lineIdx.has(jobId)) {
+  b.active.add(jobId);
+  if (!b.lineRef.has(jobId)) {
+    const text = lineText(b.meta.get(jobId)!, null);
     b.win.createLine({
-      text: lineText(b.meta.get(jobId)!, null),
+      text,
       type: "default",
       progress: 0,
     });
-    b.lineIdx.set(jobId, b.nextIdx++);
-    b.active++;
+    // Prefer toolkit's tracked line list (same object ItemProgress uses).
+    const lines: any[] = Array.isArray(b.win.lines) ? b.win.lines : [];
+    const line = lines.length ? lines[lines.length - 1] : null;
+    if (line) b.lineRef.set(jobId, line);
+    try {
+      b.win.show();
+    } catch {
+      /* already shown */
+    }
   }
 }
 
 export function updateDownloadJobLine(
   jobId: string,
   p: DownloadProgress,
-  metaPatch?: Partial<JobMeta>,
+  metaPatch?: Partial<{ source: string; title: string }>,
 ): void {
   if (!board) return;
-  const prev = board.meta.get(jobId) || { source: "…", title: "" };
-  if (metaPatch) {
-    board.meta.set(jobId, {
-      source: metaPatch.source ?? prev.source,
-      title: metaPatch.title ?? prev.title,
-    });
+  // Stale progress after finish — do not re-create lines (was collapsing UX).
+  if (!board.active.has(jobId) && !board.lineRef.has(jobId)) return;
+
+  const prev = board.meta.get(jobId) || {
+    source: "…",
+    title: "",
+    last: null,
+  };
+  const next: JobMeta = {
+    source: metaPatch?.source ?? prev.source,
+    title: metaPatch?.title ?? prev.title,
+    last: p,
+  };
+  board.meta.set(jobId, next);
+
+  if (!board.lineRef.has(jobId)) {
+    // Registered late / race: create the line now.
+    registerDownloadJob(jobId, next);
   }
-  const meta = board.meta.get(jobId) || prev;
-  let idx = board.lineIdx.get(jobId);
-  if (idx == null) {
-    registerDownloadJob(jobId, meta);
-    idx = board.lineIdx.get(jobId);
+  const line = board.lineRef.get(jobId);
+  if (!line) {
+    // Fallback: toolkit changeLine by index in win.lines order of active keys.
+    const keys = [...board.lineRef.keys()];
+    const idx = keys.indexOf(jobId);
+    if (idx >= 0) {
+      try {
+        board.win.changeLine({
+          idx,
+          text: lineText(next, p),
+          type: "default",
+          progress: p.percent != null ? p.percent : 0,
+        });
+      } catch {
+        /* ignore */
+      }
+    }
+    return;
   }
-  if (idx == null) return;
-  board.win.changeLine({
-    idx,
-    text: lineText(meta, p),
+  applyLine(line, lineText(next, p), {
     type: "default",
     progress: p.percent != null ? p.percent : 0,
   });
@@ -177,23 +292,56 @@ export function finishDownloadJob(
   opts: { ok: boolean; text?: string } = { ok: true },
 ): void {
   if (!board) return;
-  const meta = board.meta.get(jobId) || { source: "…", title: "" };
-  const idx = board.lineIdx.get(jobId);
-  if (idx != null) {
-    board.win.changeLine({
-      idx,
-      text:
-        opts.text ||
-        `${opts.ok ? "✓" : "✗"} [${meta.source.slice(0, 12)}] ${meta.title.slice(0, 28)}`,
-      type: opts.ok ? "success" : "fail",
-      progress: 100,
-    });
+  if (!board.active.has(jobId) && !board.lineRef.has(jobId)) return;
+
+  const meta = board.meta.get(jobId) || {
+    source: "…",
+    title: "",
+    last: null,
+  };
+  const line = board.lineRef.get(jobId);
+  const text =
+    opts.text ||
+    `${opts.ok ? "✓" : "✗"} [${meta.source.slice(0, 12)}] ${meta.title.slice(0, 28)}`;
+  applyLine(line, text, {
+    type: opts.ok ? "success" : "fail",
+    progress: 100,
+  });
+  // Also try changeLine for icon update if applyLine couldn't set icon.
+  if (line && Array.isArray(board.win.lines)) {
+    const idx = board.win.lines.indexOf(line);
+    if (idx >= 0) {
+      try {
+        board.win.changeLine({
+          idx,
+          text,
+          type: opts.ok ? "success" : "fail",
+          progress: 100,
+        });
+      } catch {
+        /* ignore */
+      }
+    }
   }
+
+  board.active.delete(jobId);
   board.meta.delete(jobId);
-  board.lineIdx.delete(jobId);
-  board.active = Math.max(0, board.active - 1);
-  if (board.active <= 0) {
-    board.win.startCloseTimer(4500);
+  board.lineRef.delete(jobId);
+
+  for (const fn of jobListeners) {
+    try {
+      fn(jobId, { loaded: 0, total: 0, percent: 100, jobId });
+    } catch {
+      /* ignore */
+    }
+  }
+
+  if (board.active.size === 0) {
+    try {
+      board.win.startCloseTimer(4500);
+    } catch {
+      /* ignore */
+    }
     board = null;
   }
 }
