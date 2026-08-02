@@ -21,7 +21,7 @@ LibRart Pro.
 | **Source**   | [sanaatchi/zotero-pdf-manager](https://github.com/sanaatchi/zotero-pdf-manager)                            |
 
 Update URL (prefs):  
-`https://github.com/sanaatchi/zotero-pdf-manager-releases/releases/latest/download/update.json`
+`https://github.com/sanaatchi/zotero-pdf-manager-releases/releases/download/update/update.json`
 
 ## Role in the three layers
 

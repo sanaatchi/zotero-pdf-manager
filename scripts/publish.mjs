@@ -1,11 +1,12 @@
-// @ajan: cursor · @etiket: katman-2, publish, prune-5, update-hash
+// @ajan: cursor · @etiket: katman-2, publish, prune-5, update-hash, rolling-verify
 /**
  * Publish a release to the PUBLIC dist repo so Zotero can auto-update.
  *
  * All subprocesses use arg-array execFileSync (no shell). Notes are a single
  * argv value. Provenance JSON links source commit ↔ XPI sha512.
  * After publish, keep only KEEP_VERSIONED_RELEASES (5) versioned tags; the
- * rolling `update` release is never deleted.
+ * rolling `update` release is never deleted. Rolling channel is re-fetched
+ * and asserted to match the just-published version (CDN lag / stale clobber).
  *
  * Usage:
  *   npm run gh-release
@@ -229,6 +230,70 @@ function ensureUpdateRelease(body) {
   }
 }
 
+/**
+ * Confirm the rolling `update` release asset actually serves this version.
+ * `gh release upload --clobber` can succeed while CDN still returns stale JSON;
+ * re-download and assert version + hash before declaring publish done.
+ */
+function sleepMs(ms) {
+  const end = Date.now() + ms;
+  while (Date.now() < end) {
+    /* publish gate only — short CDN wait */
+  }
+}
+
+function verifyRollingUpdateChannel(expectedBody) {
+  const expected = JSON.parse(expectedBody);
+  const expectedVersion =
+    expected?.addons?.[addonID]?.updates?.[0]?.version || "";
+  const expectedHash =
+    expected?.addons?.[addonID]?.updates?.[0]?.update_hash || "";
+  if (!expectedVersion || !expectedHash) {
+    throw new Error("verifyRollingUpdateChannel: malformed expected body");
+  }
+
+  const url = `https://github.com/${DIST_REPO}/releases/download/${UPDATE_RELEASE}/update.json`;
+  const tmp = join(tmpdir(), `zpdf-rolling-update-${Date.now()}.json`);
+  let lastErr = "";
+  try {
+    for (let attempt = 1; attempt <= 5; attempt++) {
+      try {
+        run(isWin ? "curl.exe" : "curl", [
+          "-fsSL",
+          "-o",
+          tmp,
+          "-A",
+          "Zotero/7.0",
+          url,
+        ]);
+        const got = JSON.parse(readFileSync(tmp, "utf8"));
+        const version = got?.addons?.[addonID]?.updates?.[0]?.version || "";
+        const hash = got?.addons?.[addonID]?.updates?.[0]?.update_hash || "";
+        if (version === expectedVersion && hash === expectedHash) {
+          console.log(
+            `Rolling update channel OK (${UPDATE_RELEASE}/update.json → ${version})`,
+          );
+          return;
+        }
+        lastErr = `got version=${version || "?"} hash=${hash || "?"}`;
+      } catch (e) {
+        lastErr = e instanceof Error ? e.message : String(e);
+      }
+      sleepMs(1500 * attempt);
+    }
+  } finally {
+    try {
+      unlinkSync(tmp);
+    } catch {
+      /* ignore */
+    }
+  }
+  throw new Error(
+    `Rolling update channel still stale after retries (expected ${expectedVersion}): ${lastErr}\n` +
+      `Re-upload: gh release upload ${UPDATE_RELEASE} update.json --repo ${DIST_REPO} --clobber`,
+  );
+}
+
 function verifyPublicDownload(updateHash) {
   run("gh", [
     "release",
@@ -365,6 +430,7 @@ function main() {
 
   ensureUpdateRelease(body);
   publishUpdateJsonToBranch(body);
+  verifyRollingUpdateChannel(body);
   verifyPublicDownload(updateHash);
   pruneOldVersionedReleases();
 
