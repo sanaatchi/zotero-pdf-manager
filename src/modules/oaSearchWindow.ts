@@ -1,8 +1,9 @@
-// @ajan: cursor · @etiket: katman-2, oa-search, window, download-progress
+// @ajan: cursor · @etiket: katman-2, oa-search, window, manual-search
 /**
  * Independent OA Search popup (openDialog) — federated results + attach actions.
  * UX: per-search source picker, PDF-only filter, keyboard nav, double-click apply,
- * auto-search on open, source/error summary. Selection optional for search.
+ * source/error summary. Selection optional for search.
+ * Search runs only on Ara (or Enter in query fields) — never auto on open.
  * Ara never stays disabled during long bridge calls (generation supersede).
  */
 import { config } from "../../package.json";
@@ -1005,12 +1006,7 @@ export async function initOaSearchWindow(win: Window): Promise<void> {
   wireActions(win);
   ensureSearchEnabled(doc);
   updateActionButtons(doc, state);
-
-  // Auto-search when fields already have a query (e.g. from selected item).
-  const q = readQuery(doc);
-  if (q.text || q.doi || q.isbn || q.authors) {
-    void runSearch(win);
-  }
+  // Prefill only — user must press Ara (or Enter in a query field).
 }
 
 export async function openOaSearchWindow(): Promise<void> {
