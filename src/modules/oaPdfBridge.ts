@@ -1,4 +1,4 @@
-// @ajan: cursor · @etiket: katman-2, oa-pdf-bridge, loopback, ssrf
+// @ajan: cursor · @etiket: katman-2, oa-pdf-bridge, short-title-guard
 /**
  * Katman-2 → Kutuphane köprü (8756) `oa_pdf_search` client.
  * Online PDF discovery runs in Python; this module only POSTs queries.
@@ -239,13 +239,55 @@ function titleContainment(needle: string, haystack: string): number {
   return inter / na.size;
 }
 
-/** Best of Jaccard and either-direction containment (matches Python match_util). */
+/**
+ * Best of Jaccard and containment (Python match_util parity).
+ * Reverse containment(b→a) only when candidate b is ≥ as token-rich as a —
+ * blocks short encyclopedia titles ("Golub, Leon") matching long queries.
+ */
 function titleMatchScore(a: string, b: string): number {
-  return Math.max(
-    titleOverlap(a, b),
-    titleContainment(a, b),
-    titleContainment(b, a),
+  const jac = titleOverlap(a, b);
+  const cAb = titleContainment(a, b);
+  const ta = normTokens(a);
+  const tb = normTokens(b);
+  const cBa =
+    tb.length && ta.length && tb.length >= ta.length
+      ? titleContainment(b, a)
+      : 0;
+  return Math.max(jac, cAb, cBa);
+}
+
+/** Generic words that must not alone justify a mid-band title match. */
+const TITLE_STOP = new Set([
+  "interview",
+  "conversation",
+  "research",
+  "analysis",
+  "study",
+  "article",
+  "review",
+  "about",
+  "with",
+  "from",
+  "into",
+  "upon",
+  "between",
+]);
+
+/**
+ * Mid-band scores (0.45–0.8) need a distinctive query token (≥7, not stop)
+ * present in the hit title — blocks "Interview with Todd Golub" for a
+ * Leon Golub Mercenaries interview.
+ */
+function titleTrustOk(itemTitle: string, hitTitle: string): boolean {
+  const ov = titleMatchScore(itemTitle, hitTitle);
+  if (ov >= 0.8) return true;
+  if (ov < 0.45) return false;
+  const hitToks = new Set(normTokens(hitTitle));
+  const distinctive = normTokens(itemTitle).filter(
+    (t) => t.length >= 7 && !TITLE_STOP.has(t),
   );
+  if (!distinctive.length) return ov >= 0.6;
+  return distinctive.some((t) => hitToks.has(t));
 }
 
 export type HitTrustContext = {
@@ -298,7 +340,7 @@ export function filterTrustedHits(
         continue;
       }
     }
-    if (ov >= 0.45) {
+    if (itemTitle && titleTrustOk(itemTitle, String(hit.title || ""))) {
       scored.push({ hit, rank: ov });
       continue;
     }

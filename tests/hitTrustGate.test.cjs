@@ -72,3 +72,41 @@ test("filterTrustedHits allows scihub when item has DOI", () => {
   );
   assert.equal(trusted.length, 1);
 });
+
+test("filterTrustedHits drops short name-only titles (Golub reverse containment)", () => {
+  const { filterTrustedHits } = loadBridge();
+  const itemTitle = "The mercenaries: an interview with Leon Golub";
+  const trusted = filterTrustedHits(
+    [
+      {
+        source: "doi",
+        title: "Golub, Leon",
+        pdfUrl: "https://example.com/encyclopedia.pdf",
+        doi: "10.1093/gao/9781884446054.article.t033121",
+      },
+      {
+        source: "doi",
+        title: "Leon Golub",
+        pdfUrl: "https://example.com/chapter.pdf",
+      },
+      {
+        source: "doi",
+        title: "Interview with Dr. Todd Golub, M.D.",
+        pdfUrl: "https://example.com/todd.pdf",
+      },
+      {
+        source: "doi",
+        title: "Interview: Leon Golub Talks with Irving Sandler",
+        pdfUrl: "https://example.com/sandler.pdf",
+      },
+      {
+        source: "doi",
+        title: "The Mercenaries: An Interview with Leon Golub",
+        pdfUrl: "https://example.com/right.pdf",
+      },
+    ],
+    { title: itemTitle, doi: "" },
+  );
+  assert.equal(trusted.length, 1);
+  assert.equal(trusted[0].pdfUrl, "https://example.com/right.pdf");
+});

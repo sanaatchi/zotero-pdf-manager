@@ -1,8 +1,8 @@
-<!-- @ajan: cursor · @etiket: katman-2, kabul, checklist, zotero, v1.0.53 -->
+<!-- @ajan: cursor · @etiket: katman-2, kabul, checklist, zotero, v1.0.54 -->
 
 # Zotero PDF Manager — manuel kabul checklist
 
-**Sürüm:** 1.0.53 (`package.json`)  
+**Sürüm:** 1.0.54 (`package.json`)  
 **Önceki imza:** 1.0.33 (2026-07-30) — A1–A6 (ikinci pencere Windows N/A)  
 **XPI kanalı:** https://github.com/sanaatchi/zotero-pdf-manager-releases/releases  
 _(1.0.49 XPI yayınlanmadıysa yerel `npm run build` çıktısıyla smoke.)_
