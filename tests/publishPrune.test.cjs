@@ -18,10 +18,7 @@ test("selectReleasesToPrune keeps newest 5 versioned; ignores update", async () 
     "update",
     "v1.0.44",
   ];
-  assert.deepEqual(mod.selectReleasesToPrune(tags, 5), [
-    "v1.0.51",
-    "v1.0.44",
-  ]);
+  assert.deepEqual(mod.selectReleasesToPrune(tags, 5), ["v1.0.51", "v1.0.44"]);
   assert.deepEqual(mod.selectReleasesToPrune(["update", "v1"], 5), []);
   assert.deepEqual(mod.selectReleasesToPrune(["v3", "v2", "v1"], 2), ["v1"]);
 });
