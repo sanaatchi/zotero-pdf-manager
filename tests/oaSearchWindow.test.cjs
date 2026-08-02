@@ -1,0 +1,134 @@
+// @ajan: cursor · @etiket: katman-2, tests, oa-search
+const assert = require("node:assert/strict");
+const fs = require("node:fs");
+const path = require("node:path");
+const { test } = require("node:test");
+const esbuild = require("esbuild");
+
+function loadActions() {
+  const result = esbuild.buildSync({
+    entryPoints: [path.join(process.cwd(), "src/modules/oaSearchActions.ts")],
+    bundle: true,
+    platform: "node",
+    format: "cjs",
+    write: false,
+    logLevel: "silent",
+    external: ["./oaPdfBridge", "./pdfSources"],
+  });
+  const module = { exports: {} };
+  const req = (id) => {
+    if (id.includes("oaPdfBridge")) {
+      return { fetchOaPdfViaBridge: async () => null };
+    }
+    if (id.includes("pdfSources")) {
+      return {
+        downloadAndAttach: async () => null,
+        rethrowAttachControlFlow: () => {},
+      };
+    }
+    return require(id);
+  };
+  new Function("module", "exports", "require", result.outputFiles[0].text)(
+    module,
+    module.exports,
+    req,
+  );
+  return module.exports;
+}
+
+test("createItemFieldsFromHit maps DOI article and ISBN book", () => {
+  const {
+    createItemFieldsFromHit,
+    guessItemTypeFromHit,
+    parseAuthorsField,
+    relatedPairIds,
+  } = loadActions();
+
+  const article = createItemFieldsFromHit({
+    source: "doi",
+    title: "Sample Paper",
+    doi: "10.1000/xyz",
+    year: "2020",
+    authors: "Doe, Jane; Smith, John",
+    landingUrl: "https://example.org/a",
+  });
+  assert.equal(article.itemType, "journalArticle");
+  assert.equal(article.DOI, "10.1000/xyz");
+  assert.equal(article.creators.length, 2);
+  assert.equal(article.creators[0].lastName, "Doe");
+  assert.equal(article.creators[0].firstName, "Jane");
+
+  assert.equal(
+    guessItemTypeFromHit({
+      source: "libgen",
+      title: "Book",
+      extra: { isbn: "978-0-00-000000-0" },
+    }),
+    "book",
+  );
+  assert.equal(
+    guessItemTypeFromHit({ source: "yoktez", title: "Tez" }),
+    "thesis",
+  );
+
+  assert.deepEqual(parseAuthorsField("Ada Lovelace"), [
+    { firstName: "Ada", lastName: "Lovelace", creatorType: "author" },
+  ]);
+  assert.deepEqual(relatedPairIds(9, 3), [3, 9]);
+  assert.deepEqual(relatedPairIds(2, 2), [2, 2]);
+});
+
+test("OA search surface: xhtml + menubar + locales + menu wiring", () => {
+  const root = process.cwd();
+  const xhtml = fs.readFileSync(
+    path.join(root, "addon/chrome/content/oa-search.xhtml"),
+    "utf8",
+  );
+  assert.match(xhtml, /zpdfmanager-oa-shell/);
+  assert.match(xhtml, /zpdfmanager-oa-tbody/);
+
+  const win = fs.readFileSync(
+    path.join(root, "src/modules/oaSearchWindow.ts"),
+    "utf8",
+  );
+  assert.match(win, /openOaSearchWindow/);
+  assert.match(win, /initOaSearchWindow/);
+  assert.match(win, /oa-search\.xhtml/);
+
+  const menubar = fs.readFileSync(
+    path.join(root, "src/modules/menubar.ts"),
+    "utf8",
+  );
+  assert.match(menubar, /pdf-manager-menu/);
+  assert.match(menubar, /main-menubar/);
+  assert.match(menubar, /openOaSearchWindow/);
+
+  const menu = fs.readFileSync(path.join(root, "src/modules/menu.ts"), "utf8");
+  assert.match(menu, /registerPdfManagerMenubar/);
+  assert.match(menu, /openOaSearchWindow/);
+  assert.match(menu, /pdf-federated-menu/);
+
+  const bridge = fs.readFileSync(
+    path.join(root, "src/modules/oaPdfBridge.ts"),
+    "utf8",
+  );
+  assert.match(bridge, /searchAllOaSourcesByQuery/);
+
+  const keys = [
+    "pdf-manager-menu",
+    "oa-search-open",
+    "oa-search-title",
+    "oa-search-attach",
+    "oa-search-create",
+    "oa-search-related",
+  ];
+  for (const locale of ["en-US", "de", "it-IT"]) {
+    const ftl = fs.readFileSync(
+      path.join(root, "addon/locale", locale, "addon.ftl"),
+      "utf8",
+    );
+    for (const key of keys) {
+      assert.match(ftl, new RegExp(`^${key}\\s*=`, "m"));
+    }
+  }
+});

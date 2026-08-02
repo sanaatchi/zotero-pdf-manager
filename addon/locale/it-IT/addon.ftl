@@ -1,3 +1,4 @@
+# @ajan: cursor · @etiket: katman-2, locale, oa-search
 attachment-manager = Attachment Manager
 attach-new-file = Allega nuovo file
 rename-move-attachment = Rinomina e sposta allegato
@@ -22,6 +23,27 @@ pdf-federated-no-sources = Nessuna fonte di download abilitata (preferenze)
 pdf-federated-start = Ricerca in tutte le fonti per { $count } elemento/i…
 pdf-federated-attach-confirm = Allegare il miglior risultato da { $source }?\n{ $title }
 pdf-federated-done = Ricerca federata — { $attached } allegati, { $failed } falliti/saltati
+pdf-manager-menu = PDF Manager
+oa-search-open = Ricerca OA…
+oa-search-title = Ricerca OA
+oa-search-run = Cerca
+oa-search-attach = Allega alla selezione
+oa-search-create = Nuovo elemento + PDF
+oa-search-related = Allega alla selezione + Related
+oa-search-target = Selezionato: { $title }
+oa-search-target-none = Nessuna selezione — scegli un elemento per allegare / Related
+oa-search-ready = Inserisci una query e premi Cerca
+oa-search-need-query = Inserisci titolo, DOI, ISBN o autori
+oa-search-searching = Ricerca in tutte le fonti abilitate…
+oa-search-results = { $count } risultato/i
+oa-search-empty = Nessun risultato
+oa-search-error = Ricerca non riuscita: { $message }
+oa-search-attaching = Download e allegato PDF in corso…
+oa-search-attach-ok = PDF allegato all’elemento selezionato
+oa-search-attach-fail = Impossibile allegare il PDF
+oa-search-creating = Creazione elemento e allegato PDF…
+oa-search-create-ok = Elemento creato: { $title }
+oa-search-related-ok = Related «{ $title }» · PDF allegato={ $attached }
 pdf-download-url-menu = Attach PDF from URL…
 pdf-embed-metadata-menu = Incorpora i metadati Zotero nel PDF (aggiorna tutti)
 pdf-embed-metadata-missing-menu = Incorpora i metadati solo per i PDF mancanti/falliti

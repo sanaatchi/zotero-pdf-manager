@@ -1,8 +1,8 @@
-// @ajan: cursor · @etiket: katman-2, federated-search, apply
+// @ajan: cursor · @etiket: katman-2, federated-search, apply, oa-search
 /**
- * Manual federated OA search: query all prefs-enabled download adapters,
- * show ranked report, optionally attach the top downloadable hit.
- * Does not change AUTOMATIC_ONLINE_SOURCE_IDS cascade policy.
+ * Legacy federated helpers (pickTop / HTML report).
+ * Attanger "Search all PDF sources…" now opens the OA Search popup
+ * (`openOaSearchWindow`) — same federated motor via bridge source=all.
  */
 import { config } from "../../package.json";
 import { getString } from "../utils/locale";

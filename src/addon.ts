@@ -1,3 +1,4 @@
+// @ajan: cursor · @etiket: katman-2, addon-data, oa-search
 import { ColumnOptions } from "zotero-plugin-toolkit/dist/helpers/virtualizedTable";
 import { DialogHelper } from "zotero-plugin-toolkit/dist/helpers/dialog";
 import hooks from "./hooks";
@@ -21,6 +22,22 @@ class Addon {
     menu?: {
       dispose: () => void;
       refreshItemMenu: () => void;
+    };
+    oaSearch?: {
+      window?: Window;
+      hits: Array<{
+        source: string;
+        title: string;
+        pdfUrl?: string | null;
+        landingUrl?: string | null;
+        doi?: string | null;
+        year?: string | null;
+        authors?: string | null;
+        score?: number;
+        extra?: Record<string, unknown>;
+      }>;
+      selectedIndex: number;
+      targetItem: Zotero.Item | null;
     };
     pdfReconciler?: {
       start: () => void;

@@ -1,0 +1,223 @@
+<!-- @ajan: cursor · @etiket: katman-2, oa-search, xhtml -->
+<html xmlns="http://www.w3.org/1999/xhtml">
+  <head>
+    <meta charset="utf-8" />
+    <title>OA Arama</title>
+    <style type="text/css">
+      <![CDATA[
+            :root {
+              --oa-bg: #f7f7f8;
+              --oa-fg: #1c1c1e;
+              --oa-muted: #6b6b70;
+              --oa-card: #ffffff;
+              --oa-border: #e4e4e7;
+              --oa-accent: #0f766e;
+              --oa-accent-fg: #fff;
+              --oa-warn: #b45309;
+              --oa-row-sel: rgba(15, 118, 110, 0.12);
+            }
+
+            @media (prefers-color-scheme: dark) {
+              :root {
+                --oa-bg: #1c1c1e;
+                --oa-fg: #f2f2f3;
+                --oa-muted: #a0a0a6;
+                --oa-card: #2a2a2e;
+                --oa-border: #3a3a40;
+                --oa-row-sel: rgba(45, 212, 191, 0.15);
+              }
+            }
+
+            html, body {
+              margin: 0;
+              padding: 0;
+              height: 100%;
+              background: var(--oa-bg);
+              color: var(--oa-fg);
+              font: 13px/1.4 system-ui, Segoe UI, sans-serif;
+            }
+
+            #zpdfmanager-oa-shell {
+              height: 100%;
+              box-sizing: border-box;
+              display: flex;
+              flex-direction: column;
+              padding: 14px 16px;
+              gap: 10px;
+            }
+
+            h1 {
+              margin: 0;
+              font-size: 16px;
+              font-weight: 650;
+            }
+
+            .target {
+              padding: 8px 10px;
+              border-radius: 8px;
+              border: 1px solid var(--oa-border);
+              background: var(--oa-card);
+              color: var(--oa-muted);
+            }
+
+            .target.has-item {
+              color: var(--oa-fg);
+            }
+
+            .search-grid {
+              display: grid;
+              grid-template-columns: 1.4fr 0.8fr 0.8fr 1fr auto;
+              gap: 8px;
+              align-items: end;
+            }
+
+            label {
+              display: flex;
+              flex-direction: column;
+              gap: 4px;
+              font-size: 11px;
+              color: var(--oa-muted);
+            }
+
+            input[type="text"] {
+              border: 1px solid var(--oa-border);
+              border-radius: 6px;
+              padding: 7px 9px;
+              font: inherit;
+              background: var(--oa-card);
+              color: var(--oa-fg);
+            }
+
+            button {
+              border: none;
+              border-radius: 8px;
+              padding: 8px 12px;
+              cursor: pointer;
+              font: inherit;
+              background: var(--oa-accent);
+              color: var(--oa-accent-fg);
+            }
+
+            button:disabled {
+              opacity: 0.45;
+              cursor: default;
+            }
+
+            button.secondary {
+              background: transparent;
+              color: var(--oa-fg);
+              border: 1px solid var(--oa-border);
+            }
+
+            .actions {
+              display: flex;
+              flex-wrap: wrap;
+              gap: 8px;
+            }
+
+            .table-wrap {
+              flex: 1;
+              min-height: 0;
+              overflow: auto;
+              border: 1px solid var(--oa-border);
+              border-radius: 8px;
+              background: var(--oa-card);
+            }
+
+            table {
+              width: 100%;
+              border-collapse: collapse;
+            }
+
+            th, td {
+              padding: 7px 8px;
+              border-bottom: 1px solid var(--oa-border);
+              text-align: left;
+              vertical-align: top;
+            }
+
+            th {
+              position: sticky;
+              top: 0;
+              background: var(--oa-card);
+              font-size: 11px;
+              color: var(--oa-muted);
+              font-weight: 600;
+            }
+
+            tr.selected td {
+              background: var(--oa-row-sel);
+            }
+
+            tr.clickable {
+              cursor: pointer;
+            }
+
+            .num { text-align: right; white-space: nowrap; }
+            .ok { color: #15803d; font-weight: 600; }
+            .muted { color: var(--oa-muted); }
+
+            #zpdfmanager-oa-status {
+              color: var(--oa-muted);
+              font-size: 12px;
+              min-height: 1.2em;
+            }
+
+            #zpdfmanager-oa-status.error {
+              color: var(--oa-warn);
+            }
+          ]]>
+    </style>
+  </head>
+  <body>
+    <div id="zpdfmanager-oa-shell">
+      <h1 id="zpdfmanager-oa-title">OA Arama</h1>
+      <div id="zpdfmanager-oa-target" class="target"></div>
+      <div class="search-grid">
+        <label
+          >Başlık / metin
+          <input id="zpdfmanager-oa-q" type="text" autocomplete="off"
+        /></label>
+        <label
+          >DOI
+          <input id="zpdfmanager-oa-doi" type="text" autocomplete="off"
+        /></label>
+        <label
+          >ISBN
+          <input id="zpdfmanager-oa-isbn" type="text" autocomplete="off"
+        /></label>
+        <label
+          >Yazarlar
+          <input id="zpdfmanager-oa-authors" type="text" autocomplete="off"
+        /></label>
+        <button id="zpdfmanager-oa-search" type="button">Ara</button>
+      </div>
+      <div class="actions">
+        <button id="zpdfmanager-oa-attach" type="button" disabled>
+          Seçiliye ekle
+        </button>
+        <button id="zpdfmanager-oa-create" type="button" disabled>
+          Yeni öğe + PDF
+        </button>
+        <button id="zpdfmanager-oa-related" type="button" disabled>
+          Seçiliye ekle + Related
+        </button>
+      </div>
+      <div class="table-wrap">
+        <table>
+          <thead>
+            <tr>
+              <th class="num">Skor</th>
+              <th>Kaynak</th>
+              <th>Başlık</th>
+              <th>Yıl</th>
+              <th>PDF?</th>
+            </tr>
+          </thead>
+          <tbody id="zpdfmanager-oa-tbody"></tbody>
+        </table>
+      </div>
+      <div id="zpdfmanager-oa-status"></div>
+    </div>
+  </body>
+</html>

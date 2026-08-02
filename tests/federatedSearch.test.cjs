@@ -71,8 +71,9 @@ test("federated search wired in menu + locales + bridge", () => {
     "utf8",
   );
   assert.match(menu, /pdf-federated-menu/);
-  assert.match(menu, /searchAllPdfSourcesForSelection/);
+  assert.match(menu, /openOaSearchWindow/);
   assert.match(bridge, /searchAllOaSources/);
+  assert.match(bridge, /searchAllOaSourcesByQuery/);
   assert.match(bridge, /enabledFederatedSourceIds/);
   assert.match(bridge, /source:\s*"all"/);
   for (const locale of ["en-US", "de", "it-IT"]) {
@@ -81,5 +82,6 @@ test("federated search wired in menu + locales + bridge", () => {
       "utf8",
     );
     assert.match(ftl, /^pdf-federated-menu\s*=/m);
+    assert.match(ftl, /^oa-search-open\s*=/m);
   }
 });

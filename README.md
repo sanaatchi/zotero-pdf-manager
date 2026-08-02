@@ -1,4 +1,4 @@
-<!-- @ajan: cursor · @etiket: katman-2, readme, federated-search -->
+<!-- @ajan: cursor · @etiket: katman-2, readme, oa-search -->
 
 # Zotero PDF Manager
 
@@ -38,7 +38,7 @@ Do **not** merge the three addons. Data flows 1 → 2 → 3.
 - Multi-root **folder index** (persistent, incremental) + optional linked-attachment base
 - Startup / periodic / on-add **reconcile** with confidence thresholds and `#pdf-review`
 - **OA download** into `{watchRoot}/downloads/` (DOI, arXiv, PMC, S2, DergiPark automatic list)
-- **Federated OA search** (menu): query all prefs-enabled sources at once; attach top hit
+- **OA Search popup** (menubar **PDF Manager → OA Search…**, also Attanger “Search all PDF sources…”): federated results table; attach to selected / new item + PDF / attach + Related Items
 - **PDF content audit** (menu): detect wrong attachments via PDF text → `#pdf-mismatch` / optional detach
 - Orphan PDF report / optional auto-create (pref-gated, dry-run)
 - Metadata check, embed, clean; filename → metadata; duplicate PDF merge

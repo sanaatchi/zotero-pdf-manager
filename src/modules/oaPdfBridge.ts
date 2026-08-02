@@ -1,4 +1,4 @@
-// @ajan: cursor · @etiket: katman-2, oa-pdf-bridge, federated-search
+// @ajan: cursor · @etiket: katman-2, oa-pdf-bridge, federated-search, oa-search
 /**
  * Katman-2 → Kutuphane köprü (8756) `oa_pdf_search` client.
  * Online PDF discovery runs in Python; this module only POSTs queries.
@@ -252,6 +252,38 @@ export async function searchAllOaSources(
     pmid: base.pmid,
     pmcid: base.pmcid,
     authors: base.authors,
+    limit: 5,
+    sources,
+    profile: opts.profile || "full",
+    totalLimit: opts.totalLimit ?? 25,
+  });
+}
+
+/** Federated search from free-form query fields (OA Search popup). */
+export async function searchAllOaSourcesByQuery(
+  query: {
+    text?: string;
+    doi?: string;
+    isbn?: string;
+    authors?: string;
+    arxivId?: string;
+    pmid?: string;
+    pmcid?: string;
+  },
+  opts: { profile?: "full" | "auto"; totalLimit?: number } = {},
+): Promise<OaPdfSearchResponse> {
+  const sources = enabledFederatedSourceIds();
+  return searchOaPdfBridgeDetailed({
+    source: "all",
+    text: String(query.text || "").trim(),
+    doi: String(query.doi || "").trim(),
+    isbn: String(query.isbn || "")
+      .replace(/[^0-9Xx]/g, "")
+      .trim(),
+    arxivId: String(query.arxivId || "").trim(),
+    pmid: String(query.pmid || "").trim(),
+    pmcid: String(query.pmcid || "").trim(),
+    authors: String(query.authors || "").trim(),
     limit: 5,
     sources,
     profile: opts.profile || "full",

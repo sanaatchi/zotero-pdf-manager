@@ -1,3 +1,4 @@
+# @ajan: cursor · @etiket: katman-2, locale, oa-search
 attachment-manager = Attachment Manager
 attach-new-file = Attach New File
 rename-move-attachment = Rename and Move Attachment
@@ -23,6 +24,27 @@ pdf-federated-no-sources = No download sources are enabled (see preferences)
 pdf-federated-start = Searching all sources for { $count } item(s)…
 pdf-federated-attach-confirm = Attach best hit from { $source }?\n{ $title }
 pdf-federated-done = Federated search — { $attached } attached, { $failed } failed/skipped
+pdf-manager-menu = PDF Manager
+oa-search-open = OA Search…
+oa-search-title = OA Search
+oa-search-run = Search
+oa-search-attach = Attach to selected
+oa-search-create = New item + PDF
+oa-search-related = Attach to selected + Related
+oa-search-target = Selected: { $title }
+oa-search-target-none = No selection — pick an item for attach / Related
+oa-search-ready = Enter a query and press Search
+oa-search-need-query = Enter a title, DOI, ISBN, or authors
+oa-search-searching = Searching all enabled sources…
+oa-search-results = { $count } result(s)
+oa-search-empty = No results
+oa-search-error = Search failed: { $message }
+oa-search-attaching = Downloading and attaching PDF…
+oa-search-attach-ok = PDF attached to selected item
+oa-search-attach-fail = Could not attach PDF
+oa-search-creating = Creating item and attaching PDF…
+oa-search-create-ok = Created item: { $title }
+oa-search-related-ok = Related item «{ $title }» · PDF attached={ $attached }
 pdf-download-url-menu = Attach PDF from URL…
 pdf-embed-metadata-menu = Embed Zotero metadata into PDF (refresh all)
 pdf-embed-metadata-missing-menu = Embed metadata only for missing/failed PDFs

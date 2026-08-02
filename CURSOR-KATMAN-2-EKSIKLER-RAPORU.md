@@ -1,8 +1,8 @@
-<!-- @ajan: cursor · @etiket: katman-2, eksik-raporu, federated-search, 2026-08-02 -->
+<!-- @ajan: cursor · @etiket: katman-2, eksik-raporu, oa-search, 2026-08-02 -->
 
 # Cursor — Katman 2 Eksikler Raporu
 
-**Tarih:** 2026-08-02 · **Sürüm:** PDF Manager **v1.0.57**  
+**Tarih:** 2026-08-02 · **Sürüm:** PDF Manager **v1.0.58**  
 **Analiz:** ürün ↔ `referanslar/katman-2/` ↔ GitHub (Attanger, Zotadata, Zoplicate,
 ZotAssets, File Utility, Attachment Scanner, ozefe/yoktez).
 
@@ -13,6 +13,13 @@ ZotAssets, File Utility, Attachment Scanner, ozefe/yoktez).
 | Açık **P1** ürün boşluğu? | **Yok** — P2-1…P2-6 + B1–B5 + G0/G1 kapalı      |
 | Gerçek açık iş?           | Checklist Bölüm B (kullanıcı) + isteğe bağlı P3 |
 | Yeni zorunlu XPI portu?   | **Yok** — GitHub taraması yeni P1 üretmedi      |
+
+### Son eklenen (v1.0.58)
+
+| Madde                         | Not                                                                 |
+| ----------------------------- | ------------------------------------------------------------------- |
+| OA Arama popup + menü çubuğu  | `PDF Manager → OA Arama…`; Attanger federated aynı pencere          |
+| Attach / yeni öğe / Related   | `oaSearchActions.ts` — Related = yeni künye + PDF seçiliye + bağla |
 
 ---
 

@@ -1,4 +1,4 @@
-/* @ajan: cursor · @etiket: katman-2, menu, content-audit */
+/* @ajan: cursor · @etiket: katman-2, menu, content-audit, oa-search */
 /*eslint no-constant-condition: ["error", { "checkLoops": false }]*/
 import { getString } from "../utils/locale";
 import { config } from "../../package.json";
@@ -36,7 +36,12 @@ import {
   scanSelectedAttachments,
 } from "./attachmentScanner";
 import { auditSelectedPdfContent } from "./pdfContentAudit";
-import { searchAllPdfSourcesForSelection } from "./federatedSearchApply";
+import { openOaSearchWindow } from "./oaSearchWindow";
+import {
+  registerPdfManagerMenubar,
+  unregisterPdfManagerMenubar,
+  ensurePdfManagerMenubar,
+} from "./menubar";
 
 const filenameExtRE = /\.[^.]+$/;
 const ATTANGER_MENU_ID = "zpdfmanager-menu";
@@ -125,6 +130,11 @@ export default class Menu {
         addon.data.notifierID = "";
       }
       this.notifierID = undefined;
+    }
+    try {
+      unregisterPdfManagerMenubar();
+    } catch (e) {
+      ztoolkit.log("unregisterPdfManagerMenubar failed", e);
     }
   }
 
@@ -447,10 +457,20 @@ export default class Menu {
           "undo-copy-attachment",
         ),
       );
+      try {
+        ensurePdfManagerMenubar(win);
+      } catch (e) {
+        ztoolkit.log("menubar refresh failed", e);
+      }
     }
   }
 
   private register() {
+    try {
+      registerPdfManagerMenubar();
+    } catch (e) {
+      ztoolkit.log("registerPdfManagerMenubar failed", e);
+    }
     const attachNewFileCallback = async () => {
       // 与菜单项的 getVisibility 条件保持一致，快捷键触发时同样需要校验
       const item = ZoteroPane.getSelectedItems()[0];
@@ -662,12 +682,9 @@ export default class Menu {
           tag: "menuitem",
           label: getString("pdf-federated-menu"),
           icon: addon.data.icons.downloadPdf,
-          getVisibility: () => {
-            const items = ZoteroPane.getSelectedItems();
-            return items.some((i) => i.isTopLevelItem() && i.isRegularItem());
-          },
+          getVisibility: () => true,
           commandListener: async () => {
-            await searchAllPdfSourcesForSelection();
+            await openOaSearchWindow();
           },
         },
         // Attach PDF from URL
