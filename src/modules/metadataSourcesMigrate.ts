@@ -1,28 +1,25 @@
-// @ajan: cursor · @etiket: katman-2, prefs-migrate, metadata-only
+// @ajan: cursor · @etiket: katman-2, prefs-migrate, doi-unpaywall-auto
 /**
- * Strip metadata-only adapters from the PDF download cascade.
+ * Prefs migrates for download cascade source roles.
  *
- * doi / arxiv / s2 / proquest remain available via oa_pdf_search (role=metadata)
- * for lookup / validation; they must not appear in sourceOrder or download prefs.
+ * - V1: strip arxiv/s2/proquest (and historically doi) from download prefs.
+ * - V2: re-enable doi as Unpaywall CAPTCHA-free OA in auto cascade.
  */
 import { getPref, setPref } from "../utils/prefs";
 
 const MIGRATE_KEY = "pdf.metadataOnlySourcesMigratedV1";
+const DOI_AUTO_KEY = "pdf.doiUnpaywallAutoMigratedV1";
 
-export const METADATA_ONLY_DOWNLOAD_IDS = [
-  "doi",
-  "arxiv",
-  "s2",
-  "proquest",
-] as const;
+/** Still excluded from download cascade. */
+export const METADATA_ONLY_DOWNLOAD_IDS = ["arxiv", "s2", "proquest"] as const;
 
 export function migrateMetadataOnlyOutOfDownload(): void {
   if (getPref(MIGRATE_KEY)) return;
 
-  setPref("pdf.doiEnabled", false);
   setPref("pdf.arxivEnabled", false);
   setPref("pdf.s2Enabled", false);
   setPref("pdf.proquestEnabled", false);
+  // doi is download (Unpaywall) — do not force-disable here.
 
   const order = String(getPref("pdf.sourceOrder") || "");
   const skip = new Set<string>(METADATA_ONLY_DOWNLOAD_IDS);
@@ -36,9 +33,30 @@ export function migrateMetadataOnlyOutOfDownload(): void {
   } else {
     setPref(
       "pdf.sourceOrder",
-      "local,dergipark,pmc,libgen,scihub,yoktez,proxy",
+      "local,doi,dergipark,pmc,libgen,scihub,yoktez,proxy",
     );
   }
 
   setPref(MIGRATE_KEY, true);
+}
+
+/** Enable Unpaywall doi in cascade for installs that ran V1 (doi was disabled). */
+export function migrateDoiUnpaywallIntoAutoCascade(): void {
+  if (getPref(DOI_AUTO_KEY)) return;
+
+  setPref("pdf.doiEnabled", true);
+
+  const order = String(getPref("pdf.sourceOrder") || "");
+  const ids = order
+    .split(",")
+    .map((s) => s.trim())
+    .filter(Boolean);
+  if (!ids.includes("doi")) {
+    const localIdx = ids.indexOf("local");
+    if (localIdx >= 0) ids.splice(localIdx + 1, 0, "doi");
+    else ids.unshift("doi");
+    setPref("pdf.sourceOrder", ids.join(","));
+  }
+
+  setPref(DOI_AUTO_KEY, true);
 }

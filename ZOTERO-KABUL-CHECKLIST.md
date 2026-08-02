@@ -1,8 +1,8 @@
-<!-- @ajan: cursor · @etiket: katman-2, kabul, checklist, zotero, v1.0.49 -->
+<!-- @ajan: cursor · @etiket: katman-2, kabul, checklist, zotero, v1.0.52 -->
 
 # Zotero PDF Manager — manuel kabul checklist
 
-**Sürüm:** 1.0.49 (`package.json`)  
+**Sürüm:** 1.0.52 (`package.json`)  
 **Önceki imza:** 1.0.33 (2026-07-30) — A1–A6 (ikinci pencere Windows N/A)  
 **XPI kanalı:** https://github.com/sanaatchi/zotero-pdf-manager-releases/releases  
 _(1.0.49 XPI yayınlanmadıysa yerel `npm run build` çıktısıyla smoke.)_
@@ -29,7 +29,7 @@ Kod + test ile doğrulandı; Zotero UI gerekmez.
 | A5  | B1 delete plan          | linked unlink planı doğru              | ✅    | `attachmentDeletePlan.test.cjs`                                 |
 | A6  | B5 dup aday grupları    | DOI/ISBN/KP küme; yazma yok            | ✅    | `duplicateItemReport.test.cjs`                                  |
 | A7  | Menü telleri            | normalize + dup-report + delete menü   | ✅    | locale FTL + `menu.ts` testleri                                 |
-| A8  | Auto OA kaynakları      | yalnız `dergipark`,`pmc`               | ✅    | `AUTOMATIC_ONLINE_SOURCE_IDS` + `oaDownloadPath` / source tests |
+| A8  | Auto OA kaynakları      | `doi`,`dergipark`,`pmc` (Unpaywall)    | ✅    | `AUTOMATIC_ONLINE_SOURCE_IDS` + `oaDownloadPath` / source tests |
 | A9  | Vendor provenance       | pinned SHA notices                     | ✅    | `vendorProvenance.test.cjs`                                     |
 
 - [x] Bölüm A tamam → otomatik kabul **✅** (v1.0.49)

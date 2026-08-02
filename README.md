@@ -1,4 +1,4 @@
-<!-- @ajan: cursor · @etiket: katman-2, readme, policy-note -->
+<!-- @ajan: cursor · @etiket: katman-2, readme, policy-note, doi-auto -->
 
 # Zotero PDF Manager
 
@@ -51,8 +51,9 @@ Do **not** merge the three addons. Data flows 1 → 2 → 3.
 
 ## Policy note (Sci-Hub / LibGen / YÖKTez)
 
-**Automatic OA** (`AUTOMATIC_ONLINE_SOURCE_IDS`) contacts only **DergiPark** and
-**PMC**. It never calls Sci-Hub, LibGen, proxy, or YÖKTez.
+**Automatic OA** (`AUTOMATIC_ONLINE_SOURCE_IDS`) contacts **DOI (Unpaywall)**,
+**DergiPark**, and **PMC** — CAPTCHA-free first. It never calls Sci-Hub, LibGen,
+proxy, YÖKTez, arXiv, S2, or ProQuest.
 
 **Manual Download / attach** may use LibGen, Sci-Hub, and YÖKTez when their prefs
 are enabled. Stock `prefs.js` currently ships those adapters **enabled** and

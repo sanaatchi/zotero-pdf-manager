@@ -9,14 +9,15 @@ import {
 } from "./folderIndex";
 import {
   DergiParkSource,
+  DOISource,
   LibGenSource,
   PMCSource,
   ProxySource,
   SciHubSource,
   YokTezSource,
 } from "./pythonPdfSources";
-// doi / arxiv / s2 / proquest → metadata-only (oa_pdf_search role=metadata);
-// not registered in ALL_SOURCES download cascade.
+// arxiv / s2 / proquest → not in ALL_SOURCES auto/manual download cascade
+// (doi is download via Unpaywall; registered below).
 
 import {
   buildOaDownloadBasename,
@@ -1037,12 +1038,13 @@ export class LocalFolderSource implements PDFSource {
 // Class implementations above were removed; see imports at file top.
 
 /**
- * Download cascade registry only.
- * Metadata-only (doi, arxiv, s2, proquest) live in Python `oa_pdf_search`
- * with role=metadata and are never attached from here.
+ * Download cascade registry.
+ * Metadata-only leftovers: arxiv / s2 / proquest (not registered here).
+ * doi = Unpaywall CAPTCHA-free OA download.
  */
 export const ALL_SOURCES: Record<string, PDFSource> = {
   local: new LocalFolderSource(),
+  doi: DOISource,
   pmc: PMCSource,
   dergipark: DergiParkSource,
   scihub: SciHubSource,
@@ -1051,10 +1053,5 @@ export const ALL_SOURCES: Record<string, PDFSource> = {
   proxy: new ProxySource(),
 };
 
-/** Lookup / validate only — not PDF download. */
-export const METADATA_ONLY_SOURCE_IDS = [
-  "doi",
-  "arxiv",
-  "s2",
-  "proquest",
-] as const;
+/** Lookup / validate only — not PDF download cascade. */
+export const METADATA_ONLY_SOURCE_IDS = ["arxiv", "s2", "proquest"] as const;

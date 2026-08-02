@@ -43,6 +43,10 @@ export type OaPdfSearchResponse = {
   source?: string;
   hits?: OaPdfHit[];
   detail?: string;
+  /** Soft-fail reason from bridge_api.search_payload — set when the source
+   * genuinely errored (network/API), distinct from a legitimate zero-result
+   * search where this is absent. */
+  error?: string;
 };
 
 function itemDOI(item: Zotero.Item): string {
@@ -178,7 +182,13 @@ export async function searchOaPdfBridge(
     const detail = body.detail || raw.slice(0, 200) || `HTTP ${status}`;
     throw new Error(`oa_pdf ${req.source}: ${detail}`);
   }
-  return Array.isArray(body.hits) ? body.hits : [];
+  const hits = Array.isArray(body.hits) ? body.hits : [];
+  // 0 hits + error → the source genuinely failed (network/API), not a real
+  // "not found". Distinguishable in logs from a legitimate empty search.
+  if (!hits.length && body.error) {
+    ztoolkit.log(`oa_pdf ${req.source}: soft-fail — ${body.error}`);
+  }
+  return hits;
 }
 
 export function pdfUrlsFromHits(hits: OaPdfHit[]): string[] {

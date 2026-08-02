@@ -206,13 +206,15 @@ test("automatic online fallback contains only approved OA sources", () => {
     "src/modules/pdfDownload.ts",
   );
 
-  assert.deepEqual([...AUTOMATIC_ONLINE_SOURCE_IDS], ["dergipark", "pmc"]);
+  assert.deepEqual(
+    [...AUTOMATIC_ONLINE_SOURCE_IDS],
+    ["doi", "dergipark", "pmc"],
+  );
   for (const unsafe of [
     "scihub",
     "libgen",
     "proxy",
     "proquest",
-    "doi",
     "arxiv",
     "s2",
   ]) {

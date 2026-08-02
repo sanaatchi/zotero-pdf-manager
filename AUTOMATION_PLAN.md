@@ -2,10 +2,10 @@
 
 # Zotero PDF Manager — Tam Otomasyon Planı
 
-> **Durum (2026-08 / v1.0.49):** P2-1…P2-6 **teslim**. Otomatik online OA =
-> yalnızca `dergipark` + `pmc` (`AUTOMATIC_ONLINE_SOURCE_IDS`). Sci-Hub / LibGen /
-> YÖKTez otomatik şelalede yok (manuel menü ayrı). Bu belge tarihsel tasarım
-> metnidir; canlı kabul için `CURSOR-KATMAN-2-EKSIKLER-RAPORU.md`.
+> **Durum (2026-08 / v1.0.52):** P2-1…P2-6 **teslim**. Otomatik online OA =
+> `doi` (Unpaywall) + `dergipark` + `pmc` (`AUTOMATIC_ONLINE_SOURCE_IDS`).
+> Sci-Hub / LibGen / YÖKTez otomatik şelalede yok (manuel menü ayrı). Bu belge
+> tarihsel tasarım metnidir; canlı kabul için `CURSOR-KATMAN-2-EKSIKLER-RAPORU.md`.
 
 **Hedef:** Kullanıcı **kök klasör(ler)i bir kez** ayarlar, bir daha hiçbir yol/tetik güncellemez.
 Plugin, kütüphane ↔ klasörleri **sürekli kendisi eşitler**, PDF'leri otomatik ekler ve

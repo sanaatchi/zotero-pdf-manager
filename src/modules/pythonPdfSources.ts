@@ -199,6 +199,7 @@ export class ProxySource implements PDFSource {
 }
 
 export const DOISource = new OaPdfPythonSource("doi", "pdf.doiEnabled");
+/** Metadata-only — not registered in ALL_SOURCES download cascade. */
 export const ArxivSource = new OaPdfPythonSource(
   "arxiv",
   "pdf.arxivEnabled",

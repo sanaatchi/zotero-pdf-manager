@@ -1,8 +1,8 @@
-<!-- @ajan: cursor · @etiket: katman-2, eksik-raporu, derin-analiz, 2026-08-02 -->
+<!-- @ajan: cursor · @etiket: katman-2, eksik-raporu, doi-auto, 2026-08-02 -->
 
 # Cursor — Katman 2 Eksikler Raporu
 
-**Tarih:** 2026-08-02 · **Sürüm:** PDF Manager **v1.0.51**  
+**Tarih:** 2026-08-02 · **Sürüm:** PDF Manager **v1.0.52**  
 **Analiz:** ürün ↔ `referanslar/katman-2/` ↔ GitHub (Attanger, Zotadata, Zoplicate,
 ZotAssets, File Utility, Attachment Scanner, ozefe/yoktez).
 
@@ -45,21 +45,21 @@ selective/behavior mevcut.
 
 ## Açık — sıralı
 
-| ID      | Öncelik         | Madde                                                                | Kanıt                                                                                        | Öneri                                       |
-| ------- | --------------- | -------------------------------------------------------------------- | -------------------------------------------------------------------------------------------- | ------------------------------------------- |
-| **G0**  | ✅              | OA bridge SSRF loopback                                              | `oaBridgeUrl.ts` v1.0.50 — K1/K3 parity                                                      |
-| **G0b** | ✅              | Delete confirm: empty parent folder                                  | `formatDeleteConfirmLines` + locale footer · **v1.0.51**                                     |
-| **G0c** | ✅              | KP helper DRY mirror                                                 | `src/utils/kpToken.ts` = K1 `normalizeKp` · **v1.0.51**                                      |
-| **G1**  | ✅              | YÖKTez auto politikası                                               | **B kilit:** tez = yalnız manuel; auto = dergipark+pmc (`AUTOMATIC_ONLINE_SOURCE_IDS`)       | dokümante 2026-08-02                        |
-| **G2**  | ✅ ajan / ⬜ UI | Checklist **v1.0.49** yenilendi                                      | `ZOTERO-KABUL-CHECKLIST.md` — Bölüm A otomatik ✅ (209 test); Bölüm B Zotero smoke kullanıcı | Kullanıcı B1–B8 işaretleyince tam kapanır   |
-| **G3**  | ✅              | README Sci-Hub/LibGen metin                                          | düzeltildi 2026-08-02                                                                        | auto yasak / manuel prefs ayrı              |
-| **G4**  | ✅              | REFERANS-PORT §4 stale                                               | düzeltildi                                                                                   | merger + contentMetadata ✅                 |
-| **G5**  | ✅              | AUTOMATION_PLAN durum bandı                                          | eklendi                                                                                      | teslim notu                                 |
-| **G6**  | **P3**          | `tr-TR` locale yok                                                   | `addon/locale/` = de / en-US / it-IT                                                         | İsteğe bağlı                                |
-| **G7**  | **P3**          | format-metadata kalan (univ place, edition, preprint/webpage guard…) | rules dir vs `metadataNormalize.ts`                                                          | Düşük ROI; journal abbr skip kalır          |
-| **G8**  | **P3**          | Menü hâlâ “Attanger” markası                                         | `menu.ts`                                                                                    | Kimlik cilası                               |
-| **G9**  | **P3**          | arxiv-workflow preprint↔published                                    | mirror yok                                                                                   | EN preprint ağır değilse skip               |
-| **G10** | **P3**          | Çoklu ek rol (ZotAssets benzeri)                                     | GitHub: Lyz-623/ZotAssets                                                                    | TR arşiv için zorunlu değil; araştırma notu |
+| ID      | Öncelik         | Madde                                                                | Kanıt                                                                                                   | Öneri                                       |
+| ------- | --------------- | -------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------- | ------------------------------------------- |
+| **G0**  | ✅              | OA bridge SSRF loopback                                              | `oaBridgeUrl.ts` v1.0.50 — K1/K3 parity                                                                 |
+| **G0b** | ✅              | Delete confirm: empty parent folder                                  | `formatDeleteConfirmLines` + locale footer · **v1.0.51**                                                |
+| **G0c** | ✅              | KP helper DRY mirror                                                 | `src/utils/kpToken.ts` = K1 `normalizeKp` · **v1.0.51**                                                 |
+| **G1**  | ✅              | YÖKTez auto politikası                                               | **B kilit:** tez = yalnız manuel; auto = **doi**+dergipark+pmc (`AUTOMATIC_ONLINE_SOURCE_IDS`, v1.0.52) | dokümante 2026-08-02                        |
+| **G2**  | ✅ ajan / ⬜ UI | Checklist **v1.0.49** yenilendi                                      | `ZOTERO-KABUL-CHECKLIST.md` — Bölüm A otomatik ✅ (209 test); Bölüm B Zotero smoke kullanıcı            | Kullanıcı B1–B8 işaretleyince tam kapanır   |
+| **G3**  | ✅              | README Sci-Hub/LibGen metin                                          | düzeltildi 2026-08-02                                                                                   | auto yasak / manuel prefs ayrı              |
+| **G4**  | ✅              | REFERANS-PORT §4 stale                                               | düzeltildi                                                                                              | merger + contentMetadata ✅                 |
+| **G5**  | ✅              | AUTOMATION_PLAN durum bandı                                          | eklendi                                                                                                 | teslim notu                                 |
+| **G6**  | **P3**          | `tr-TR` locale yok                                                   | `addon/locale/` = de / en-US / it-IT                                                                    | İsteğe bağlı                                |
+| **G7**  | **P3**          | format-metadata kalan (univ place, edition, preprint/webpage guard…) | rules dir vs `metadataNormalize.ts`                                                                     | Düşük ROI; journal abbr skip kalır          |
+| **G8**  | **P3**          | Menü hâlâ “Attanger” markası                                         | `menu.ts`                                                                                               | Kimlik cilası                               |
+| **G9**  | **P3**          | arxiv-workflow preprint↔published                                    | mirror yok                                                                                              | EN preprint ağır değilse skip               |
+| **G10** | **P3**          | Çoklu ek rol (ZotAssets benzeri)                                     | GitHub: Lyz-623/ZotAssets                                                                               | TR arşiv için zorunlu değil; araştırma notu |
 
 ### Yapılmaz (kilitli)
 

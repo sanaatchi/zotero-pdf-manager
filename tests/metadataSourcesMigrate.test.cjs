@@ -1,3 +1,4 @@
+// @ajan: cursor · @etiket: katman-2, prefs-migrate, doi-unpaywall, test
 const assert = require("node:assert/strict");
 const { test } = require("node:test");
 const path = require("node:path");
@@ -37,7 +38,7 @@ function loadMigrate() {
   return { api: module.exports, store };
 }
 
-test("migrate strips doi/arxiv/s2/proquest from sourceOrder", () => {
+test("migrate strips arxiv/s2/proquest but keeps doi in sourceOrder", () => {
   const { api, store } = loadMigrate();
   store["pdf.sourceOrder"] =
     "local,dergipark,doi,arxiv,pmc,s2,libgen,scihub,yoktez,proquest,proxy";
@@ -48,13 +49,13 @@ test("migrate strips doi/arxiv/s2/proquest from sourceOrder", () => {
 
   api.migrateMetadataOnlyOutOfDownload();
 
-  assert.equal(store["pdf.doiEnabled"], false);
+  assert.equal(store["pdf.doiEnabled"], true);
   assert.equal(store["pdf.arxivEnabled"], false);
   assert.equal(store["pdf.s2Enabled"], false);
   assert.equal(store["pdf.proquestEnabled"], false);
   assert.equal(
     store["pdf.sourceOrder"],
-    "local,dergipark,pmc,libgen,scihub,yoktez,proxy",
+    "local,dergipark,doi,pmc,libgen,scihub,yoktez,proxy",
   );
   assert.equal(store["pdf.metadataOnlySourcesMigratedV1"], true);
 
@@ -62,4 +63,20 @@ test("migrate strips doi/arxiv/s2/proquest from sourceOrder", () => {
   store["pdf.sourceOrder"] = "local,doi,pmc";
   api.migrateMetadataOnlyOutOfDownload();
   assert.equal(store["pdf.sourceOrder"], "local,doi,pmc");
+});
+
+test("doi Unpaywall migrate enables doi and inserts into sourceOrder", () => {
+  const { api, store } = loadMigrate();
+  store["pdf.sourceOrder"] = "local,dergipark,pmc";
+  store["pdf.doiEnabled"] = false;
+
+  api.migrateDoiUnpaywallIntoAutoCascade();
+
+  assert.equal(store["pdf.doiEnabled"], true);
+  assert.equal(store["pdf.sourceOrder"], "local,doi,dergipark,pmc");
+  assert.equal(store["pdf.doiUnpaywallAutoMigratedV1"], true);
+
+  store["pdf.doiEnabled"] = false;
+  api.migrateDoiUnpaywallIntoAutoCascade();
+  assert.equal(store["pdf.doiEnabled"], false);
 });

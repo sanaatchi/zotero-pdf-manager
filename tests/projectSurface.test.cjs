@@ -250,7 +250,7 @@ test("OA downloads folder preference is exposed", () => {
   assert.match(sources, /resolveOaDownloadsDir/);
   assert.match(
     download,
-    /AUTOMATIC_ONLINE_SOURCE_IDS = \["dergipark", "pmc"\]/,
+    /AUTOMATIC_ONLINE_SOURCE_IDS = \[[\s\S]*?"doi"[\s\S]*?"dergipark"[\s\S]*?"pmc"[\s\S]*\]/,
   );
 
   for (const locale of ["de", "en-US", "it-IT"]) {

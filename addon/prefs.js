@@ -82,7 +82,7 @@ pref("extensions.zotero.__addonRef__.scanner.tagDuplicate", "#duplicate");
 pref("extensions.zotero.__addonRef__.scanner.tagNonfile", "#nonfile");
 pref(
   "extensions.zotero.__addonRef__.pdf.sourceOrder",
-  "local,dergipark,pmc,libgen,scihub,yoktez,proxy",
+  "local,doi,dergipark,pmc,libgen,scihub,yoktez,proxy",
 );
 pref("extensions.zotero.__addonRef__.pdf.localEnabled", true);
 pref(
@@ -97,8 +97,8 @@ pref(
 );
 pref("extensions.zotero.__addonRef__.pdf.useLinkedAttachmentBase", true);
 pref("extensions.zotero.__addonRef__.pdf.localAsLink", true);
-// Metadata-only (not PDF download): doi / arxiv / s2 / proquest
-pref("extensions.zotero.__addonRef__.pdf.doiEnabled", false);
+// doi = Unpaywall CAPTCHA-free OA download. Metadata-only: arxiv / s2 / proquest
+pref("extensions.zotero.__addonRef__.pdf.doiEnabled", true);
 pref("extensions.zotero.__addonRef__.pdf.arxivEnabled", false);
 pref("extensions.zotero.__addonRef__.pdf.pmcEnabled", true);
 pref("extensions.zotero.__addonRef__.pdf.s2Enabled", false);
@@ -121,3 +121,4 @@ pref("extensions.zotero.__addonRef__.pdf.oaBridgeUrl", "http://127.0.0.1:8756");
 // Optional Ollama content check via bridge (/pdf-validate-content).
 pref("extensions.zotero.__addonRef__.pdf.validateContentLlm", true);
 pref("extensions.zotero.__addonRef__.pdf.metadataOnlySourcesMigratedV1", false);
+pref("extensions.zotero.__addonRef__.pdf.doiUnpaywallAutoMigratedV1", false);

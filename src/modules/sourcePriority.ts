@@ -1,4 +1,4 @@
-// @ajan: cursor · @etiket: katman-2, source-priority, yoktez-only-thesis
+// @ajan: cursor · @etiket: katman-2, source-priority, yoktez-only-thesis, doi-unpaywall
 /**
  * Item-aware PDF source priority.
  *
@@ -7,16 +7,19 @@
  * DergiPark itself only accepts journalArticle (scientific articles).
  *
  * Other policies:
- * - Foreign articles → article DBs; LibGen late fallback (book-heavy but OK).
- * - DOI (non-TR articles) → Sci-Hub early.
+ * - Foreign articles → article DBs (doi/Unpaywall, pmc, …); LibGen late fallback.
+ * - DOI (non-TR articles) → Unpaywall (`doi`) early; Sci-Hub only if in cascade.
  * - Non-Turkish books → LibGen early.
- *
- * Metadata-only (doi/arxiv/s2/proquest) are never in the download cascade.
  */
 import { getDOI, isArticle, isBook, isThesis } from "./pdfSources";
 
 /** Online article download sources (used for non-Turkish articles). */
-export const ARTICLE_DATABASE_IDS = ["dergipark", "pmc", "scihub"] as const;
+export const ARTICLE_DATABASE_IDS = [
+  "doi",
+  "dergipark",
+  "pmc",
+  "scihub",
+] as const;
 
 const TURKISH_CHARS = /[çğıöşüÇĞİÖŞÜ]/;
 const TURKISH_LANG = /^(tr|tur|turkish|türkçe|turkce)\b/i;
@@ -106,8 +109,15 @@ export function prioritizeSourcesForItem(
     if (!turkish) allow.add("libgen");
     ids = ids.filter((id) => allow.has(id));
 
+    if (hasDoi && ids.includes("doi")) {
+      ids = moveToFrontAfterLocal(ids, "doi");
+    }
     if (hasDoi && ids.includes("scihub")) {
       ids = moveToFrontAfterLocal(ids, "scihub");
+      // Keep Unpaywall before Sci-Hub when both present.
+      if (ids.includes("doi")) {
+        ids = moveToFrontAfterLocal(ids, "doi");
+      }
     }
     // Foreign article: LibGen late fallback only (after all article DBs).
     if (!turkish && ids.includes("libgen")) {
@@ -123,8 +133,14 @@ export function prioritizeSourcesForItem(
     return ids;
   }
 
+  if (hasDoi && ids.includes("doi")) {
+    ids = moveToFrontAfterLocal(ids, "doi");
+  }
   if (hasDoi && ids.includes("scihub")) {
     ids = moveToFrontAfterLocal(ids, "scihub");
+    if (ids.includes("doi")) {
+      ids = moveToFrontAfterLocal(ids, "doi");
+    }
   }
   return ids;
 }

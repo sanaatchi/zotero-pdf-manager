@@ -7,7 +7,10 @@ import Menu from "./modules/menu";
 import { PDFReconciler } from "./modules/pdfReconciler";
 import { migrateBookPdfSources } from "./modules/bookSourcesMigrate";
 import { migrateArticleDergiparkPriority } from "./modules/articleDergiparkMigrate";
-import { migrateMetadataOnlyOutOfDownload } from "./modules/metadataSourcesMigrate";
+import {
+  migrateDoiUnpaywallIntoAutoCascade,
+  migrateMetadataOnlyOutOfDownload,
+} from "./modules/metadataSourcesMigrate";
 
 /** Open Zotero main windows that have UI loaded for this add-on. */
 const loadedWindows = new Set<Window>();
@@ -47,6 +50,11 @@ async function onStartup() {
     migrateMetadataOnlyOutOfDownload();
   } catch (e) {
     ztoolkit.log("migrateMetadataOnlyOutOfDownload failed", e);
+  }
+  try {
+    migrateDoiUnpaywallIntoAutoCascade();
+  } catch (e) {
+    ztoolkit.log("migrateDoiUnpaywallIntoAutoCascade failed", e);
   }
   Zotero.PreferencePanes.register({
     pluginID: config.addonID,

@@ -1,4 +1,4 @@
-// @ajan: cursor · @etiket: katman-2, pdfDownload, yoktez-only-thesis
+// @ajan: cursor · @etiket: katman-2, pdfDownload, yoktez-only-thesis, doi-auto
 import {
   ALL_SOURCES,
   downloadAndAttach,
@@ -52,11 +52,11 @@ export {
 } from "./sourcePriority";
 
 /**
- * Automatic OA: downloadable article DBs only.
- * Never: Sci-Hub/LibGen/proxy, or metadata-only doi/arxiv/s2/proquest.
+ * Automatic OA cascade (legal / CAPTCHA-free first).
+ * Never: Sci-Hub/LibGen/proxy/yoktez/arxiv/s2/proquest.
  */
 // Politika B (kilit): YÖKTez asla otomatik şelalede değil — yalnız manuel menü.
-export const AUTOMATIC_ONLINE_SOURCE_IDS = ["dergipark", "pmc"] as const;
+export const AUTOMATIC_ONLINE_SOURCE_IDS = ["doi", "dergipark", "pmc"] as const;
 
 export type AutomaticOnlineResult =
   | { attachment: Zotero.Item; source: string; stopped?: undefined }
