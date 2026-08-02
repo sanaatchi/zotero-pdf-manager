@@ -119,8 +119,10 @@ function ensureBoard(): ProgressBoard {
 
 function lineText(meta: JobMeta, p: DownloadProgress | null): string {
   const pct = p ? formatDownloadPercent(p) : "…";
-  const src = meta.source || "…";
-  const title = (meta.title || "").slice(0, 48);
+  // Keep source + % visible; Zotero ProgressWindow crops with ellipsis
+  // (crop=end) but long titles still push the % off on narrow popups.
+  const src = (meta.source || "…").slice(0, 12);
+  const title = (meta.title || "").slice(0, 28);
   return `[${src}] ${pct} — ${title}`;
 }
 
@@ -182,7 +184,7 @@ export function finishDownloadJob(
       idx,
       text:
         opts.text ||
-        `${opts.ok ? "✓" : "✗"} [${meta.source}] ${meta.title.slice(0, 48)}`,
+        `${opts.ok ? "✓" : "✗"} [${meta.source.slice(0, 12)}] ${meta.title.slice(0, 28)}`,
       type: opts.ok ? "success" : "fail",
       progress: 100,
     });
