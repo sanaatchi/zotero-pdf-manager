@@ -17,6 +17,12 @@ dir-not-set-sourceDir = Source directory not set. Please select it in Attanger p
 rename-linked-attachment-error = Failed to rename linked attachment: { $title }
 # --- PDF downloader ---
 pdf-download-menu = Download & attach PDF
+pdf-federated-menu = Search all PDF sources…
+pdf-federated-empty = No items selected
+pdf-federated-no-sources = No download sources are enabled (see preferences)
+pdf-federated-start = Searching all sources for { $count } item(s)…
+pdf-federated-attach-confirm = Attach best hit from { $source }?\n{ $title }
+pdf-federated-done = Federated search — { $attached } attached, { $failed } failed/skipped
 pdf-download-url-menu = Attach PDF from URL…
 pdf-embed-metadata-menu = Embed Zotero metadata into PDF (refresh all)
 pdf-embed-metadata-missing-menu = Embed metadata only for missing/failed PDFs

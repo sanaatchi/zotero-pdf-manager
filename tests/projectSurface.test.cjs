@@ -407,6 +407,8 @@ test("PDF-content metadata research is manual, identifier-first and confirmable"
   assert.match(menu, /researchMetadataForSelectedPDFs/);
   assert.match(menu, /pdf-content-audit-menu/);
   assert.match(menu, /auditSelectedPdfContent/);
+  assert.match(menu, /pdf-federated-menu/);
+  assert.match(menu, /searchAllPdfSourcesForSelection/);
   assert.match(module, /extractDocumentIdentifiers/);
   assert.match(module, /crossrefByDOI/);
   assert.match(module, /openLibraryByISBN/);
@@ -421,6 +423,7 @@ test("PDF-content metadata research is manual, identifier-first and confirmable"
     );
     assert.match(source, /^pdf-content-metadata-menu\s*=/m);
     assert.match(source, /^pdf-content-audit-menu\s*=/m);
+    assert.match(source, /^pdf-federated-menu\s*=/m);
   }
 });
 

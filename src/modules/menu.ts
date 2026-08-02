@@ -36,6 +36,7 @@ import {
   scanSelectedAttachments,
 } from "./attachmentScanner";
 import { auditSelectedPdfContent } from "./pdfContentAudit";
+import { searchAllPdfSourcesForSelection } from "./federatedSearchApply";
 
 const filenameExtRE = /\.[^.]+$/;
 const ATTANGER_MENU_ID = "zpdfmanager-menu";
@@ -655,6 +656,18 @@ export default class Menu {
           },
           commandListener: async () => {
             await downloadPdfForSelectedItems();
+          },
+        },
+        {
+          tag: "menuitem",
+          label: getString("pdf-federated-menu"),
+          icon: addon.data.icons.downloadPdf,
+          getVisibility: () => {
+            const items = ZoteroPane.getSelectedItems();
+            return items.some((i) => i.isTopLevelItem() && i.isRegularItem());
+          },
+          commandListener: async () => {
+            await searchAllPdfSourcesForSelection();
           },
         },
         // Attach PDF from URL

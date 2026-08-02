@@ -15,6 +15,12 @@ dir-not-set-sourceDir = Quellverzeichnis nicht festgelegt. Bitte in den Attanger
 rename-linked-attachment-error = Verknüpfter Anhang konnte nicht umbenannt werden: { $title }
 # --- PDF downloader ---
 pdf-download-menu = Download & attach PDF
+pdf-federated-menu = In allen PDF-Quellen suchen…
+pdf-federated-empty = Keine Einträge ausgewählt
+pdf-federated-no-sources = Keine Download-Quellen aktiviert (Einstellungen)
+pdf-federated-start = Suche in allen Quellen für { $count } Eintrag/Einträge…
+pdf-federated-attach-confirm = Besten Treffer von { $source } anhängen?\n{ $title }
+pdf-federated-done = Verbundsuche — { $attached } angehängt, { $failed } fehlgeschlagen/übersprungen
 pdf-download-url-menu = Attach PDF from URL…
 pdf-embed-metadata-menu = Zotero-Metadaten in PDF einbetten (alle aktualisieren)
 pdf-embed-metadata-missing-menu = Metadaten nur für fehlende/fehlgeschlagene PDFs einbetten

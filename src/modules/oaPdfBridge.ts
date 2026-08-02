@@ -1,4 +1,4 @@
-// @ajan: cursor · @etiket: katman-2, oa-pdf-bridge, distinctive-title-trust
+// @ajan: cursor · @etiket: katman-2, oa-pdf-bridge, federated-search
 /**
  * Katman-2 → Kutuphane köprü (8756) `oa_pdf_search` client.
  * Online PDF discovery runs in Python; this module only POSTs queries.
@@ -23,6 +23,7 @@ export type OaPdfHit = {
   doi?: string | null;
   year?: string | null;
   authors?: string | null;
+  score?: number;
   extra?: Record<string, unknown>;
 };
 
@@ -36,6 +37,10 @@ export type OaPdfSearchRequest = {
   pmcid?: string;
   authors?: string;
   limit?: number;
+  /** Federated (source=all): subset of adapters; omit → profile. */
+  sources?: string[];
+  profile?: "full" | "auto";
+  totalLimit?: number;
 };
 
 export type OaPdfSearchResponse = {
@@ -47,6 +52,9 @@ export type OaPdfSearchResponse = {
    * genuinely errored (network/API), distinct from a legitimate zero-result
    * search where this is absent. */
   error?: string;
+  errors?: Record<string, string>;
+  sourcesQueried?: string[];
+  profile?: string;
 };
 
 function itemDOI(item: Zotero.Item): string {
@@ -142,6 +150,14 @@ export function buildOaSearchRequest(
 export async function searchOaPdfBridge(
   req: OaPdfSearchRequest,
 ): Promise<OaPdfHit[]> {
+  const body = await searchOaPdfBridgeDetailed(req);
+  return Array.isArray(body.hits) ? body.hits : [];
+}
+
+/** Full bridge response (federated errors / sourcesQueried included). */
+export async function searchOaPdfBridgeDetailed(
+  req: OaPdfSearchRequest,
+): Promise<OaPdfSearchResponse> {
   const base = resolveOaBridgeUrl();
   const endpoint = `${base}/pdf-search`;
   let xhr: any;
@@ -158,9 +174,12 @@ export async function searchOaPdfBridge(
         pmcid: req.pmcid || "",
         authors: req.authors || "",
         limit: req.limit ?? 5,
+        sources: req.sources || [],
+        profile: req.profile || "full",
+        totalLimit: req.totalLimit ?? 25,
       }),
       responseType: "text",
-      timeout: 120000,
+      timeout: 180000,
       successCodes: false,
     });
   } catch (e) {
@@ -183,12 +202,61 @@ export async function searchOaPdfBridge(
     throw new Error(`oa_pdf ${req.source}: ${detail}`);
   }
   const hits = Array.isArray(body.hits) ? body.hits : [];
-  // 0 hits + error → the source genuinely failed (network/API), not a real
-  // "not found". Distinguishable in logs from a legitimate empty search.
   if (!hits.length && body.error) {
     ztoolkit.log(`oa_pdf ${req.source}: soft-fail — ${body.error}`);
   }
-  return hits;
+  return body;
+}
+
+/** Pref keys for federated download adapters (excludes local/proxy). */
+export const FEDERATED_SOURCE_PREF: Record<string, string> = {
+  doi: "pdf.doiEnabled",
+  dergipark: "pdf.dergiparkEnabled",
+  pmc: "pdf.pmcEnabled",
+  arxiv: "pdf.arxivEnabled",
+  s2: "pdf.s2Enabled",
+  yoktez: "pdf.yoktezEnabled",
+  scihub: "pdf.scihubEnabled",
+  libgen: "pdf.libgenEnabled",
+};
+
+/** Enabled OA download source ids for federated search (prefs filter). */
+export function enabledFederatedSourceIds(): string[] {
+  const out: string[] = [];
+  for (const [id, pref] of Object.entries(FEDERATED_SOURCE_PREF)) {
+    try {
+      if (getPref(pref)) out.push(id);
+    } catch {
+      /* ignore */
+    }
+  }
+  return out;
+}
+
+/**
+ * Federated search across prefs-enabled download adapters.
+ * Does not change automatic cascade policy.
+ */
+export async function searchAllOaSources(
+  item: Zotero.Item,
+  opts: { profile?: "full" | "auto"; totalLimit?: number } = {},
+): Promise<OaPdfSearchResponse> {
+  const sources = enabledFederatedSourceIds();
+  const base = buildOaSearchRequest("doi", item, 5);
+  return searchOaPdfBridgeDetailed({
+    source: "all",
+    text: base.text,
+    doi: base.doi,
+    isbn: base.isbn,
+    arxivId: base.arxivId,
+    pmid: base.pmid,
+    pmcid: base.pmcid,
+    authors: base.authors,
+    limit: 5,
+    sources,
+    profile: opts.profile || "full",
+    totalLimit: opts.totalLimit ?? 25,
+  });
 }
 
 export function pdfUrlsFromHits(hits: OaPdfHit[]): string[] {

@@ -16,6 +16,12 @@ dir-not-set-sourceDir = Cartella sorgente non impostata. Selezionarla nelle pref
 rename-linked-attachment-error = Impossibile rinominare l'allegato collegato: { $title }
 # --- PDF downloader ---
 pdf-download-menu = Download & attach PDF
+pdf-federated-menu = Cerca in tutte le fonti PDF…
+pdf-federated-empty = Nessun elemento selezionato
+pdf-federated-no-sources = Nessuna fonte di download abilitata (preferenze)
+pdf-federated-start = Ricerca in tutte le fonti per { $count } elemento/i…
+pdf-federated-attach-confirm = Allegare il miglior risultato da { $source }?\n{ $title }
+pdf-federated-done = Ricerca federata — { $attached } allegati, { $failed } falliti/saltati
 pdf-download-url-menu = Attach PDF from URL…
 pdf-embed-metadata-menu = Incorpora i metadati Zotero nel PDF (aggiorna tutti)
 pdf-embed-metadata-missing-menu = Incorpora i metadati solo per i PDF mancanti/falliti
