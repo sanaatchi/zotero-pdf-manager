@@ -1,4 +1,4 @@
-// @ajan: cursor · @etiket: katman-2, oa-pdf-bridge, federated-search, oa-search
+// @ajan: cursor · @etiket: katman-2, oa-pdf-bridge, federated-search, fanout-fallback
 /**
  * Katman-2 → Kutuphane köprü (8756) `oa_pdf_search` client.
  * Online PDF discovery runs in Python; this module only POSTs queries.
@@ -243,20 +243,22 @@ export async function searchAllOaSources(
 ): Promise<OaPdfSearchResponse> {
   const sources = enabledFederatedSourceIds();
   const base = buildOaSearchRequest("doi", item, 5);
-  return searchOaPdfBridgeDetailed({
-    source: "all",
-    text: base.text,
-    doi: base.doi,
-    isbn: base.isbn,
-    arxivId: base.arxivId,
-    pmid: base.pmid,
-    pmcid: base.pmcid,
-    authors: base.authors,
-    limit: 5,
-    sources,
-    profile: opts.profile || "full",
-    totalLimit: opts.totalLimit ?? 25,
-  });
+  return searchAllOaSourcesByQuery(
+    {
+      text: base.text,
+      doi: base.doi,
+      isbn: base.isbn,
+      arxivId: base.arxivId,
+      pmid: base.pmid,
+      pmcid: base.pmcid,
+      authors: base.authors,
+    },
+    {
+      profile: opts.profile || "full",
+      totalLimit: opts.totalLimit ?? 25,
+      sources,
+    },
+  );
 }
 
 /** Federated search from free-form query fields (OA Search popup). */
@@ -296,7 +298,86 @@ export async function searchAllOaSourcesByQuery(
   };
   // Only send sources when non-empty so bridge falls back to full profile.
   if (sources.length) req.sources = sources;
-  return searchOaPdfBridgeDetailed(req);
+  try {
+    return await searchOaPdfBridgeDetailed(req);
+  } catch (e) {
+    const msg = e instanceof Error ? e.message : String(e);
+    // Stale bridge (pre-federated) rejects source=all — fan out per source.
+    if (!/Unknown source ['"]?all/i.test(msg)) throw e;
+    ztoolkit.log(
+      "OA federated source=all rejected by bridge — client fan-out fallback",
+      msg,
+    );
+    return fanOutOaSourcesByQuery(query, {
+      sources: sources.length ? sources : enabledFederatedSourceIds(),
+      totalLimit: opts.totalLimit ?? 25,
+      perSourceLimit: req.limit ?? 5,
+    });
+  }
+}
+
+/** Client-side federated fallback when bridge lacks source=all. */
+export async function fanOutOaSourcesByQuery(
+  query: {
+    text?: string;
+    doi?: string;
+    isbn?: string;
+    authors?: string;
+    arxivId?: string;
+    pmid?: string;
+    pmcid?: string;
+  },
+  opts: {
+    sources: string[];
+    totalLimit?: number;
+    perSourceLimit?: number;
+  },
+): Promise<OaPdfSearchResponse> {
+  const sourceIds = (opts.sources || []).filter(Boolean);
+  const totalLimit = opts.totalLimit ?? 25;
+  const perSourceLimit = opts.perSourceLimit ?? 5;
+  const errors: Record<string, string> = {};
+  const hits: OaPdfHit[] = [];
+  const seen = new Set<string>();
+
+  await Promise.all(
+    sourceIds.map(async (sid) => {
+      try {
+        const body = await searchOaPdfBridgeDetailed({
+          source: sid,
+          text: String(query.text || "").trim(),
+          doi: String(query.doi || "").trim(),
+          isbn: String(query.isbn || "")
+            .replace(/[^0-9Xx]/g, "")
+            .trim(),
+          arxivId: String(query.arxivId || "").trim(),
+          pmid: String(query.pmid || "").trim(),
+          pmcid: String(query.pmcid || "").trim(),
+          authors: String(query.authors || "").trim(),
+          limit: perSourceLimit,
+        });
+        if (body.error) errors[sid] = String(body.error);
+        for (const hit of body.hits || []) {
+          const key = `${hit.source}|${hit.pdfUrl || hit.landingUrl || hit.title}`;
+          if (seen.has(key)) continue;
+          seen.add(key);
+          hits.push(hit);
+        }
+      } catch (e) {
+        errors[sid] = e instanceof Error ? e.message : String(e);
+      }
+    }),
+  );
+
+  hits.sort((a, b) => Number(b.score || 0) - Number(a.score || 0));
+  return {
+    ok: true,
+    source: "all",
+    profile: "full",
+    sourcesQueried: sourceIds,
+    hits: hits.slice(0, totalLimit),
+    errors: Object.keys(errors).length ? errors : undefined,
+  };
 }
 
 export function pdfUrlsFromHits(hits: OaPdfHit[]): string[] {
