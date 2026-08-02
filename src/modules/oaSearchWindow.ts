@@ -1,4 +1,4 @@
-// @ajan: cursor · @etiket: katman-2, oa-search, window, source-picker
+// @ajan: cursor · @etiket: katman-2, oa-search, window, source-picker, prefill-core
 /**
  * Independent OA Search popup (openDialog) — federated results + attach actions.
  * UX: per-search source picker, PDF-only filter, keyboard nav, double-click apply,
@@ -529,7 +529,13 @@ function prefillFromItem(doc: Document, item: Zotero.Item | null): void {
   const authors = doc.getElementById(
     `${config.addonRef}-oa-authors`,
   ) as HTMLInputElement | null;
-  if (q && !q.value) q.value = String(item.getField("title") || "").trim();
+  if (q && !q.value) {
+    // Prefer core title before colon — full Zotero subtitles miss OA indexes.
+    let title = String(item.getField("title") || "").trim();
+    const colon = title.search(/\s*[:—–]\s*/);
+    if (colon >= 8) title = title.slice(0, colon).trim();
+    q.value = title;
+  }
   if (doi && !doi.value) doi.value = String(item.getField("DOI") || "").trim();
   if (isbn && !isbn.value)
     isbn.value = String(item.getField("ISBN") || "")
