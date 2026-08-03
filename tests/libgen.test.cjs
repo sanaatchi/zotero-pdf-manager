@@ -36,6 +36,9 @@ test("LibGen bridge request prioritizes DOI ISBN and title", () => {
         }[field] || ""
       );
     },
+    getCreators() {
+      return [];
+    },
   };
   const req = buildOaSearchRequest("libgen", item);
   assert.equal(req.doi, "10.1000/test");

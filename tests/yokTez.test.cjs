@@ -59,6 +59,9 @@ test("oa bridge request carries title DOI and YÖK tez no", () => {
       if (field === "url") return "";
       return "";
     },
+    getCreators() {
+      return [];
+    },
   };
   const req = buildOaSearchRequest("yoktez", item, 3);
   assert.equal(req.source, "yoktez");
@@ -74,6 +77,65 @@ test("oa bridge request carries title DOI and YÖK tez no", () => {
     ]),
     ["https://a/pdf"],
   );
+});
+
+test("oa bridge request embeds thesis kind criteria from item", () => {
+  const { buildOaSearchRequest } = loadBridge();
+  global.Zotero.ItemTypes = { getName: () => "thesis" };
+  const item = {
+    itemTypeID: 1,
+    getField(field) {
+      return (
+        {
+          title: "Soyut resme bakis",
+          date: "2015-06-01",
+          language: "tr",
+          university: "Mimar Sinan",
+          thesisType: "Yüksek Lisans",
+          DOI: "",
+          ISBN: "",
+          extra: "",
+          url: "",
+        }[field] || ""
+      );
+    },
+    getCreators() {
+      return [{ firstName: "Ayşe", lastName: "Yılmaz", creatorType: "author" }];
+    },
+  };
+  const req = buildOaSearchRequest("yoktez", item, 3);
+  assert.equal(req.kind, "thesis");
+  assert.equal(req.year, "2015");
+  assert.equal(req.language, "tr");
+  assert.equal(req.university, "Mimar Sinan");
+  assert.equal(req.thesisType, "Yüksek Lisans");
+  assert.match(req.authors, /Yılmaz/);
+});
+
+test("filterTrustedHits drops year mismatch when year provided", () => {
+  const { filterTrustedHits } = loadBridge();
+  const kept = filterTrustedHits(
+    [
+      {
+        source: "doi",
+        title: "The mercenaries interview Leon Golub",
+        pdfUrl: "https://a/x.pdf",
+        year: "2010",
+      },
+      {
+        source: "doi",
+        title: "The mercenaries interview Leon Golub",
+        pdfUrl: "https://a/y.pdf",
+        year: "1990",
+      },
+    ],
+    {
+      title: "The mercenaries interview Leon Golub",
+      year: "2010",
+    },
+  );
+  assert.equal(kept.length, 1);
+  assert.equal(kept[0].year, "2010");
 });
 
 test("DergiPark source supports only journal articles", () => {

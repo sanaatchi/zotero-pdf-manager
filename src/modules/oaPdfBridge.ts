@@ -1,11 +1,11 @@
-// @ajan: cursor · @etiket: katman-2, oa-pdf-bridge, search-kind, reuse-download
+// @ajan: cursor · @etiket: katman-2, oa-pdf-bridge, search-kind-auto, reuse-download
 /**
  * Katman-2 → Kutuphane köprü (8756) `oa_pdf_search` client.
  * Online PDF discovery runs in Python; this module only POSTs queries.
  * LibGen book PDFs: long fetch timeout (keys refresh + multi-minute download).
  * Bridge base URL is loopback-only (same SSRF policy as K1/K3).
  * Manual OA Search sends allowWebSearch=true (DergiPark DDG last-resort).
- * Structured kind criteria (year, language, …) pass through for federated rank.
+ * Download & attach embeds kind criteria from the Zotero item automatically.
  */
 import { getPref, setPref } from "../utils/prefs";
 import { normalizeDOI } from "../utils/metadataNormalize";
@@ -14,6 +14,7 @@ import {
   isAllowedOaBridgeUrl,
   normalizeOaBridgeUrl,
 } from "../utils/oaBridgeUrl";
+import { kindFromZoteroItemType } from "./oaSearchCriteria";
 
 export { DEFAULT_OA_BRIDGE_URL, isAllowedOaBridgeUrl, normalizeOaBridgeUrl };
 
@@ -88,18 +89,66 @@ export function resolveOaBridgeUrl(): string {
   return normalizeOaBridgeUrl(String(getPref("pdf.oaBridgeUrl") || ""));
 }
 
+function safeItemField(item: Zotero.Item, field: string): string {
+  try {
+    return String(item.getField(field as any) || "").trim();
+  } catch {
+    return "";
+  }
+}
+
+function yearFromItemDate(raw: string): string {
+  const s = String(raw || "").trim();
+  const m = s.match(/\b(1[4-9]\d{2}|20\d{2})\b/);
+  return m ? m[1]! : "";
+}
+
+function creatorsByType(item: Zotero.Item, types: string[], limit = 4): string {
+  try {
+    const want = new Set(types.map((t) => t.toLowerCase()));
+    const creators = item.getCreators() as Array<{
+      lastName?: string;
+      firstName?: string;
+      name?: string;
+      creatorType?: string;
+    }>;
+    return (creators || [])
+      .filter((c) => want.has(String(c.creatorType || "author").toLowerCase()))
+      .slice(0, limit)
+      .map((c) =>
+        String(
+          c.name || [c.firstName, c.lastName].filter(Boolean).join(" "),
+        ).trim(),
+      )
+      .filter(Boolean)
+      .join("; ");
+  } catch {
+    return "";
+  }
+}
+
 /** Build search fields from a Zotero item for one oa_pdf_search source id. */
 export function buildOaSearchRequest(
   sourceId: string,
   item: Zotero.Item,
   limit = 5,
 ): OaPdfSearchRequest {
-  const title = String(item.getField("title") || "").trim();
+  const title = safeItemField(item, "title");
   const doi = itemDOI(item);
-  const isbn = String(item.getField("ISBN") || "").replace(/[^0-9Xx]/g, "");
-  const extra = String(item.getField("extra") || "");
-  const urlField = String(item.getField("url") || "");
+  const isbn = safeItemField(item, "ISBN").replace(/[^0-9Xx]/g, "");
+  const extra = safeItemField(item, "extra");
+  const urlField = safeItemField(item, "url");
   const hay = `${urlField}\n${extra}`;
+
+  let itemTypeName = "";
+  try {
+    itemTypeName = String(
+      (Zotero.ItemTypes as any)?.getName?.(item.itemTypeID) || "",
+    );
+  } catch {
+    itemTypeName = "";
+  }
+  const resolvedKind = kindFromZoteroItemType(itemTypeName);
 
   let arxivId = "";
   const arxivAnchored = hay.match(/arxiv[:/]\s*([\w.-]+\/\d+|\d{4}\.\d{4,5})/i);
@@ -123,31 +172,30 @@ export function buildOaSearchRequest(
       ? `${title} ${yokNo}`.trim()
       : title;
 
-  let authors = "";
-  try {
-    const creators = item.getCreators() as Array<{
-      lastName?: string;
-      firstName?: string;
-      name?: string;
-    }>;
-    authors = (creators || [])
-      .slice(0, 3)
-      .map((c) =>
-        String(
-          c.name || [c.firstName, c.lastName].filter(Boolean).join(" "),
-        ).trim(),
-      )
-      .filter(Boolean)
-      .join("; ");
-  } catch {
-    /* ignore */
-  }
+  const authors = creatorsByType(item, ["author"], 4);
+  const editors = creatorsByType(item, ["editor"], 4);
+  const translator = creatorsByType(item, ["translator"], 3);
+  const year = yearFromItemDate(safeItemField(item, "date"));
+  const language = safeItemField(item, "language");
+  const publication = safeItemField(item, "publicationTitle");
+  const bookTitle = safeItemField(item, "bookTitle");
+  const publisher = safeItemField(item, "publisher");
+  const thesisType = safeItemField(item, "thesisType");
+  const university = safeItemField(item, "university");
 
   // LibGen: core title before colon + author surnames (long subtitles miss catalog).
   if (sourceId === "libgen" && title) {
     const colon = title.search(/\s*[:—–]\s*/);
     if (colon >= 8) {
       text = title.slice(0, colon).trim();
+    }
+  }
+
+  // Book section: include container book title in remote text (parity with
+  // Python compose_remote_text).
+  if (resolvedKind === "bookSection" && bookTitle && text) {
+    if (!text.toLowerCase().includes(bookTitle.toLowerCase())) {
+      text = `${text} ${bookTitle}`.trim();
     }
   }
 
@@ -161,6 +209,16 @@ export function buildOaSearchRequest(
     pmcid,
     authors,
     limit,
+    kind: resolvedKind,
+    year,
+    language,
+    translator,
+    publication,
+    editors,
+    bookTitle,
+    publisher,
+    thesisType,
+    university,
   };
 }
 
@@ -195,6 +253,16 @@ export async function searchOaPdfBridgeDetailed(
         profile: req.profile || "full",
         totalLimit: req.totalLimit ?? 25,
         allowWebSearch: req.allowWebSearch ?? false,
+        kind: req.kind || "",
+        year: req.year || "",
+        language: req.language || "",
+        translator: req.translator || "",
+        publication: req.publication || "",
+        editors: req.editors || "",
+        bookTitle: req.bookTitle || "",
+        publisher: req.publisher || "",
+        thesisType: req.thesisType || "",
+        university: req.university || "",
       }),
       responseType: "text",
       timeout: 180000,
@@ -327,6 +395,16 @@ export async function searchAllOaSources(
       pmid: base.pmid,
       pmcid: base.pmcid,
       authors: base.authors,
+      kind: base.kind,
+      year: base.year,
+      language: base.language,
+      translator: base.translator,
+      publication: base.publication,
+      editors: base.editors,
+      bookTitle: base.bookTitle,
+      publisher: base.publisher,
+      thesisType: base.thesisType,
+      university: base.university,
     },
     {
       profile: opts.profile || "full",
@@ -677,7 +755,16 @@ export type HitTrustContext = {
   doi?: string;
   /** Source id — scihub is DOI-keyed and skips title gate when DOI matches. */
   sourceId?: string;
+  /** Soft year gate (Download & attach / OA criteria). */
+  year?: string;
 };
+
+function yearToken(raw: string): string {
+  const m = String(raw || "")
+    .trim()
+    .match(/\b(1[4-9]\d{2}|20\d{2})\b/);
+  return m ? m[1]! : "";
+}
 
 /**
  * Drop low-confidence OA hits before download.
@@ -689,10 +776,20 @@ export function filterTrustedHits(
 ): OaPdfHit[] {
   const itemDoi = normalizeDOI(ctx.doi || "");
   const itemTitle = ctx.title || "";
+  const wantYear = yearToken(ctx.year || "");
   const scored: { hit: OaPdfHit; rank: number }[] = [];
   for (const hit of hits || []) {
     const url = String(hit.pdfUrl || "").trim();
     if (!url) continue;
+    if (wantYear) {
+      const hitYear = yearToken(
+        String(hit.year || "") || String((hit.extra as any)?.year || ""),
+      );
+      if (hitYear) {
+        const delta = Math.abs(Number(wantYear) - Number(hitYear));
+        if (delta > 1) continue;
+      }
+    }
     const hitDoi = normalizeDOI(String(hit.doi || ""));
     const doiMatch = !!(itemDoi && hitDoi && itemDoi === hitDoi);
     const hitTitle = String(hit.title || "");
