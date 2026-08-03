@@ -161,3 +161,24 @@ test("filterTrustedHits drops Eğitim Örgütlerinde Makyavelist/Çevik false fr
   assert.equal(trusted.length, 1);
   assert.equal(trusted[0].pdfUrl, "https://example.com/right.pdf");
 });
+
+test("filterTrustedHits recovers 7-char distinctive near-miss (Python parity)", () => {
+  // Python distinctive_title_tokens min_len=7; former TS gate m.length < 8
+  // rejected this recovery. edit(estetik, estetka)=2 on a long high-overlap title.
+  const { filterTrustedHits } = loadBridge();
+  const itemTitle =
+    "Modern Avrupa estetik kuramlarinin figuratif resim sanati analizi";
+  const trusted = filterTrustedHits(
+    [
+      {
+        source: "doi",
+        title:
+          "Modern Avrupa estetka kuramlarinin figuratif resim sanati analizi",
+        pdfUrl: "https://example.com/near.pdf",
+      },
+    ],
+    { title: itemTitle, doi: "" },
+  );
+  assert.equal(trusted.length, 1);
+  assert.equal(trusted[0].pdfUrl, "https://example.com/near.pdf");
+});

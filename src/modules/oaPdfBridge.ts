@@ -1,4 +1,4 @@
-// @ajan: cursor · @etiket: katman-2, oa-pdf-bridge, short-title-trust, reuse-download
+// @ajan: cursor · @etiket: katman-2, oa-pdf-bridge, trust-parity-7
 /**
  * Katman-2 → Kutuphane köprü (8756) `oa_pdf_search` client.
  * Online PDF discovery runs in Python; this module only POSTs queries.
@@ -552,6 +552,8 @@ const TITLE_STOP = new Set([
  * (Turkish morphology: toplumda ≉ toplumsal).
  * Short titles (≤3 content tokens or ≤1 distinctive ≥7): every content
  * token + score ≥0.75 (blocks "sahteciliği"-only forgery matches).
+ * Long-title one-miss recovery: edit ≤2 when ov≥0.85; miss token ≥7
+ * (parity with Python distinctive_title_tokens — not 8).
  */
 function editDistance(a: string, b: string): number {
   if (a === b) return 0;
@@ -612,7 +614,9 @@ function titleTrustOk(itemTitle: string, hitTitle: string): boolean {
   const misses = need.filter((t) => !tokenInFuzzy(t, hitToks));
   if (misses.length !== 1) return false;
   const m = misses[0]!;
-  if (m.length < 8) return false;
+  // Parity with Python distinctive_title_tokens min_len=7 (not 8).
+  // A 7-char distinctive near-miss (edit ≤2) must still recover.
+  if (m.length < 7) return false;
   for (const h of hitToks) {
     if (Math.abs(h.length - m.length) > 2) continue;
     if (editDistanceAllow2(m, h) <= 2) return true;
