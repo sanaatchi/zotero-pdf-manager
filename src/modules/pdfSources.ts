@@ -1,4 +1,4 @@
-// @ajan: cursor · @etiket: katman-2, pdf-sources, safe-overwrite, locked-fallback
+// @ajan: cursor · @etiket: katman-2, pdf-sources, no-dup-copy, link-reuse
 import { getString } from "../utils/locale";
 import { getPref } from "../utils/prefs";
 import {
@@ -701,13 +701,16 @@ export async function cleanupRejectedAttachment(opts: {
 
 /**
  * Find an existing PDF attachment on `item` that already links to `filePath`.
- * Used so retries overwrite bytes in place instead of erase+recreate.
+ * Used so retries overwrite bytes in place instead of erase+recreate, and so
+ * Local/orphan flows never attach the same disk file twice on one parent.
  */
-async function findParentLinkedPdfByPath(
+export async function findParentLinkedPdfByPath(
   item: Zotero.Item,
   filePath: string,
 ): Promise<Zotero.Item | null> {
-  const want = PathUtils.normalize(filePath);
+  const want = PathUtils.normalize(String(filePath || ""));
+  if (!want) return null;
+  const wantKey = want.replace(/\\/g, "/").toLowerCase();
   for (const attachmentID of item.getAttachments()) {
     const att = Zotero.Items.get(attachmentID) as Zotero.Item | undefined;
     if (!att) continue;
@@ -719,7 +722,11 @@ async function findParentLinkedPdfByPath(
         (await (att as any).getFilePathAsync?.()) ||
         (att as any).getFilePath?.() ||
         "";
-      if (p && PathUtils.normalize(p) === want) return att;
+      if (!p) continue;
+      const got = PathUtils.normalize(String(p))
+        .replace(/\\/g, "/")
+        .toLowerCase();
+      if (got === wantKey) return att;
     } catch {
       /* ignore */
     }
@@ -810,26 +817,25 @@ export async function downloadAndAttach(
             } catch {
               /* best-effort */
             }
+            finalCreatedByThisRun = true;
           } catch (writeErr) {
-            // File locked (open in reader) — keep bytes on a new unique path.
+            // File locked (open in reader) — never spawn stem-<ts>.pdf twin.
+            // Keep the existing disk file and re-link / reuse it below.
             ztoolkit.log(
-              "OA in-place overwrite failed; unique-path fallback",
+              "OA in-place overwrite failed; reuse existing path (no copy)",
               writeErr,
             );
-            releaseDownloadPathReservation(persistedPath);
-            persistedPath = await reserveUniqueDownloadPath(
-              downloadsDir,
-              basename,
-              async (p) => !!(await IOUtils.exists(p)),
-              Date.now() + 1,
-              { reuseExisting: false },
-            );
-            await IOUtils.move(partial, persistedPath, { noOverwrite: true });
+            try {
+              await IOUtils.remove(partial);
+            } catch {
+              /* best-effort */
+            }
+            finalCreatedByThisRun = false;
           }
         } else {
           await IOUtils.move(partial, persistedPath, { noOverwrite: true });
+          finalCreatedByThisRun = true;
         }
-        finalCreatedByThisRun = true;
       } catch (e) {
         try {
           await IOUtils.remove(partial);
@@ -848,9 +854,8 @@ export async function downloadAndAttach(
       if (existingLinked) {
         attachment = existingLinked;
       } else {
-        const asLink = getPref("pdf.localAsLink") !== false;
-        const method = asLink ? "linkFromFile" : "importFromFile";
-        attachment = await (Zotero.Attachments as any)[method]({
+        // Watch-root OA files: always link — importFromFile would copy into storage.
+        attachment = await (Zotero.Attachments as any).linkFromFile({
           file: persistedPath,
           libraryID: item.libraryID,
           parentItemID: item.id,
@@ -971,14 +976,10 @@ export async function relocateImportedPdfToDownloads(
   );
 
   try {
-    if (await IOUtils.exists(dest)) {
-      try {
-        await IOUtils.remove(dest);
-      } catch (e) {
-        ztoolkit.log("relocate: overwrite remove failed", dest, e);
-      }
+    if (!(await IOUtils.exists(dest))) {
+      await IOUtils.copy(srcPath, dest, { noOverwrite: true });
     }
-    await IOUtils.copy(srcPath, dest, { noOverwrite: true });
+    // dest already present → reuse; never remove+re-copy (second disk twin).
   } catch (e) {
     releaseDownloadPathReservation(dest);
     ztoolkit.log("relocate: copy failed", e);
@@ -986,22 +987,26 @@ export async function relocateImportedPdfToDownloads(
   }
   releaseDownloadPathReservation(dest);
 
+  const already = await findParentLinkedPdfByPath(item, dest);
+  if (already) {
+    try {
+      await attachment.eraseTx();
+    } catch (e) {
+      ztoolkit.log("relocate: erase imported (already linked) failed", e);
+    }
+    await registerDownloadedFile(dest);
+    return already;
+  }
+
   try {
     await attachment.eraseTx();
   } catch (e) {
     ztoolkit.log("relocate: erase imported attachment failed", e);
-    try {
-      await IOUtils.remove(dest);
-    } catch {
-      /* best-effort */
-    }
     return attachment;
   }
 
   try {
-    const asLink = getPref("pdf.localAsLink") !== false;
-    const method = asLink ? "linkFromFile" : "importFromFile";
-    const linked = await (Zotero.Attachments as any)[method]({
+    const linked = await (Zotero.Attachments as any).linkFromFile({
       file: dest,
       libraryID: item.libraryID,
       parentItemID: item.id,
@@ -1106,10 +1111,12 @@ export class LocalFolderSource implements PDFSource {
   }
 
   async attachFile(item: Zotero.Item, match: IndexedFile) {
-    const asLink = !!getPref("pdf.localAsLink");
-    const method = asLink ? "linkFromFile" : "importFromFile";
+    // Same disk file must never get a second attachment on this parent
+    // (and never be import-copied into Zotero storage from the watch root).
+    const existing = await findParentLinkedPdfByPath(item, match.path);
+    if (existing) return existing;
     try {
-      return await (Zotero.Attachments as any)[method]({
+      return await (Zotero.Attachments as any).linkFromFile({
         file: match.path,
         libraryID: item.libraryID,
         parentItemID: item.id,

@@ -1,4 +1,4 @@
-// @ajan: cursor · @etiket: katman-2, p2, orphan, bounded-memory, p2-5
+// @ajan: cursor · @etiket: katman-2, orphan, link-only, no-dup-copy
 import { IndexedFile } from "./folderIndex";
 import { appendAuditEvent } from "./automationAudit";
 import {
@@ -268,6 +268,7 @@ async function createItemForFile(
 
   try {
     await item.saveTx();
+    // Link only — never importFromFile (would copy the watch-root PDF).
     const attachment = await (Zotero.Attachments as any).linkFromFile({
       file: file.path,
       libraryID,
