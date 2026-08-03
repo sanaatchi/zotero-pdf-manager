@@ -1,11 +1,19 @@
-// @ajan: cursor · @etiket: katman-2, oa-search, search-kind, field-active
+// @ajan: cursor · @etiket: katman-2, oa-search, kinds-8, field-by-field
 /**
  * OA Search kind → field schema (Zotero itemType-aligned).
  * UI shows/hides inputs; per-field active checkboxes; optional field-by-field
  * fan-out. Bridge receives structured criteria for ranking / discovery.
  */
 
-export type OaSearchKind = "book" | "journalArticle" | "bookSection" | "thesis";
+export type OaSearchKind =
+  | "book"
+  | "journalArticle"
+  | "bookSection"
+  | "thesis"
+  | "document"
+  | "magazineArticle"
+  | "report"
+  | "newspaperArticle";
 
 export type OaCriteriaFieldId =
   | "title"
@@ -20,7 +28,12 @@ export type OaCriteriaFieldId =
   | "bookTitle"
   | "publisher"
   | "thesisType"
-  | "university";
+  | "university"
+  | "volume"
+  | "issue"
+  | "numPages"
+  | "pages"
+  | "place";
 
 export type OaSearchCriteria = {
   kind: OaSearchKind;
@@ -37,6 +50,11 @@ export type OaSearchCriteria = {
   publisher: string;
   thesisType: string;
   university: string;
+  volume: string;
+  issue: string;
+  numPages: string;
+  pages: string;
+  place: string;
 };
 
 export const OA_SEARCH_KINDS: OaSearchKind[] = [
@@ -44,30 +62,111 @@ export const OA_SEARCH_KINDS: OaSearchKind[] = [
   "journalArticle",
   "bookSection",
   "thesis",
+  "document",
+  "magazineArticle",
+  "report",
+  "newspaperArticle",
 ];
 
-/** Fields visible for each kind (order = form order after kind selector). */
+/**
+ * Fields visible for each kind (order = form order after kind selector).
+ * Mirrors docs/oa-arama-alan-agirliklari.md — the same table that drives
+ * the backend's per-kind KIND_FIELD_WEIGHT scoring (oa_pdf_search/
+ * field_weights.json), so a field only shows in the UI when it actually
+ * contributes to that kind's score.
+ */
 export const KIND_FIELDS: Record<OaSearchKind, OaCriteriaFieldId[]> = {
-  book: ["title", "authors", "isbn", "year", "language", "translator"],
+  book: [
+    "title",
+    "authors",
+    "year",
+    "isbn",
+    "publisher",
+    "editors",
+    "volume",
+    "numPages",
+    "translator",
+    "place",
+    "language",
+  ],
   journalArticle: [
     "title",
     "authors",
-    "publication",
     "year",
     "doi",
+    "publication",
+    "editors",
+    "volume",
+    "issue",
+    "pages",
+    "translator",
     "language",
   ],
   bookSection: [
     "title",
     "authors",
-    "editors",
-    "bookTitle",
     "year",
-    "publisher",
     "isbn",
+    "bookTitle",
+    "publisher",
+    "editors",
+    "pages",
+    "translator",
+    "place",
     "language",
   ],
-  thesis: ["title", "authors", "thesisType", "university", "year", "language"],
+  thesis: [
+    "title",
+    "authors",
+    "year",
+    "university",
+    "thesisType",
+    "numPages",
+    "place",
+    "language",
+  ],
+  document: [
+    "title",
+    "authors",
+    "year",
+    "publisher",
+    "numPages",
+    "translator",
+    "place",
+    "language",
+  ],
+  magazineArticle: [
+    "title",
+    "authors",
+    "year",
+    "doi",
+    "publisher",
+    "publication",
+    "volume",
+    "issue",
+    "pages",
+    "place",
+    "language",
+  ],
+  report: [
+    "title",
+    "authors",
+    "year",
+    "publisher",
+    "numPages",
+    "translator",
+    "place",
+    "language",
+  ],
+  newspaperArticle: [
+    "title",
+    "authors",
+    "year",
+    "publication",
+    "pages",
+    "place",
+    "language",
+  ],
 };
 
 /**
@@ -102,6 +201,11 @@ export const FIELD_LABEL_KEY: Record<OaCriteriaFieldId, string> = {
   publisher: "oa-search-field-publisher",
   thesisType: "oa-search-field-thesis-type",
   university: "oa-search-field-university",
+  volume: "oa-search-field-volume",
+  issue: "oa-search-field-issue",
+  numPages: "oa-search-field-num-pages",
+  pages: "oa-search-field-pages",
+  place: "oa-search-field-place",
 };
 
 export const FIELD_INPUT_ID: Record<OaCriteriaFieldId, string> = {
@@ -118,6 +222,11 @@ export const FIELD_INPUT_ID: Record<OaCriteriaFieldId, string> = {
   publisher: "oa-publisher",
   thesisType: "oa-thesis-type",
   university: "oa-university",
+  volume: "oa-volume",
+  issue: "oa-issue",
+  numPages: "oa-num-pages",
+  pages: "oa-pages",
+  place: "oa-place",
 };
 
 export function isOaSearchKind(value: string): value is OaSearchKind {
@@ -136,13 +245,13 @@ export function kindFromZoteroItemType(itemType: string): OaSearchKind {
   if (t === "book" || t === "monograph") return "book";
   if (t === "booksection" || t === "bookSection") return "bookSection";
   if (t === "thesis") return "thesis";
-  if (
-    t === "journalarticle" ||
-    t === "journalArticle" ||
-    t === "magazinearticle" ||
-    t === "newspaperarticle" ||
-    t === "conferencepaper"
-  ) {
+  if (t === "magazinearticle") return "magazineArticle";
+  if (t === "newspaperarticle") return "newspaperArticle";
+  if (t === "report") return "report";
+  if (t === "document" || t === "manuscript" || t === "presentation") {
+    return "document";
+  }
+  if (t === "journalarticle" || t === "journalArticle" || t === "conferencepaper") {
     return "journalArticle";
   }
   return "journalArticle";
@@ -166,6 +275,11 @@ export function emptyCriteria(
     publisher: "",
     thesisType: "",
     university: "",
+    volume: "",
+    issue: "",
+    numPages: "",
+    pages: "",
+    place: "",
   };
 }
 
@@ -197,6 +311,16 @@ function fieldValue(c: OaSearchCriteria, id: OaCriteriaFieldId): string {
       return c.thesisType.trim();
     case "university":
       return c.university.trim();
+    case "volume":
+      return c.volume.trim();
+    case "issue":
+      return c.issue.trim();
+    case "numPages":
+      return c.numPages.trim();
+    case "pages":
+      return c.pages.trim();
+    case "place":
+      return c.place.trim();
     default:
       return "";
   }
@@ -238,6 +362,11 @@ export function applyActiveFields(
     "publisher",
     "thesisType",
     "university",
+    "volume",
+    "issue",
+    "numPages",
+    "pages",
+    "place",
   ];
   for (const id of all) {
     if (active.has(id)) continue;
@@ -281,6 +410,21 @@ export function applyActiveFields(
       case "university":
         out.university = "";
         break;
+      case "volume":
+        out.volume = "";
+        break;
+      case "issue":
+        out.issue = "";
+        break;
+      case "numPages":
+        out.numPages = "";
+        break;
+      case "pages":
+        out.pages = "";
+        break;
+      case "place":
+        out.place = "";
+        break;
     }
   }
   return out;
@@ -313,7 +457,6 @@ export function buildFieldByFieldQueries(
         break;
       case "authors":
         q.authors = val;
-        q.text = val; // adapters that only accept free-text
         break;
       case "doi":
         q.doi = val;
@@ -323,31 +466,24 @@ export function buildFieldByFieldQueries(
         break;
       case "publication":
         q.publication = val;
-        q.text = val;
         break;
       case "editors":
         q.editors = val;
-        q.text = val;
         break;
       case "bookTitle":
         q.bookTitle = val;
-        q.text = val;
         break;
       case "publisher":
         q.publisher = val;
-        q.text = val;
         break;
       case "translator":
         q.translator = val;
-        q.text = val;
         break;
       case "thesisType":
         q.thesisType = val;
-        q.text = val;
         break;
       case "university":
         q.university = val;
-        q.text = val;
         break;
       default:
         break;

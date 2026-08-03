@@ -1,4 +1,4 @@
-// @ajan: cursor · @etiket: katman-2, oa-search, window, attach-error-detail
+// @ajan: cursor · @etiket: katman-2, oa-search, window, kinds-8
 /**
  * Independent OA Search popup (openDialog) — federated results + attach actions.
  * UX: kind-specific criteria forms, per-field active toggles, optional
@@ -881,6 +881,11 @@ function readQuery(doc: Document): OaSearchCriteria {
     publisher: inputVal(doc, "oa-publisher"),
     thesisType: inputVal(doc, "oa-thesis-type"),
     university: inputVal(doc, "oa-university"),
+    volume: inputVal(doc, "oa-volume"),
+    issue: inputVal(doc, "oa-issue"),
+    numPages: inputVal(doc, "oa-num-pages"),
+    pages: inputVal(doc, "oa-pages"),
+    place: inputVal(doc, "oa-place"),
   };
 }
 
@@ -937,6 +942,15 @@ function prefillFromItem(doc: Document, item: Zotero.Item | null): void {
     "oa-thesis-type",
     String(item.getField("thesisType") || "").trim(),
   );
+  setInputVal(doc, "oa-volume", String(item.getField("volume") || "").trim());
+  setInputVal(doc, "oa-issue", String(item.getField("issue") || "").trim());
+  setInputVal(
+    doc,
+    "oa-num-pages",
+    String(item.getField("numPages") || "").trim(),
+  );
+  setInputVal(doc, "oa-pages", String(item.getField("pages") || "").trim());
+  setInputVal(doc, "oa-place", String(item.getField("place") || "").trim());
   try {
     const creators = item.getCreators?.() || [];
     const authors: string[] = [];
@@ -1203,6 +1217,11 @@ function wireActions(win: Window): void {
     `${config.addonRef}-oa-publisher`,
     `${config.addonRef}-oa-thesis-type`,
     `${config.addonRef}-oa-university`,
+    `${config.addonRef}-oa-volume`,
+    `${config.addonRef}-oa-issue`,
+    `${config.addonRef}-oa-num-pages`,
+    `${config.addonRef}-oa-pages`,
+    `${config.addonRef}-oa-place`,
   ]) {
     doc.getElementById(id)?.addEventListener("keydown", (ev) => {
       if ((ev as KeyboardEvent).key === "Enter") {
