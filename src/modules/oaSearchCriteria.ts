@@ -70,10 +70,11 @@ export const OA_SEARCH_KINDS: OaSearchKind[] = [
 
 /**
  * Fields visible for each kind (order = form order after kind selector).
- * Mirrors docs/oa-arama-alan-agirliklari.md — the same table that drives
- * the backend's per-kind KIND_FIELD_WEIGHT scoring (oa_pdf_search/
- * field_weights.json), so a field only shows in the UI when it actually
- * contributes to that kind's score.
+ * Aligns with docs/oa-arama-alan-agirliklari.md / field_weights.json for
+ * fields that sources can actually filter on. Deliberately omits
+ * volume / issue / numPages / pages / place — none of the OA APIs expose
+ * those as search filters, so showing them would be misleading (fill → no
+ * query change). Scoring still uses the full weight table server-side.
  */
 export const KIND_FIELDS: Record<OaSearchKind, OaCriteriaFieldId[]> = {
   book: [
@@ -83,10 +84,7 @@ export const KIND_FIELDS: Record<OaSearchKind, OaCriteriaFieldId[]> = {
     "isbn",
     "publisher",
     "editors",
-    "volume",
-    "numPages",
     "translator",
-    "place",
     "language",
   ],
   journalArticle: [
@@ -96,9 +94,6 @@ export const KIND_FIELDS: Record<OaSearchKind, OaCriteriaFieldId[]> = {
     "doi",
     "publication",
     "editors",
-    "volume",
-    "issue",
-    "pages",
     "translator",
     "language",
   ],
@@ -110,31 +105,11 @@ export const KIND_FIELDS: Record<OaSearchKind, OaCriteriaFieldId[]> = {
     "bookTitle",
     "publisher",
     "editors",
-    "pages",
     "translator",
-    "place",
     "language",
   ],
-  thesis: [
-    "title",
-    "authors",
-    "year",
-    "university",
-    "thesisType",
-    "numPages",
-    "place",
-    "language",
-  ],
-  document: [
-    "title",
-    "authors",
-    "year",
-    "publisher",
-    "numPages",
-    "translator",
-    "place",
-    "language",
-  ],
+  thesis: ["title", "authors", "year", "university", "thesisType", "language"],
+  document: ["title", "authors", "year", "publisher", "translator", "language"],
   magazineArticle: [
     "title",
     "authors",
@@ -142,31 +117,10 @@ export const KIND_FIELDS: Record<OaSearchKind, OaCriteriaFieldId[]> = {
     "doi",
     "publisher",
     "publication",
-    "volume",
-    "issue",
-    "pages",
-    "place",
     "language",
   ],
-  report: [
-    "title",
-    "authors",
-    "year",
-    "publisher",
-    "numPages",
-    "translator",
-    "place",
-    "language",
-  ],
-  newspaperArticle: [
-    "title",
-    "authors",
-    "year",
-    "publication",
-    "pages",
-    "place",
-    "language",
-  ],
+  report: ["title", "authors", "year", "publisher", "translator", "language"],
+  newspaperArticle: ["title", "authors", "year", "publication", "language"],
 };
 
 /**
