@@ -1,4 +1,4 @@
-// @ajan: cursor · @etiket: katman-2, oa-pdf-bridge, search-kind-auto, reuse-download
+// @ajan: cursor · @etiket: katman-2, oa-pdf-bridge, fetch-error-detail
 /**
  * Katman-2 → Kutuphane köprü (8756) `oa_pdf_search` client.
  * Online PDF discovery runs in Python; this module only POSTs queries.
@@ -944,16 +944,47 @@ export async function fetchOaPdfViaBridge(opts: {
   if (status && (status < 200 || status >= 300)) {
     let detail = "";
     try {
-      const text =
-        typeof xhr.responseText === "string"
-          ? xhr.responseText
-          : xhr.response
-            ? new TextDecoder().decode(new Uint8Array(xhr.response))
-            : "";
-      detail = JSON.parse(text || "{}").detail || text.slice(0, 200);
+      const raw = xhr?.response;
+      let text = "";
+      if (typeof xhr?.responseText === "string" && xhr.responseText) {
+        text = xhr.responseText;
+      } else if (typeof raw === "string") {
+        text = raw;
+      } else if (raw != null) {
+        const bytes =
+          raw instanceof ArrayBuffer
+            ? new Uint8Array(raw)
+            : raw instanceof Uint8Array
+              ? raw
+              : new Uint8Array(raw);
+        text = new TextDecoder().decode(bytes);
+      }
+      text = String(text || "").trim();
+      if (text) {
+        try {
+          const parsed = JSON.parse(text) as { detail?: unknown };
+          const d = parsed?.detail;
+          if (typeof d === "string" && d.trim()) detail = d.trim();
+          else if (Array.isArray(d))
+            detail = d
+              .map((x) =>
+                typeof x === "string"
+                  ? x
+                  : x && typeof x === "object" && "msg" in x
+                    ? String((x as any).msg)
+                    : JSON.stringify(x),
+              )
+              .filter(Boolean)
+              .join("; ");
+          else if (d != null) detail = String(d);
+        } catch {
+          detail = text.slice(0, 300);
+        }
+      }
     } catch {
-      detail = `HTTP ${status}`;
+      detail = "";
     }
+    if (!detail) detail = `HTTP ${status}`;
     finishDownloadJob(jobId, { ok: false });
     throw new Error(`oa_pdf fetch ${opts.source}: ${detail}`);
   }
