@@ -82,7 +82,7 @@ pref("extensions.zotero.__addonRef__.scanner.tagDuplicate", "#duplicate");
 pref("extensions.zotero.__addonRef__.scanner.tagNonfile", "#nonfile");
 pref(
   "extensions.zotero.__addonRef__.pdf.sourceOrder",
-  "local,doi,dergipark,pmc,libgen,scihub,yoktez,proxy",
+  "local,doi,dergipark,pmc,core,libgen,zenodo,openaire,scihub,yoktez,archive,proxy",
 );
 pref("extensions.zotero.__addonRef__.pdf.localEnabled", true);
 pref(
