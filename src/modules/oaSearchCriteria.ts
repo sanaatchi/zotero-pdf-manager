@@ -251,7 +251,11 @@ export function kindFromZoteroItemType(itemType: string): OaSearchKind {
   if (t === "document" || t === "manuscript" || t === "presentation") {
     return "document";
   }
-  if (t === "journalarticle" || t === "journalArticle" || t === "conferencepaper") {
+  if (
+    t === "journalarticle" ||
+    t === "journalArticle" ||
+    t === "conferencepaper"
+  ) {
     return "journalArticle";
   }
   return "journalArticle";
