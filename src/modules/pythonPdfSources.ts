@@ -247,7 +247,10 @@ export const ProQuestSource = new OaPdfPythonSource(
   (item) => isThesis(item) || isArticle(item),
 );
 /** Zenodo: preprints/datasets/theses/reports — broad, like DOI/Unpaywall. */
-export const ZenodoSource = new OaPdfPythonSource("zenodo", "pdf.zenodoEnabled");
+export const ZenodoSource = new OaPdfPythonSource(
+  "zenodo",
+  "pdf.zenodoEnabled",
+);
 /** Internet Archive: public-domain scanned books — book-only, LibGen-adjacent. */
 export const InternetArchiveSource = new OaPdfPythonSource(
   "archive",
