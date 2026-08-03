@@ -1,4 +1,4 @@
-// @ajan: cursor · @etiket: katman-2, source-priority, tr-doi-unpaywall
+// @ajan: cursor · @etiket: katman-2, source-priority, article-db-core-zenodo
 /**
  * Item-aware PDF source priority.
  *
@@ -20,6 +20,9 @@ export const ARTICLE_DATABASE_IDS = [
   "dergipark",
   "pmc",
   "scihub",
+  "core",
+  "zenodo",
+  "openaire",
 ] as const;
 
 const TURKISH_CHARS = /[çğıöşüÇĞİÖŞÜ]/;
