@@ -8,13 +8,17 @@ import {
   registerDownloadedFile,
 } from "./folderIndex";
 import {
+  CoreSource,
   DergiParkSource,
   DOISource,
+  InternetArchiveSource,
   LibGenSource,
+  OpenAireSource,
   PMCSource,
   ProxySource,
   SciHubSource,
   YokTezSource,
+  ZenodoSource,
 } from "./pythonPdfSources";
 // arxiv / s2 / proquest → not in ALL_SOURCES auto/manual download cascade
 // (doi is download via Unpaywall; registered below).
@@ -1265,6 +1269,10 @@ export const ALL_SOURCES: Record<string, PDFSource> = {
   libgen: LibGenSource,
   yoktez: YokTezSource,
   proxy: new ProxySource(),
+  zenodo: ZenodoSource,
+  archive: InternetArchiveSource,
+  openaire: OpenAireSource,
+  core: CoreSource,
 };
 
 /** Lookup / validate only — not PDF download cascade. */

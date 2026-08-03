@@ -246,3 +246,18 @@ export const ProQuestSource = new OaPdfPythonSource(
   "pdf.proquestEnabled",
   (item) => isThesis(item) || isArticle(item),
 );
+/** Zenodo: preprints/datasets/theses/reports — broad, like DOI/Unpaywall. */
+export const ZenodoSource = new OaPdfPythonSource("zenodo", "pdf.zenodoEnabled");
+/** Internet Archive: public-domain scanned books — book-only, LibGen-adjacent. */
+export const InternetArchiveSource = new OaPdfPythonSource(
+  "archive",
+  "pdf.archiveEnabled",
+  isBook,
+);
+/** OpenAIRE: broad EU OA aggregator, like DOI/CORE. */
+export const OpenAireSource = new OaPdfPythonSource(
+  "openaire",
+  "pdf.openaireEnabled",
+);
+/** CORE: broadest OA repository aggregator — needs OA_PDF_CORE_API_KEY server-side. */
+export const CoreSource = new OaPdfPythonSource("core", "pdf.coreEnabled");
