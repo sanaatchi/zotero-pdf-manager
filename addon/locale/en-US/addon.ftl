@@ -66,6 +66,7 @@ oa-search-attaching-pct = Downloading PDF… { $percent }
 oa-search-attaching-jobs = Downloading: { $jobs }
 oa-search-attach-ok = PDF attached to selected item
 oa-search-attach-fail = Could not attach PDF
+oa-search-attach-fail-detail = Could not attach PDF: { $message }
 oa-search-creating = Creating item and attaching PDF…
 oa-search-create-ok = Created item: { $title }
 oa-search-related-ok = Related item «{ $title }» · PDF attached={ $attached }

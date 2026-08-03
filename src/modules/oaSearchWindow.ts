@@ -1,4 +1,4 @@
-// @ajan: cursor · @etiket: katman-2, oa-search, window, field-active
+// @ajan: cursor · @etiket: katman-2, oa-search, window, attach-error-detail
 /**
  * Independent OA Search popup (openDialog) — federated results + attach actions.
  * UX: kind-specific criteria forms, per-field active toggles, optional
@@ -26,7 +26,7 @@ import {
   type OaPdfSearchResponse,
 } from "./oaPdfBridge";
 import {
-  attachHitToItem,
+  attachHitToItemDetailed,
   attachToSelectedWithRelated,
   createItemFromHit,
 } from "./oaSearchActions";
@@ -96,6 +96,7 @@ const LABEL_FALLBACK: Record<string, string> = {
   "oa-search-attaching-jobs": "İndiriliyor: {jobs}",
   "oa-search-attach-ok": "PDF seçili öğeye eklendi",
   "oa-search-attach-fail": "PDF eklenemedi",
+  "oa-search-attach-fail-detail": "PDF eklenemedi: {message}",
   "oa-search-creating": "Öğe oluşturuluyor…",
   "oa-search-searching": "Kaynaklarda aranıyor…",
   "oa-search-run-busy": "Aranıyor…",
@@ -971,13 +972,15 @@ async function applyPrimaryAction(
   await withBusy(doc, async () => {
     if (state.targetItem) {
       await withDownloadStatus(doc, "oa-search-attaching", async () => {
-        const ok = await attachHitToItem(state.targetItem!, hit);
+        const result = await attachHitToItemDetailed(state.targetItem!, hit);
         setStatus(
           doc,
-          ok
+          result.ok
             ? uiString("oa-search-attach-ok")
-            : uiString("oa-search-attach-fail"),
-          !ok,
+            : uiString("oa-search-attach-fail-detail", {
+                message: String(result.error || "").slice(0, 160),
+              }) || uiString("oa-search-attach-fail"),
+          !result.ok,
         );
       });
       return;
@@ -1304,13 +1307,15 @@ function wireActions(win: Window): void {
         }
         setStatus(doc, uiString("oa-search-attaching"));
         await withDownloadStatus(doc, "oa-search-attaching", async () => {
-          const ok = await attachHitToItem(item, hit);
+          const result = await attachHitToItemDetailed(item, hit);
           setStatus(
             doc,
-            ok
+            result.ok
               ? uiString("oa-search-attach-ok")
-              : uiString("oa-search-attach-fail"),
-            !ok,
+              : uiString("oa-search-attach-fail-detail", {
+                  message: String(result.error || "").slice(0, 160),
+                }) || uiString("oa-search-attach-fail"),
+            !result.ok,
           );
         });
       });

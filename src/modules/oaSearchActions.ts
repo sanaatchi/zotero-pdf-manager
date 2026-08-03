@@ -1,4 +1,4 @@
-// @ajan: cursor · @etiket: katman-2, oa-search, actions, search-kind
+// @ajan: cursor · @etiket: katman-2, oa-search, actions, attach-detail
 /**
  * OA Search popup actions: attach hit PDF, create item from hit, Related Items.
  * Pure field mapping is unit-tested; Zotero I/O stays async.
@@ -123,35 +123,68 @@ export async function attachHitToItem(
   item: Zotero.Item,
   hit: OaPdfHit,
 ): Promise<boolean> {
+  const result = await attachHitToItemDetailed(item, hit);
+  return result.ok;
+}
+
+/** Same as attachHitToItem but keeps the failure reason for OA Search status. */
+export async function attachHitToItemDetailed(
+  item: Zotero.Item,
+  hit: OaPdfHit,
+): Promise<{ ok: boolean; error?: string }> {
   const url = String(hit.pdfUrl || "").trim();
-  if (!url) return false;
+  const landing = String(hit.landingUrl || "").trim();
+  if (!url && !landing) {
+    return { ok: false, error: "no pdfUrl/landingUrl on hit" };
+  }
   const sourceId = String(hit.source || "oa").trim() || "oa";
   const { downloadAndAttach, rethrowAttachControlFlow } =
     await import("./pdfSources");
+  const extraBase = {
+    ...((hit.extra || {}) as Record<string, unknown>),
+    landingUrl: landing || undefined,
+    pdfUrl: url || undefined,
+  };
   try {
-    const bytes = await fetchOaPdfViaBridge({
+    let bytes = await fetchOaPdfViaBridge({
       source: sourceId,
-      pdfUrl: url,
-      extra: {
-        ...((hit.extra || {}) as Record<string, unknown>),
-        landingUrl: hit.landingUrl || undefined,
-        pdfUrl: url,
-      },
+      pdfUrl: url || landing,
+      extra: extraBase,
       label: String(hit.title || item.getDisplayTitle() || "").trim(),
     });
-    if (!bytes) return false;
+    // Landing-only / HTML pdfUrl: one more try with explicit landing scrape.
+    if (!bytes && landing && landing !== url) {
+      bytes = await fetchOaPdfViaBridge({
+        source: sourceId,
+        pdfUrl: landing,
+        extra: { ...extraBase, landingUrl: landing },
+        label: String(hit.title || item.getDisplayTitle() || "").trim(),
+      });
+    }
+    if (!bytes) {
+      return {
+        ok: false,
+        error: "bridge returned no PDF bytes (%PDF gate)",
+      };
+    }
     // Explicit OA Search pick — trust like attachPdfFromUrl (validate: false).
-    // Otherwise content validation can attach then eraseTx → "Could not attach".
-    const att = await downloadAndAttach(item, url, {
+    const att = await downloadAndAttach(item, url || landing, {
       sourceId,
       bytes,
       validate: false,
     });
-    return !!att;
+    if (!att) {
+      return {
+        ok: false,
+        error: "downloadAndAttach returned null (disk/link)",
+      };
+    }
+    return { ok: true };
   } catch (e) {
     rethrowAttachControlFlow(e);
+    const msg = e instanceof Error ? e.message : String(e);
     ztoolkit.log("oaSearch attachHitToItem failed", e);
-    return false;
+    return { ok: false, error: msg };
   }
 }
 

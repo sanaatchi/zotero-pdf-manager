@@ -65,6 +65,7 @@ oa-search-attaching-pct = Download PDF… { $percent }
 oa-search-attaching-jobs = Download: { $jobs }
 oa-search-attach-ok = PDF allegato all’elemento selezionato
 oa-search-attach-fail = Impossibile allegare il PDF
+oa-search-attach-fail-detail = Impossibile allegare il PDF: { $message }
 oa-search-creating = Creazione elemento e allegato PDF…
 oa-search-create-ok = Elemento creato: { $title }
 oa-search-related-ok = Related «{ $title }» · PDF allegato={ $attached }

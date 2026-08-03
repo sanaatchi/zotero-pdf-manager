@@ -1,4 +1,4 @@
-// @ajan: cursor · @etiket: katman-2, pdf-sources, validate-tag-only, safe-overwrite
+// @ajan: cursor · @etiket: katman-2, pdf-sources, safe-overwrite, locked-fallback
 import { getString } from "../utils/locale";
 import { getPref } from "../utils/prefs";
 import {
@@ -803,11 +803,28 @@ export async function downloadAndAttach(
         // linked attachments point at that path; remove-then-move made the
         // PDF "disappear" from Zotero mid-download / on retry.
         if (await IOUtils.exists(persistedPath)) {
-          await IOUtils.write(persistedPath, bytes);
           try {
-            await IOUtils.remove(partial);
-          } catch {
-            /* best-effort */
+            await IOUtils.write(persistedPath, bytes);
+            try {
+              await IOUtils.remove(partial);
+            } catch {
+              /* best-effort */
+            }
+          } catch (writeErr) {
+            // File locked (open in reader) — keep bytes on a new unique path.
+            ztoolkit.log(
+              "OA in-place overwrite failed; unique-path fallback",
+              writeErr,
+            );
+            releaseDownloadPathReservation(persistedPath);
+            persistedPath = await reserveUniqueDownloadPath(
+              downloadsDir,
+              basename,
+              async (p) => !!(await IOUtils.exists(p)),
+              Date.now() + 1,
+              { reuseExisting: false },
+            );
+            await IOUtils.move(partial, persistedPath, { noOverwrite: true });
           }
         } else {
           await IOUtils.move(partial, persistedPath, { noOverwrite: true });

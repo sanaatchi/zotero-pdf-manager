@@ -64,6 +64,7 @@ oa-search-attaching-pct = PDF wird heruntergeladen… { $percent }
 oa-search-attaching-jobs = Download: { $jobs }
 oa-search-attach-ok = PDF an ausgewählten Eintrag angehängt
 oa-search-attach-fail = PDF konnte nicht angehängt werden
+oa-search-attach-fail-detail = PDF konnte nicht angehängt werden: { $message }
 oa-search-creating = Eintrag wird erstellt und PDF angehängt…
 oa-search-create-ok = Eintrag erstellt: { $title }
 oa-search-related-ok = Related «{ $title }» · PDF angehängt={ $attached }
