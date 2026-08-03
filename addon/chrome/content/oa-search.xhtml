@@ -1,4 +1,4 @@
-<!-- @ajan: cursor · @etiket: katman-2, oa-search, multi-job-status -->
+<!-- @ajan: cursor · @etiket: katman-2, oa-search, search-kind -->
 <html xmlns="http://www.w3.org/1999/xhtml">
   <head>
     <meta charset="utf-8" />
@@ -66,9 +66,34 @@
 
             .search-grid {
               display: grid;
-              grid-template-columns: 1.4fr 0.8fr 0.8fr 1fr auto;
+              grid-template-columns: repeat(4, minmax(0, 1fr)) auto;
               gap: 8px;
               align-items: end;
+            }
+
+            .search-grid .oa-field[hidden] {
+              display: none !important;
+            }
+
+            .kind-row {
+              display: flex;
+              align-items: end;
+              gap: 10px;
+              flex-wrap: wrap;
+            }
+
+            .kind-row label {
+              min-width: 160px;
+            }
+
+            .kind-row select {
+              min-width: 180px;
+            }
+
+            @media (max-width: 900px) {
+              .search-grid {
+                grid-template-columns: 1fr 1fr;
+              }
             }
 
             label {
@@ -275,20 +300,67 @@
     <div id="zpdfmanager-oa-shell">
       <h1 id="zpdfmanager-oa-title">OA Arama</h1>
       <div id="zpdfmanager-oa-target" class="target"></div>
-      <div class="search-grid">
+      <div class="kind-row">
         <label
-          >Başlık / metin
+          >Tür
+          <select id="zpdfmanager-oa-kind">
+            <option value="book">Kitap</option>
+            <option value="journalArticle" selected="selected">Dergi makalesi</option>
+            <option value="bookSection">Kitap bölümü</option>
+            <option value="thesis">Tez</option>
+          </select>
+        </label>
+      </div>
+      <div class="search-grid">
+        <label class="oa-field" data-field="title"
+          >Başlık
           <input id="zpdfmanager-oa-q" type="text" autocomplete="off"
         /></label>
-        <label
-          >DOI <input id="zpdfmanager-oa-doi" type="text" autocomplete="off"
-        /></label>
-        <label
-          >ISBN <input id="zpdfmanager-oa-isbn" type="text" autocomplete="off"
-        /></label>
-        <label
+        <label class="oa-field" data-field="authors"
           >Yazarlar
           <input id="zpdfmanager-oa-authors" type="text" autocomplete="off"
+        /></label>
+        <label class="oa-field" data-field="doi" hidden="hidden"
+          >DOI <input id="zpdfmanager-oa-doi" type="text" autocomplete="off"
+        /></label>
+        <label class="oa-field" data-field="isbn" hidden="hidden"
+          >ISBN <input id="zpdfmanager-oa-isbn" type="text" autocomplete="off"
+        /></label>
+        <label class="oa-field" data-field="year" hidden="hidden"
+          >Yıl
+          <input id="zpdfmanager-oa-year" type="text" autocomplete="off"
+        /></label>
+        <label class="oa-field" data-field="language" hidden="hidden"
+          >Dil
+          <input id="zpdfmanager-oa-language" type="text" autocomplete="off"
+        /></label>
+        <label class="oa-field" data-field="translator" hidden="hidden"
+          >Çevirmen
+          <input id="zpdfmanager-oa-translator" type="text" autocomplete="off"
+        /></label>
+        <label class="oa-field" data-field="publication" hidden="hidden"
+          >Yayın / dergi
+          <input id="zpdfmanager-oa-publication" type="text" autocomplete="off"
+        /></label>
+        <label class="oa-field" data-field="editors" hidden="hidden"
+          >Editörler
+          <input id="zpdfmanager-oa-editors" type="text" autocomplete="off"
+        /></label>
+        <label class="oa-field" data-field="bookTitle" hidden="hidden"
+          >Kitap başlığı
+          <input id="zpdfmanager-oa-book-title" type="text" autocomplete="off"
+        /></label>
+        <label class="oa-field" data-field="publisher" hidden="hidden"
+          >Yayıncı
+          <input id="zpdfmanager-oa-publisher" type="text" autocomplete="off"
+        /></label>
+        <label class="oa-field" data-field="thesisType" hidden="hidden"
+          >Tez türü
+          <input id="zpdfmanager-oa-thesis-type" type="text" autocomplete="off"
+        /></label>
+        <label class="oa-field" data-field="university" hidden="hidden"
+          >Üniversite
+          <input id="zpdfmanager-oa-university" type="text" autocomplete="off"
         /></label>
         <button id="zpdfmanager-oa-search" type="button" data-label="Ara">
           Ara

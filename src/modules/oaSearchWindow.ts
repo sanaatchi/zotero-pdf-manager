@@ -1,8 +1,8 @@
-// @ajan: cursor · @etiket: katman-2, oa-search, window, multi-job-status
+// @ajan: cursor · @etiket: katman-2, oa-search, window, search-kind
 /**
  * Independent OA Search popup (openDialog) — federated results + attach actions.
- * UX: per-search source picker, PDF-only filter, keyboard nav, double-click apply,
- * source/error summary. Selection optional for search.
+ * UX: kind-specific criteria forms, per-search source picker, PDF-only filter,
+ * keyboard nav, double-click apply, source/error summary.
  * Search runs only on Ara (or Enter in query fields) — never auto on open.
  * Ara never stays disabled during long bridge calls (generation supersede).
  * Concurrent downloads: status shows one segment per progressJob (not a single %).
@@ -27,6 +27,14 @@ import {
   attachToSelectedWithRelated,
   createItemFromHit,
 } from "./oaSearchActions";
+import {
+  criteriaHasQuery,
+  isOaSearchKind,
+  KIND_FIELDS,
+  kindFromZoteroItemType,
+  type OaSearchCriteria,
+  type OaSearchKind,
+} from "./oaSearchCriteria";
 
 const WINDOW_ID = `${config.addonRef}-oa-search`;
 
@@ -46,7 +54,25 @@ const LABEL_FALLBACK: Record<string, string> = {
     "Seçim yok (arama için gerekmez). Seçiliye ekle / Related için Zotero’da kayıt seçin",
   "oa-search-ready": "Sorgu yazıp Ara’ya basın — Zotero seçimi zorunlu değil",
   "oa-search-empty": "Sonuç yok",
-  "oa-search-need-query": "Başlık, DOI, ISBN veya yazar girin",
+  "oa-search-need-query": "Seçilen türe göre en az bir alan doldurun",
+  "oa-search-kind": "Tür",
+  "oa-search-kind-book": "Kitap",
+  "oa-search-kind-journalArticle": "Dergi makalesi",
+  "oa-search-kind-bookSection": "Kitap bölümü",
+  "oa-search-kind-thesis": "Tez",
+  "oa-search-field-title": "Başlık",
+  "oa-search-field-authors": "Yazarlar",
+  "oa-search-field-doi": "DOI",
+  "oa-search-field-isbn": "ISBN",
+  "oa-search-field-year": "Yıl",
+  "oa-search-field-language": "Dil",
+  "oa-search-field-translator": "Çevirmen",
+  "oa-search-field-publication": "Yayın / dergi",
+  "oa-search-field-editors": "Editörler",
+  "oa-search-field-book-title": "Kitap başlığı",
+  "oa-search-field-publisher": "Yayıncı",
+  "oa-search-field-thesis-type": "Tez türü",
+  "oa-search-field-university": "Üniversite",
   "oa-search-hint-no-target":
     "Seçili öğe yok — Seçiliye ekle / Related için Zotero’da bir kayıt seçin",
   "oa-search-hint-no-pdf": "PDF’si olan bir sonuç satırı seçin",
@@ -82,6 +108,7 @@ type OaSearchWindowState = {
   /** Bumps on each Ara click — older in-flight searches discard their result. */
   searchGeneration: number;
   searching: boolean;
+  searchKind: OaSearchKind;
 };
 
 function isWindowAlive(win?: Window | null): boolean {
@@ -110,6 +137,7 @@ function getState(): OaSearchWindowState {
       meta: { sourcesQueried: [], errors: {} },
       searchGeneration: 0,
       searching: false,
+      searchKind: "journalArticle",
     };
   }
   const s = data.oaSearch;
@@ -121,6 +149,9 @@ function getState(): OaSearchWindowState {
   if (!s.meta) s.meta = { sourcesQueried: [], errors: {} };
   if (typeof s.searchGeneration !== "number") s.searchGeneration = 0;
   if (typeof s.searching !== "boolean") s.searching = false;
+  if (!isOaSearchKind(String(s.searchKind || ""))) {
+    s.searchKind = "journalArticle";
+  }
   return s;
 }
 
@@ -642,69 +673,132 @@ function renderHits(doc: Document, state: OaSearchWindowState): void {
   updateActionButtons(doc, state);
 }
 
-function prefillFromItem(doc: Document, item: Zotero.Item | null): void {
-  if (!item) return;
-  const q = doc.getElementById(
-    `${config.addonRef}-oa-q`,
-  ) as HTMLInputElement | null;
-  const doi = doc.getElementById(
-    `${config.addonRef}-oa-doi`,
-  ) as HTMLInputElement | null;
-  const isbn = doc.getElementById(
-    `${config.addonRef}-oa-isbn`,
-  ) as HTMLInputElement | null;
-  const authors = doc.getElementById(
-    `${config.addonRef}-oa-authors`,
-  ) as HTMLInputElement | null;
-  if (q && !q.value) {
-    // Prefer core title before colon — full Zotero subtitles miss OA indexes.
-    let title = String(item.getField("title") || "").trim();
-    const colon = title.search(/\s*[:—–]\s*/);
-    if (colon >= 8) title = title.slice(0, colon).trim();
-    q.value = title;
-  }
-  if (doi && !doi.value) doi.value = String(item.getField("DOI") || "").trim();
-  if (isbn && !isbn.value)
-    isbn.value = String(item.getField("ISBN") || "")
-      .replace(/[^0-9Xx]/g, "")
-      .trim();
-  if (authors && !authors.value) {
-    try {
-      const creators = item.getCreators?.() || [];
-      authors.value = creators
-        .slice(0, 4)
-        .map(
-          (c: any) =>
-            `${c.firstName || ""} ${c.lastName || ""}`.trim() || c.name || "",
-        )
-        .filter(Boolean)
-        .join("; ");
-    } catch {
-      /* ignore */
-    }
-  }
+function inputVal(doc: Document, suffix: string): string {
+  return (
+    (
+      doc.getElementById(`${config.addonRef}-${suffix}`) as HTMLInputElement
+    )?.value?.trim() || ""
+  );
 }
 
-function readQuery(doc: Document): {
-  text: string;
-  doi: string;
-  isbn: string;
-  authors: string;
-} {
+function setInputVal(doc: Document, suffix: string, value: string): void {
+  const el = doc.getElementById(
+    `${config.addonRef}-${suffix}`,
+  ) as HTMLInputElement | null;
+  if (el && !el.value) el.value = value;
+}
+
+function applyKindFieldVisibility(doc: Document, kind: OaSearchKind): void {
+  const visible = new Set(KIND_FIELDS[kind] || KIND_FIELDS.journalArticle);
+  const labels = doc.querySelectorAll(".oa-field[data-field]");
+  labels.forEach((node) => {
+    const field = (node as HTMLElement).getAttribute("data-field") || "";
+    (node as HTMLElement).hidden = !visible.has(field as any);
+  });
+  const kindSel = doc.getElementById(
+    `${config.addonRef}-oa-kind`,
+  ) as HTMLSelectElement | null;
+  if (kindSel && kindSel.value !== kind) kindSel.value = kind;
+}
+
+function readQuery(doc: Document): OaSearchCriteria {
+  const kindRaw = (
+    doc.getElementById(`${config.addonRef}-oa-kind`) as HTMLSelectElement
+  )?.value;
+  const kind: OaSearchKind = isOaSearchKind(kindRaw || "")
+    ? (kindRaw as OaSearchKind)
+    : "journalArticle";
   return {
-    text: (
-      doc.getElementById(`${config.addonRef}-oa-q`) as HTMLInputElement
-    )?.value?.trim(),
-    doi: (
-      doc.getElementById(`${config.addonRef}-oa-doi`) as HTMLInputElement
-    )?.value?.trim(),
-    isbn: (
-      doc.getElementById(`${config.addonRef}-oa-isbn`) as HTMLInputElement
-    )?.value?.trim(),
-    authors: (
-      doc.getElementById(`${config.addonRef}-oa-authors`) as HTMLInputElement
-    )?.value?.trim(),
+    kind,
+    text: inputVal(doc, "oa-q"),
+    authors: inputVal(doc, "oa-authors"),
+    doi: inputVal(doc, "oa-doi"),
+    isbn: inputVal(doc, "oa-isbn"),
+    year: inputVal(doc, "oa-year"),
+    language: inputVal(doc, "oa-language"),
+    translator: inputVal(doc, "oa-translator"),
+    publication: inputVal(doc, "oa-publication"),
+    editors: inputVal(doc, "oa-editors"),
+    bookTitle: inputVal(doc, "oa-book-title"),
+    publisher: inputVal(doc, "oa-publisher"),
+    thesisType: inputVal(doc, "oa-thesis-type"),
+    university: inputVal(doc, "oa-university"),
   };
+}
+
+function prefillFromItem(doc: Document, item: Zotero.Item | null): void {
+  if (!item) return;
+  try {
+    const kind = kindFromZoteroItemType(String(item.itemType || ""));
+    const state = getState();
+    state.searchKind = kind;
+    applyKindFieldVisibility(doc, kind);
+  } catch {
+    /* ignore */
+  }
+  let title = String(item.getField("title") || "").trim();
+  const colon = title.search(/\s*[:—–]\s*/);
+  if (colon >= 8) title = title.slice(0, colon).trim();
+  setInputVal(doc, "oa-q", title);
+  setInputVal(doc, "oa-doi", String(item.getField("DOI") || "").trim());
+  setInputVal(
+    doc,
+    "oa-isbn",
+    String(item.getField("ISBN") || "")
+      .replace(/[^0-9Xx]/g, "")
+      .trim(),
+  );
+  setInputVal(doc, "oa-year", String(item.getField("date") || "").trim());
+  setInputVal(
+    doc,
+    "oa-language",
+    String(item.getField("language") || "").trim(),
+  );
+  setInputVal(
+    doc,
+    "oa-publication",
+    String(item.getField("publicationTitle") || "").trim(),
+  );
+  setInputVal(
+    doc,
+    "oa-book-title",
+    String(item.getField("bookTitle") || "").trim(),
+  );
+  setInputVal(
+    doc,
+    "oa-publisher",
+    String(item.getField("publisher") || "").trim(),
+  );
+  setInputVal(
+    doc,
+    "oa-university",
+    String(item.getField("university") || "").trim(),
+  );
+  setInputVal(
+    doc,
+    "oa-thesis-type",
+    String(item.getField("thesisType") || "").trim(),
+  );
+  try {
+    const creators = item.getCreators?.() || [];
+    const authors: string[] = [];
+    const editors: string[] = [];
+    const translators: string[] = [];
+    for (const c of creators.slice(0, 8) as any[]) {
+      const name =
+        `${c.firstName || ""} ${c.lastName || ""}`.trim() || c.name || "";
+      if (!name) continue;
+      const t = String(c.creatorType || "author");
+      if (t === "editor") editors.push(name);
+      else if (t === "translator") translators.push(name);
+      else authors.push(name);
+    }
+    setInputVal(doc, "oa-authors", authors.join("; "));
+    setInputVal(doc, "oa-editors", editors.join("; "));
+    setInputVal(doc, "oa-translator", translators.join("; "));
+  } catch {
+    /* ignore */
+  }
 }
 
 async function applyPrimaryAction(
@@ -733,8 +827,20 @@ async function applyPrimaryAction(
     }
     const libraryID = Zotero.Libraries.userLibraryID;
     setStatus(doc, uiString("oa-search-creating"));
+    const q = readQuery(doc);
     await withDownloadStatus(doc, "oa-search-attaching", async () => {
-      const item = await createItemFromHit(hit, libraryID, { attachPdf: true });
+      const item = await createItemFromHit(hit, libraryID, {
+        attachPdf: true,
+        preferredItemType: q.kind,
+        bookTitle: q.bookTitle,
+        publication: q.publication,
+        publisher: q.publisher,
+        university: q.university,
+        language: q.language,
+        thesisType: q.thesisType,
+        editors: q.editors,
+        translator: q.translator,
+      });
       setStatus(
         doc,
         uiString("oa-search-create-ok", {
@@ -760,8 +866,9 @@ async function runSearch(win: Window): Promise<void> {
       return;
     }
 
-    const { text, doi, isbn, authors } = readQuery(doc);
-    if (!text && !doi && !isbn && !authors) {
+    const query = readQuery(doc);
+    state.searchKind = query.kind;
+    if (!criteriaHasQuery(query)) {
       setStatus(doc, uiString("oa-search-need-query"), true);
       return;
     }
@@ -779,7 +886,22 @@ async function runSearch(win: Window): Promise<void> {
 
     try {
       const body = await searchAllOaSourcesByQuery(
-        { text, doi, isbn, authors },
+        {
+          text: query.text,
+          doi: query.doi,
+          isbn: query.isbn,
+          authors: query.authors,
+          kind: query.kind,
+          year: query.year,
+          language: query.language,
+          translator: query.translator,
+          publication: query.publication,
+          editors: query.editors,
+          bookTitle: query.bookTitle,
+          publisher: query.publisher,
+          thesisType: query.thesisType,
+          university: query.university,
+        },
         {
           profile: "full",
           totalLimit: 40,
@@ -864,6 +986,7 @@ function wireActions(win: Window): void {
     ensureSearchEnabled(doc);
     bindSearchTrigger(win, searchButton(doc));
     updateActionButtons(doc, getState());
+    applyKindFieldVisibility(doc, getState().searchKind);
     return;
   }
   doc.documentElement.setAttribute("data-oa-wired", "1");
@@ -909,6 +1032,15 @@ function wireActions(win: Window): void {
     `${config.addonRef}-oa-doi`,
     `${config.addonRef}-oa-isbn`,
     `${config.addonRef}-oa-authors`,
+    `${config.addonRef}-oa-year`,
+    `${config.addonRef}-oa-language`,
+    `${config.addonRef}-oa-translator`,
+    `${config.addonRef}-oa-publication`,
+    `${config.addonRef}-oa-editors`,
+    `${config.addonRef}-oa-book-title`,
+    `${config.addonRef}-oa-publisher`,
+    `${config.addonRef}-oa-thesis-type`,
+    `${config.addonRef}-oa-university`,
   ]) {
     doc.getElementById(id)?.addEventListener("keydown", (ev) => {
       if ((ev as KeyboardEvent).key === "Enter") {
@@ -917,6 +1049,20 @@ function wireActions(win: Window): void {
       }
     });
   }
+
+  doc
+    .getElementById(`${config.addonRef}-oa-kind`)
+    ?.addEventListener("change", () => {
+      const raw = (
+        doc.getElementById(`${config.addonRef}-oa-kind`) as HTMLSelectElement
+      )?.value;
+      const kind: OaSearchKind = isOaSearchKind(raw || "")
+        ? (raw as OaSearchKind)
+        : "journalArticle";
+      state.searchKind = kind;
+      applyKindFieldVisibility(doc, kind);
+    });
+  applyKindFieldVisibility(doc, state.searchKind);
 
   const pdfOnly = doc.getElementById(
     `${config.addonRef}-oa-pdf-only`,
@@ -1091,7 +1237,7 @@ export async function openOaSearchWindow(): Promise<void> {
 
   const url = `chrome://${config.addonRef}/content/oa-search.xhtml`;
   const features =
-    "chrome,centerscreen,resizable,dialog=no,width=1020,height=740";
+    "chrome,centerscreen,resizable,dialog=no,width=1080,height=860";
   const win =
     (mainWin.openDialog(url, WINDOW_ID, features) as Window | null) ||
     (mainWin.open(url, WINDOW_ID, features) as Window | null);

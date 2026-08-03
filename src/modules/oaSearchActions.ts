@@ -1,4 +1,4 @@
-// @ajan: cursor · @etiket: katman-2, oa-search, actions, multi-job-progress
+// @ajan: cursor · @etiket: katman-2, oa-search, actions, search-kind
 /**
  * OA Search popup actions: attach hit PDF, create item from hit, Related Items.
  * Pure field mapping is unit-tested; Zotero I/O stays async.
@@ -88,14 +88,18 @@ export function parseAuthorsField(
 }
 
 /** Pure: map OA hit → Zotero field bag (no I/O). */
-export function createItemFieldsFromHit(hit: OaPdfHit): ItemFieldsFromHit {
+export function createItemFieldsFromHit(
+  hit: OaPdfHit,
+  opts: { preferredItemType?: string } = {},
+): ItemFieldsFromHit {
   const title = String(hit.title || "").trim() || "Untitled";
   const DOI = String(hit.doi || "").trim();
   const ISBN = hitIsbn(hit);
   const date = String(hit.year || "").trim();
   const url = String(hit.landingUrl || hit.pdfUrl || "").trim();
+  const preferred = String(opts.preferredItemType || "").trim();
   return {
-    itemType: guessItemTypeFromHit(hit),
+    itemType: preferred || guessItemTypeFromHit(hit),
     title,
     DOI,
     ISBN,
@@ -158,9 +162,22 @@ export async function attachHitToItem(
 export async function createItemFromHit(
   hit: OaPdfHit,
   libraryID: number,
-  opts: { attachPdf?: boolean } = {},
+  opts: {
+    attachPdf?: boolean;
+    preferredItemType?: string;
+    bookTitle?: string;
+    publication?: string;
+    publisher?: string;
+    university?: string;
+    language?: string;
+    thesisType?: string;
+    editors?: string;
+    translator?: string;
+  } = {},
 ): Promise<Zotero.Item> {
-  const fields = createItemFieldsFromHit(hit);
+  const fields = createItemFieldsFromHit(hit, {
+    preferredItemType: opts.preferredItemType,
+  });
   const item = new Zotero.Item(fields.itemType as any);
   item.libraryID = libraryID;
   safeSetField(item, "title", fields.title);
@@ -168,8 +185,25 @@ export async function createItemFromHit(
   safeSetField(item, "ISBN", fields.ISBN);
   safeSetField(item, "date", fields.date);
   safeSetField(item, "url", fields.url);
-  if (fields.creators.length) {
-    item.setCreators(fields.creators as any);
+  safeSetField(item, "bookTitle", String(opts.bookTitle || "").trim());
+  safeSetField(item, "publicationTitle", String(opts.publication || "").trim());
+  safeSetField(item, "publisher", String(opts.publisher || "").trim());
+  safeSetField(item, "university", String(opts.university || "").trim());
+  safeSetField(item, "language", String(opts.language || "").trim());
+  safeSetField(item, "thesisType", String(opts.thesisType || "").trim());
+  const creators = [...fields.creators];
+  if (opts.editors?.trim()) {
+    for (const c of parseAuthorsField(opts.editors)) {
+      creators.push({ ...c, creatorType: "editor" });
+    }
+  }
+  if (opts.translator?.trim()) {
+    for (const c of parseAuthorsField(opts.translator)) {
+      creators.push({ ...c, creatorType: "translator" });
+    }
+  }
+  if (creators.length) {
+    item.setCreators(creators as any);
   }
   item.addTag("#oa-search");
   await item.saveTx();

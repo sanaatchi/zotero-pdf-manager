@@ -165,6 +165,8 @@ test("OA search surface: xhtml + menubar + locales + menu wiring", () => {
   assert.match(xhtml, /zpdfmanager-oa-pdf-only/);
   assert.match(xhtml, /zpdfmanager-oa-sources/);
   assert.match(xhtml, /zpdfmanager-oa-sources-all/);
+  assert.match(xhtml, /zpdfmanager-oa-kind/);
+  assert.match(xhtml, /data-field="university"/);
 
   const win = fs.readFileSync(
     path.join(root, "src/modules/oaSearchWindow.ts"),
