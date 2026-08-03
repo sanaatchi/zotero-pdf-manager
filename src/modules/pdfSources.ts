@@ -1,4 +1,4 @@
-// @ajan: cursor · @etiket: katman-2, pdf-sources, validate-tag-only, reuse-download
+// @ajan: cursor · @etiket: katman-2, pdf-sources, validate-tag-only, safe-overwrite
 import { getString } from "../utils/locale";
 import { getPref } from "../utils/prefs";
 import {
@@ -696,6 +696,34 @@ export async function cleanupRejectedAttachment(opts: {
 }
 
 /**
+ * Find an existing PDF attachment on `item` that already links to `filePath`.
+ * Used so retries overwrite bytes in place instead of erase+recreate.
+ */
+async function findParentLinkedPdfByPath(
+  item: Zotero.Item,
+  filePath: string,
+): Promise<Zotero.Item | null> {
+  const want = PathUtils.normalize(filePath);
+  for (const attachmentID of item.getAttachments()) {
+    const att = Zotero.Items.get(attachmentID) as Zotero.Item | undefined;
+    if (!att) continue;
+    try {
+      if (!(att as any).isPDFAttachment?.() && !(att as any).isAttachment?.()) {
+        continue;
+      }
+      const p =
+        (await (att as any).getFilePathAsync?.()) ||
+        (att as any).getFilePath?.() ||
+        "";
+      if (p && PathUtils.normalize(p) === want) return att;
+    } catch {
+      /* ignore */
+    }
+  }
+  return null;
+}
+
+/**
  * Download bytes from `url`, verify they are a real PDF, then either:
  * - **P2-4 downloads mode:** write under `{watchRoot}/downloads/`, link/import,
  *   register in folder index; or
@@ -767,20 +795,19 @@ export async function downloadAndAttach(
       const partial = oaPartialTempPath(persistedPath);
       try {
         await IOUtils.write(partial, bytes);
-        // Primary path is reserved for this item — overwrite prior copy so
-        // downloads/ does not accumulate stem-<timestamp>.pdf retries.
+        // Never unlink the primary path before the new bytes are in place —
+        // linked attachments point at that path; remove-then-move made the
+        // PDF "disappear" from Zotero mid-download / on retry.
         if (await IOUtils.exists(persistedPath)) {
+          await IOUtils.write(persistedPath, bytes);
           try {
-            await IOUtils.remove(persistedPath);
-          } catch (e) {
-            ztoolkit.log(
-              "OA download overwrite remove failed",
-              persistedPath,
-              e,
-            );
+            await IOUtils.remove(partial);
+          } catch {
+            /* best-effort */
           }
+        } else {
+          await IOUtils.move(partial, persistedPath, { noOverwrite: true });
         }
-        await IOUtils.move(partial, persistedPath, { noOverwrite: true });
         finalCreatedByThisRun = true;
       } catch (e) {
         try {
@@ -792,15 +819,24 @@ export async function downloadAndAttach(
       } finally {
         releaseDownloadPathReservation(persistedPath);
       }
-      const asLink = getPref("pdf.localAsLink") !== false;
-      const method = asLink ? "linkFromFile" : "importFromFile";
-      attachment = await (Zotero.Attachments as any)[method]({
-        file: persistedPath,
-        libraryID: item.libraryID,
-        parentItemID: item.id,
-        title: getString("pdf-attachment-title"),
-        contentType: "application/pdf",
-      });
+      // Reuse an existing link to the same path (retry / same-item download).
+      const existingLinked = await findParentLinkedPdfByPath(
+        item,
+        persistedPath,
+      );
+      if (existingLinked) {
+        attachment = existingLinked;
+      } else {
+        const asLink = getPref("pdf.localAsLink") !== false;
+        const method = asLink ? "linkFromFile" : "importFromFile";
+        attachment = await (Zotero.Attachments as any)[method]({
+          file: persistedPath,
+          libraryID: item.libraryID,
+          parentItemID: item.id,
+          title: getString("pdf-attachment-title"),
+          contentType: "application/pdf",
+        });
+      }
       if (attachment) {
         await registerDownloadedFile(persistedPath);
       }

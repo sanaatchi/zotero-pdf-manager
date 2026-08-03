@@ -1,4 +1,4 @@
-// @ajan: cursor · @etiket: katman-2, federated-search, apply, oa-search
+// @ajan: cursor · @etiket: katman-2, federated-search, apply, validate-false
 /**
  * Legacy federated helpers (pickTop / HTML report).
  * Attanger "Search all PDF sources…" now opens the OA Search popup
@@ -121,9 +121,12 @@ async function attachHit(item: Zotero.Item, hit: OaPdfHit): Promise<boolean> {
       label: String(hit.title || item.getDisplayTitle() || "").trim(),
     });
     if (!bytes) return false;
+    // Explicit user pick from federated/OA list — do not run content
+    // validation (mismatch used to eraseTx; keep attach like OA Search).
     const att = await downloadAndAttach(item, url, {
       sourceId,
       bytes,
+      validate: false,
     });
     return !!att;
   } catch (e) {

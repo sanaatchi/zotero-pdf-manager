@@ -17,6 +17,12 @@ test("validation verdicts: match clears tags; mismatch/unverifiable keep + tag",
   assert.match(source, /keeping attachment \(#pdf-mismatch\)/);
   assert.match(source, /renameRejectedPdfOnDisk/);
   assert.match(source, /Never IOUtils\.remove the PDF/);
+  // Linked path must not be unlinked before overwrite (attachment "vanishes").
+  assert.doesNotMatch(
+    source,
+    /if \(await IOUtils\.exists\(persistedPath\)\) \{[\s\S]*?await IOUtils\.remove\(persistedPath\)/,
+  );
+  assert.match(source, /findParentLinkedPdfByPath/);
   assert.match(
     source,
     /unverifiable[\s\S]*?keeping attachment \(#pdf-review\)/,

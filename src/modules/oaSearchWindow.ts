@@ -1,13 +1,15 @@
-// @ajan: cursor · @etiket: katman-2, oa-search, window, search-kind
+// @ajan: cursor · @etiket: katman-2, oa-search, window, field-active
 /**
  * Independent OA Search popup (openDialog) — federated results + attach actions.
- * UX: kind-specific criteria forms, per-search source picker, PDF-only filter,
+ * UX: kind-specific criteria forms, per-field active toggles, optional
+ * field-by-field fan-out, per-search source picker, PDF-only filter,
  * keyboard nav, double-click apply, source/error summary.
  * Search runs only on Ara (or Enter in query fields) — never auto on open.
  * Ara never stays disabled during long bridge calls (generation supersede).
  * Concurrent downloads: status shows one segment per progressJob (not a single %).
  */
 import { config } from "../../package.json";
+import { getPref, setPref } from "../utils/prefs";
 import { getString } from "../utils/locale";
 import {
   addJobProgressListener,
@@ -21,6 +23,7 @@ import {
   saveOaSearchSourceSelection,
   searchAllOaSourcesByQuery,
   type OaPdfHit,
+  type OaPdfSearchResponse,
 } from "./oaPdfBridge";
 import {
   attachHitToItem,
@@ -28,10 +31,16 @@ import {
   createItemFromHit,
 } from "./oaSearchActions";
 import {
+  applyActiveFields,
+  buildFieldByFieldQueries,
   criteriaHasQuery,
+  isOaCriteriaFieldId,
   isOaSearchKind,
   KIND_FIELDS,
   kindFromZoteroItemType,
+  parseActiveFieldsPref,
+  serializeActiveFieldsPref,
+  type OaCriteriaFieldId,
   type OaSearchCriteria,
   type OaSearchKind,
 } from "./oaSearchCriteria";
@@ -73,6 +82,11 @@ const LABEL_FALLBACK: Record<string, string> = {
   "oa-search-field-publisher": "Yayıncı",
   "oa-search-field-thesis-type": "Tez türü",
   "oa-search-field-university": "Üniversite",
+  "oa-search-field-by-field": "Tek tek alan ara",
+  "oa-search-field-by-field-hint":
+    "Açıkken her aktif alan ayrı sorgu olur; kapalıyken tek birleşik arama",
+  "oa-search-need-primary":
+    "Yıl/dil tek başına yetmez — başlık, yazar, DOI veya dergi gibi bir alan açın",
   "oa-search-hint-no-target":
     "Seçili öğe yok — Seçiliye ekle / Related için Zotero’da bir kayıt seçin",
   "oa-search-hint-no-pdf": "PDF’si olan bir sonuç satırı seçin",
@@ -699,6 +713,146 @@ function applyKindFieldVisibility(doc: Document, kind: OaSearchKind): void {
     `${config.addonRef}-oa-kind`,
   ) as HTMLSelectElement | null;
   if (kindSel && kindSel.value !== kind) kindSel.value = kind;
+  syncFieldActiveVisual(doc);
+}
+
+function readActiveFields(doc: Document): Set<OaCriteriaFieldId> {
+  const out = new Set<OaCriteriaFieldId>();
+  const boxes = doc.querySelectorAll(
+    `input.oa-field-active[data-field]`,
+  ) as NodeListOf<HTMLInputElement>;
+  for (const box of Array.from(boxes)) {
+    const id = box.getAttribute("data-field") || "";
+    if (box.checked && isOaCriteriaFieldId(id)) out.add(id);
+  }
+  return out;
+}
+
+function writeActiveFields(doc: Document, active: Set<OaCriteriaFieldId>): void {
+  const boxes = doc.querySelectorAll(
+    `input.oa-field-active[data-field]`,
+  ) as NodeListOf<HTMLInputElement>;
+  for (const box of Array.from(boxes)) {
+    const id = box.getAttribute("data-field") || "";
+    if (!isOaCriteriaFieldId(id)) continue;
+    box.checked = active.has(id);
+  }
+  syncFieldActiveVisual(doc);
+}
+
+function syncFieldActiveVisual(doc: Document): void {
+  const labels = doc.querySelectorAll(".oa-field[data-field]");
+  for (const node of Array.from(labels)) {
+    const field = (node as HTMLElement).getAttribute("data-field") || "";
+    const box = (node as HTMLElement).querySelector(
+      `input.oa-field-active[data-field="${field}"]`,
+    ) as HTMLInputElement | null;
+    if (box && !box.checked) {
+      (node as HTMLElement).classList.add("inactive-field");
+    } else {
+      (node as HTMLElement).classList.remove("inactive-field");
+    }
+  }
+}
+
+function persistActiveFields(doc: Document): Set<OaCriteriaFieldId> {
+  const active = readActiveFields(doc);
+  try {
+    setPref("pdf.oaSearchFieldActive", serializeActiveFieldsPref(active));
+  } catch {
+    /* ignore */
+  }
+  return active;
+}
+
+function loadActiveFieldsIntoDoc(doc: Document): void {
+  let raw = "";
+  try {
+    raw = String(getPref("pdf.oaSearchFieldActive") || "");
+  } catch {
+    raw = "";
+  }
+  writeActiveFields(doc, parseActiveFieldsPref(raw));
+}
+
+function readFieldByField(doc: Document): boolean {
+  const box = doc.getElementById(
+    `${config.addonRef}-oa-field-by-field`,
+  ) as HTMLInputElement | null;
+  return Boolean(box?.checked);
+}
+
+function loadFieldByFieldIntoDoc(doc: Document): void {
+  const box = doc.getElementById(
+    `${config.addonRef}-oa-field-by-field`,
+  ) as HTMLInputElement | null;
+  if (!box) return;
+  try {
+    box.checked = Boolean(getPref("pdf.oaSearchFieldByField"));
+  } catch {
+    box.checked = false;
+  }
+}
+
+function persistFieldByField(doc: Document): boolean {
+  const on = readFieldByField(doc);
+  try {
+    setPref("pdf.oaSearchFieldByField", on);
+  } catch {
+    /* ignore */
+  }
+  return on;
+}
+
+function criteriaToBridgeQuery(c: OaSearchCriteria) {
+  return {
+    text: c.text,
+    doi: c.doi,
+    isbn: c.isbn,
+    authors: c.authors,
+    kind: c.kind,
+    year: c.year,
+    language: c.language,
+    translator: c.translator,
+    publication: c.publication,
+    editors: c.editors,
+    bookTitle: c.bookTitle,
+    publisher: c.publisher,
+    thesisType: c.thesisType,
+    university: c.university,
+  };
+}
+
+function mergeFederatedBodies(
+  bodies: OaPdfSearchResponse[],
+  fallbackSources: string[],
+): OaPdfSearchResponse {
+  const seen = new Set<string>();
+  const hits: OaPdfHit[] = [];
+  const errors: Record<string, string> = {};
+  const sourcesQueried = new Set<string>();
+  for (const body of bodies) {
+    for (const sid of body.sourcesQueried || []) sourcesQueried.add(sid);
+    for (const [k, v] of Object.entries(body.errors || {})) {
+      if (v) errors[k] = String(v);
+    }
+    for (const hit of body.hits || []) {
+      const key =
+        String(hit.pdfUrl || "").trim() ||
+        `${hit.source}|${hit.doi || ""}|${hit.title || ""}`;
+      if (!key || seen.has(key)) continue;
+      seen.add(key);
+      hits.push(hit);
+    }
+  }
+  return {
+    ok: true,
+    hits,
+    sourcesQueried: sourcesQueried.size
+      ? [...sourcesQueried]
+      : fallbackSources.slice(),
+    errors,
+  };
 }
 
 function readQuery(doc: Document): OaSearchCriteria {
@@ -866,17 +1020,30 @@ async function runSearch(win: Window): Promise<void> {
       return;
     }
 
-    const query = readQuery(doc);
-    state.searchKind = query.kind;
-    if (!criteriaHasQuery(query)) {
+    const queryRaw = readQuery(doc);
+    const active = persistActiveFields(doc);
+    const fieldByField = persistFieldByField(doc);
+    state.searchKind = queryRaw.kind;
+    if (!criteriaHasQuery(queryRaw, active)) {
       setStatus(doc, uiString("oa-search-need-query"), true);
+      return;
+    }
+
+    const query = applyActiveFields(queryRaw, active);
+    const fanOut = fieldByField
+      ? buildFieldByFieldQueries(queryRaw, active)
+      : [query];
+    if (!fanOut.length) {
+      setStatus(doc, uiString("oa-search-need-primary"), true);
       return;
     }
 
     setSearchBusy(doc, true);
     setStatus(
       doc,
-      `${uiString("oa-search-searching")} (${sources.join(", ")})`,
+      `${uiString("oa-search-searching")} (${sources.join(", ")}${
+        fieldByField ? `, ×${fanOut.length}` : ""
+      })`,
     );
     state.rawHits = [];
     state.hits = [];
@@ -885,30 +1052,19 @@ async function runSearch(win: Window): Promise<void> {
     renderHits(doc, state);
 
     try {
-      const body = await searchAllOaSourcesByQuery(
-        {
-          text: query.text,
-          doi: query.doi,
-          isbn: query.isbn,
-          authors: query.authors,
-          kind: query.kind,
-          year: query.year,
-          language: query.language,
-          translator: query.translator,
-          publication: query.publication,
-          editors: query.editors,
-          bookTitle: query.bookTitle,
-          publisher: query.publisher,
-          thesisType: query.thesisType,
-          university: query.university,
-        },
-        {
-          profile: "full",
-          totalLimit: 40,
-          sources,
-        },
-      );
+      const bodies: OaPdfSearchResponse[] = [];
+      for (const part of fanOut) {
+        if (gen !== state.searchGeneration) return;
+        bodies.push(
+          await searchAllOaSourcesByQuery(criteriaToBridgeQuery(part), {
+            profile: "full",
+            totalLimit: 40,
+            sources,
+          }),
+        );
+      }
       if (gen !== state.searchGeneration) return;
+      const body = mergeFederatedBodies(bodies, sources);
       state.rawHits = Array.isArray(body.hits) ? body.hits : [];
       state.meta = {
         sourcesQueried: body.sourcesQueried || sources,
@@ -1063,6 +1219,33 @@ function wireActions(win: Window): void {
       applyKindFieldVisibility(doc, kind);
     });
   applyKindFieldVisibility(doc, state.searchKind);
+  loadActiveFieldsIntoDoc(doc);
+  loadFieldByFieldIntoDoc(doc);
+
+  const fieldByFieldLabel = doc.getElementById(
+    `${config.addonRef}-oa-field-by-field-label`,
+  );
+  if (fieldByFieldLabel) {
+    const tip = uiString("oa-search-field-by-field");
+    const span = fieldByFieldLabel.childNodes[fieldByFieldLabel.childNodes.length - 1];
+    // Keep checkbox; refresh trailing label text via dataset.
+    fieldByFieldLabel.setAttribute("title", uiString("oa-search-field-by-field-hint"));
+    const textNode = Array.from(fieldByFieldLabel.childNodes).find(
+      (n) => n.nodeType === 3 && String(n.textContent || "").trim(),
+    );
+    if (textNode) textNode.textContent = tip;
+  }
+  doc
+    .getElementById(`${config.addonRef}-oa-field-by-field`)
+    ?.addEventListener("change", () => {
+      persistFieldByField(doc);
+    });
+  doc.querySelectorAll("input.oa-field-active[data-field]").forEach((el) => {
+    el.addEventListener("change", () => {
+      persistActiveFields(doc);
+      syncFieldActiveVisual(doc);
+    });
+  });
 
   const pdfOnly = doc.getElementById(
     `${config.addonRef}-oa-pdf-only`,

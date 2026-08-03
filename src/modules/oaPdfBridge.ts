@@ -89,7 +89,7 @@ export function resolveOaBridgeUrl(): string {
   return normalizeOaBridgeUrl(String(getPref("pdf.oaBridgeUrl") || ""));
 }
 
-function safeItemField(item: Zotero.Item, field: string): string {
+export function safeItemField(item: Zotero.Item, field: string): string {
   try {
     return String(item.getField(field as any) || "").trim();
   } catch {
@@ -97,7 +97,7 @@ function safeItemField(item: Zotero.Item, field: string): string {
   }
 }
 
-function yearFromItemDate(raw: string): string {
+export function yearFromItemDate(raw: string): string {
   const s = String(raw || "").trim();
   const m = s.match(/\b(1[4-9]\d{2}|20\d{2})\b/);
   return m ? m[1]! : "";
@@ -304,6 +304,10 @@ export const FEDERATED_SOURCE_PREF: Record<string, string> = {
   yoktez: "pdf.yoktezEnabled",
   scihub: "pdf.scihubEnabled",
   libgen: "pdf.libgenEnabled",
+  zenodo: "pdf.zenodoEnabled",
+  archive: "pdf.archiveEnabled",
+  openaire: "pdf.openaireEnabled",
+  core: "pdf.coreEnabled",
 };
 
 /** Display labels for OA Search source picker (stable ids). */
@@ -316,6 +320,10 @@ export const FEDERATED_SOURCE_LABEL: Record<string, string> = {
   yoktez: "YÖK Tez",
   scihub: "Sci-Hub",
   libgen: "LibGen",
+  zenodo: "Zenodo",
+  archive: "Internet Archive",
+  openaire: "OpenAIRE",
+  core: "CORE",
 };
 
 export function allFederatedSourceIds(): string[] {

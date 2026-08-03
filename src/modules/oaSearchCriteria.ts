@@ -1,7 +1,8 @@
-// @ajan: cursor · @etiket: katman-2, oa-search, search-kind, criteria
+// @ajan: cursor · @etiket: katman-2, oa-search, search-kind, field-active
 /**
  * OA Search kind → field schema (Zotero itemType-aligned).
- * UI shows/hides inputs; bridge receives structured criteria for ranking.
+ * UI shows/hides inputs; per-field active checkboxes; optional field-by-field
+ * fan-out. Bridge receives structured criteria for ranking / discovery.
  */
 
 export type OaSearchKind = "book" | "journalArticle" | "bookSection" | "thesis";
@@ -69,6 +70,24 @@ export const KIND_FIELDS: Record<OaSearchKind, OaCriteriaFieldId[]> = {
   thesis: ["title", "authors", "thesisType", "university", "year", "language"],
 };
 
+/**
+ * Fields that can drive a standalone remote query in field-by-field mode.
+ * Year/language alone are too broad — they stay soft filters on other queries.
+ */
+export const PRIMARY_SEARCH_FIELDS: ReadonlySet<OaCriteriaFieldId> = new Set([
+  "title",
+  "authors",
+  "doi",
+  "isbn",
+  "publication",
+  "editors",
+  "bookTitle",
+  "publisher",
+  "translator",
+  "thesisType",
+  "university",
+]);
+
 export const FIELD_LABEL_KEY: Record<OaCriteriaFieldId, string> = {
   title: "oa-search-field-title",
   authors: "oa-search-field-authors",
@@ -103,6 +122,10 @@ export const FIELD_INPUT_ID: Record<OaCriteriaFieldId, string> = {
 
 export function isOaSearchKind(value: string): value is OaSearchKind {
   return (OA_SEARCH_KINDS as string[]).includes(value);
+}
+
+export function isOaCriteriaFieldId(value: string): value is OaCriteriaFieldId {
+  return value in FIELD_INPUT_ID;
 }
 
 /** Map Zotero itemType → OA Search kind. */
@@ -146,23 +169,211 @@ export function emptyCriteria(
   };
 }
 
-/** True when at least one searchable criterion is filled. */
-export function criteriaHasQuery(c: OaSearchCriteria): boolean {
+function fieldValue(c: OaSearchCriteria, id: OaCriteriaFieldId): string {
+  switch (id) {
+    case "title":
+      return c.text.trim();
+    case "authors":
+      return c.authors.trim();
+    case "doi":
+      return c.doi.trim();
+    case "isbn":
+      return c.isbn.trim();
+    case "year":
+      return c.year.trim();
+    case "language":
+      return c.language.trim();
+    case "translator":
+      return c.translator.trim();
+    case "publication":
+      return c.publication.trim();
+    case "editors":
+      return c.editors.trim();
+    case "bookTitle":
+      return c.bookTitle.trim();
+    case "publisher":
+      return c.publisher.trim();
+    case "thesisType":
+      return c.thesisType.trim();
+    case "university":
+      return c.university.trim();
+    default:
+      return "";
+  }
+}
+
+/** True when at least one active searchable criterion is filled. */
+export function criteriaHasQuery(
+  c: OaSearchCriteria,
+  active?: ReadonlySet<OaCriteriaFieldId> | null,
+): boolean {
   const fields = KIND_FIELDS[c.kind] || KIND_FIELDS.journalArticle;
   for (const id of fields) {
-    if (id === "title" && c.text.trim()) return true;
-    if (id === "authors" && c.authors.trim()) return true;
-    if (id === "doi" && c.doi.trim()) return true;
-    if (id === "isbn" && c.isbn.trim()) return true;
-    if (id === "year" && c.year.trim()) return true;
-    if (id === "language" && c.language.trim()) return true;
-    if (id === "translator" && c.translator.trim()) return true;
-    if (id === "publication" && c.publication.trim()) return true;
-    if (id === "editors" && c.editors.trim()) return true;
-    if (id === "bookTitle" && c.bookTitle.trim()) return true;
-    if (id === "publisher" && c.publisher.trim()) return true;
-    if (id === "thesisType" && c.thesisType.trim()) return true;
-    if (id === "university" && c.university.trim()) return true;
+    if (active && !active.has(id)) continue;
+    if (fieldValue(c, id)) return true;
   }
   return false;
+}
+
+/**
+ * Zero out inactive fields so the bridge never soft-filters on them.
+ * Soft filters (year/language) stay if still active.
+ */
+export function applyActiveFields(
+  c: OaSearchCriteria,
+  active: ReadonlySet<OaCriteriaFieldId>,
+): OaSearchCriteria {
+  const out = { ...c };
+  const all: OaCriteriaFieldId[] = [
+    "title",
+    "authors",
+    "doi",
+    "isbn",
+    "year",
+    "language",
+    "translator",
+    "publication",
+    "editors",
+    "bookTitle",
+    "publisher",
+    "thesisType",
+    "university",
+  ];
+  for (const id of all) {
+    if (active.has(id)) continue;
+    switch (id) {
+      case "title":
+        out.text = "";
+        break;
+      case "authors":
+        out.authors = "";
+        break;
+      case "doi":
+        out.doi = "";
+        break;
+      case "isbn":
+        out.isbn = "";
+        break;
+      case "year":
+        out.year = "";
+        break;
+      case "language":
+        out.language = "";
+        break;
+      case "translator":
+        out.translator = "";
+        break;
+      case "publication":
+        out.publication = "";
+        break;
+      case "editors":
+        out.editors = "";
+        break;
+      case "bookTitle":
+        out.bookTitle = "";
+        break;
+      case "publisher":
+        out.publisher = "";
+        break;
+      case "thesisType":
+        out.thesisType = "";
+        break;
+      case "university":
+        out.university = "";
+        break;
+    }
+  }
+  return out;
+}
+
+/**
+ * Build focused queries for field-by-field fan-out.
+ * Soft filters year/language are attached to every primary query when active.
+ */
+export function buildFieldByFieldQueries(
+  c: OaSearchCriteria,
+  active: ReadonlySet<OaCriteriaFieldId>,
+): OaSearchCriteria[] {
+  const base = applyActiveFields(c, active);
+  const softYear = active.has("year") ? base.year : "";
+  const softLang = active.has("language") ? base.language : "";
+  const out: OaSearchCriteria[] = [];
+  const fields = KIND_FIELDS[c.kind] || KIND_FIELDS.journalArticle;
+
+  for (const id of fields) {
+    if (!active.has(id) || !PRIMARY_SEARCH_FIELDS.has(id)) continue;
+    const val = fieldValue(base, id);
+    if (!val) continue;
+    const q = emptyCriteria(c.kind);
+    q.year = softYear;
+    q.language = softLang;
+    switch (id) {
+      case "title":
+        q.text = val;
+        break;
+      case "authors":
+        q.authors = val;
+        q.text = val; // adapters that only accept free-text
+        break;
+      case "doi":
+        q.doi = val;
+        break;
+      case "isbn":
+        q.isbn = val;
+        break;
+      case "publication":
+        q.publication = val;
+        q.text = val;
+        break;
+      case "editors":
+        q.editors = val;
+        q.text = val;
+        break;
+      case "bookTitle":
+        q.bookTitle = val;
+        q.text = val;
+        break;
+      case "publisher":
+        q.publisher = val;
+        q.text = val;
+        break;
+      case "translator":
+        q.translator = val;
+        q.text = val;
+        break;
+      case "thesisType":
+        q.thesisType = val;
+        q.text = val;
+        break;
+      case "university":
+        q.university = val;
+        q.text = val;
+        break;
+      default:
+        break;
+    }
+    if (criteriaHasQuery(q)) out.push(q);
+  }
+  return out;
+}
+
+export function parseActiveFieldsPref(raw: string): Set<OaCriteriaFieldId> {
+  const known = new Set(Object.keys(FIELD_INPUT_ID) as OaCriteriaFieldId[]);
+  const out = new Set<OaCriteriaFieldId>();
+  const s = String(raw || "").trim();
+  if (!s) {
+    for (const id of known) out.add(id);
+    return out;
+  }
+  for (const part of s.split(/[,;\s]+/)) {
+    const id = part.trim();
+    if (isOaCriteriaFieldId(id)) out.add(id);
+  }
+  return out.size ? out : new Set(known);
+}
+
+export function serializeActiveFieldsPref(
+  active: ReadonlySet<OaCriteriaFieldId>,
+): string {
+  return [...active].sort().join(",");
 }

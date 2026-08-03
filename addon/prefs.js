@@ -115,11 +115,22 @@ pref(
 );
 pref("extensions.zotero.__addonRef__.pdf.yoktezEnabled", true);
 pref("extensions.zotero.__addonRef__.pdf.proquestEnabled", false);
+// zenodo/archive/openaire: open APIs, no key. core: needs a free API key
+// (core.ac.uk/services/api) set as env OA_PDF_CORE_API_KEY — off by
+// default until configured, else every federated search wastes a call.
+pref("extensions.zotero.__addonRef__.pdf.zenodoEnabled", true);
+pref("extensions.zotero.__addonRef__.pdf.archiveEnabled", true);
+pref("extensions.zotero.__addonRef__.pdf.openaireEnabled", true);
+pref("extensions.zotero.__addonRef__.pdf.coreEnabled", false);
 pref("extensions.zotero.__addonRef__.pdf.proxyEnabled", false);
 pref("extensions.zotero.__addonRef__.pdf.proxyURL", "");
 pref("extensions.zotero.__addonRef__.pdf.oaBridgeUrl", "http://127.0.0.1:8756");
 // OA Search popup: last selected source ids (comma-separated). Empty → prefs-enabled.
 pref("extensions.zotero.__addonRef__.pdf.oaSearchSources", "");
+// OA Search: comma-separated active criteria field ids (empty = all on).
+pref("extensions.zotero.__addonRef__.pdf.oaSearchFieldActive", "");
+// OA Search: fan-out one remote query per active primary field.
+pref("extensions.zotero.__addonRef__.pdf.oaSearchFieldByField", false);
 // Optional Ollama content check via bridge (/pdf-validate-content).
 pref("extensions.zotero.__addonRef__.pdf.validateContentLlm", true);
 pref("extensions.zotero.__addonRef__.pdf.metadataOnlySourcesMigratedV1", false);

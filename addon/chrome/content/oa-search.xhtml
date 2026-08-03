@@ -1,4 +1,4 @@
-<!-- @ajan: cursor · @etiket: katman-2, oa-search, search-kind -->
+<!-- @ajan: cursor · @etiket: katman-2, oa-search, search-kind, field-active -->
 <html xmlns="http://www.w3.org/1999/xhtml">
   <head>
     <meta charset="utf-8" />
@@ -88,6 +88,37 @@
 
             .kind-row select {
               min-width: 180px;
+            }
+
+            .oa-field-head {
+              display: flex;
+              align-items: center;
+              gap: 6px;
+              flex-direction: row;
+            }
+
+            .oa-field-head input[type="checkbox"] {
+              margin: 0;
+              flex: 0 0 auto;
+            }
+
+            .oa-field-by-field {
+              flex-direction: row;
+              align-items: center;
+              gap: 6px;
+              min-width: auto !important;
+              color: var(--oa-fg);
+              font-size: 12px;
+              cursor: pointer;
+              user-select: none;
+            }
+
+            .oa-field-by-field input {
+              margin: 0;
+            }
+
+            .oa-field.inactive-field input[type="text"] {
+              opacity: 0.45;
             }
 
             @media (max-width: 900px) {
@@ -312,54 +343,155 @@
             <option value="thesis">Tez</option>
           </select>
         </label>
+        <label class="oa-field-by-field" id="zpdfmanager-oa-field-by-field-label"
+          ><input
+            id="zpdfmanager-oa-field-by-field"
+            type="checkbox"
+          />Tek tek alan ara</label
+        >
       </div>
       <div class="search-grid">
         <label class="oa-field" data-field="title"
-          >Başlık <input id="zpdfmanager-oa-q" type="text" autocomplete="off"
+          ><span class="oa-field-head"
+            ><input
+              class="oa-field-active"
+              data-field="title"
+              type="checkbox"
+              checked="checked"
+            /><span class="oa-field-label">Başlık</span></span
+          >
+          <input id="zpdfmanager-oa-q" type="text" autocomplete="off"
         /></label>
         <label class="oa-field" data-field="authors"
-          >Yazarlar
+          ><span class="oa-field-head"
+            ><input
+              class="oa-field-active"
+              data-field="authors"
+              type="checkbox"
+              checked="checked"
+            /><span class="oa-field-label">Yazarlar</span></span
+          >
           <input id="zpdfmanager-oa-authors" type="text" autocomplete="off"
         /></label>
         <label class="oa-field" data-field="doi" hidden="hidden"
-          >DOI <input id="zpdfmanager-oa-doi" type="text" autocomplete="off"
+          ><span class="oa-field-head"
+            ><input
+              class="oa-field-active"
+              data-field="doi"
+              type="checkbox"
+              checked="checked"
+            /><span class="oa-field-label">DOI</span></span
+          >
+          <input id="zpdfmanager-oa-doi" type="text" autocomplete="off"
         /></label>
         <label class="oa-field" data-field="isbn" hidden="hidden"
-          >ISBN <input id="zpdfmanager-oa-isbn" type="text" autocomplete="off"
+          ><span class="oa-field-head"
+            ><input
+              class="oa-field-active"
+              data-field="isbn"
+              type="checkbox"
+              checked="checked"
+            /><span class="oa-field-label">ISBN</span></span
+          >
+          <input id="zpdfmanager-oa-isbn" type="text" autocomplete="off"
         /></label>
         <label class="oa-field" data-field="year" hidden="hidden"
-          >Yıl <input id="zpdfmanager-oa-year" type="text" autocomplete="off"
+          ><span class="oa-field-head"
+            ><input
+              class="oa-field-active"
+              data-field="year"
+              type="checkbox"
+              checked="checked"
+            /><span class="oa-field-label">Yıl</span></span
+          >
+          <input id="zpdfmanager-oa-year" type="text" autocomplete="off"
         /></label>
         <label class="oa-field" data-field="language" hidden="hidden"
-          >Dil
+          ><span class="oa-field-head"
+            ><input
+              class="oa-field-active"
+              data-field="language"
+              type="checkbox"
+              checked="checked"
+            /><span class="oa-field-label">Dil</span></span
+          >
           <input id="zpdfmanager-oa-language" type="text" autocomplete="off"
         /></label>
         <label class="oa-field" data-field="translator" hidden="hidden"
-          >Çevirmen
+          ><span class="oa-field-head"
+            ><input
+              class="oa-field-active"
+              data-field="translator"
+              type="checkbox"
+              checked="checked"
+            /><span class="oa-field-label">Çevirmen</span></span
+          >
           <input id="zpdfmanager-oa-translator" type="text" autocomplete="off"
         /></label>
         <label class="oa-field" data-field="publication" hidden="hidden"
-          >Yayın / dergi
+          ><span class="oa-field-head"
+            ><input
+              class="oa-field-active"
+              data-field="publication"
+              type="checkbox"
+              checked="checked"
+            /><span class="oa-field-label">Yayın / dergi</span></span
+          >
           <input id="zpdfmanager-oa-publication" type="text" autocomplete="off"
         /></label>
         <label class="oa-field" data-field="editors" hidden="hidden"
-          >Editörler
+          ><span class="oa-field-head"
+            ><input
+              class="oa-field-active"
+              data-field="editors"
+              type="checkbox"
+              checked="checked"
+            /><span class="oa-field-label">Editörler</span></span
+          >
           <input id="zpdfmanager-oa-editors" type="text" autocomplete="off"
         /></label>
         <label class="oa-field" data-field="bookTitle" hidden="hidden"
-          >Kitap başlığı
+          ><span class="oa-field-head"
+            ><input
+              class="oa-field-active"
+              data-field="bookTitle"
+              type="checkbox"
+              checked="checked"
+            /><span class="oa-field-label">Kitap başlığı</span></span
+          >
           <input id="zpdfmanager-oa-book-title" type="text" autocomplete="off"
         /></label>
         <label class="oa-field" data-field="publisher" hidden="hidden"
-          >Yayıncı
+          ><span class="oa-field-head"
+            ><input
+              class="oa-field-active"
+              data-field="publisher"
+              type="checkbox"
+              checked="checked"
+            /><span class="oa-field-label">Yayıncı</span></span
+          >
           <input id="zpdfmanager-oa-publisher" type="text" autocomplete="off"
         /></label>
         <label class="oa-field" data-field="thesisType" hidden="hidden"
-          >Tez türü
+          ><span class="oa-field-head"
+            ><input
+              class="oa-field-active"
+              data-field="thesisType"
+              type="checkbox"
+              checked="checked"
+            /><span class="oa-field-label">Tez türü</span></span
+          >
           <input id="zpdfmanager-oa-thesis-type" type="text" autocomplete="off"
         /></label>
         <label class="oa-field" data-field="university" hidden="hidden"
-          >Üniversite
+          ><span class="oa-field-head"
+            ><input
+              class="oa-field-active"
+              data-field="university"
+              type="checkbox"
+              checked="checked"
+            /><span class="oa-field-label">Üniversite</span></span
+          >
           <input id="zpdfmanager-oa-university" type="text" autocomplete="off"
         /></label>
         <button id="zpdfmanager-oa-search" type="button" data-label="Ara">
