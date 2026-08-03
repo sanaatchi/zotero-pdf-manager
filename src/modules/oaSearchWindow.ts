@@ -728,7 +728,10 @@ function readActiveFields(doc: Document): Set<OaCriteriaFieldId> {
   return out;
 }
 
-function writeActiveFields(doc: Document, active: Set<OaCriteriaFieldId>): void {
+function writeActiveFields(
+  doc: Document,
+  active: Set<OaCriteriaFieldId>,
+): void {
   const boxes = doc.querySelectorAll(
     `input.oa-field-active[data-field]`,
   ) as NodeListOf<HTMLInputElement>;
@@ -1227,9 +1230,13 @@ function wireActions(win: Window): void {
   );
   if (fieldByFieldLabel) {
     const tip = uiString("oa-search-field-by-field");
-    const span = fieldByFieldLabel.childNodes[fieldByFieldLabel.childNodes.length - 1];
+    const span =
+      fieldByFieldLabel.childNodes[fieldByFieldLabel.childNodes.length - 1];
     // Keep checkbox; refresh trailing label text via dataset.
-    fieldByFieldLabel.setAttribute("title", uiString("oa-search-field-by-field-hint"));
+    fieldByFieldLabel.setAttribute(
+      "title",
+      uiString("oa-search-field-by-field-hint"),
+    );
     const textNode = Array.from(fieldByFieldLabel.childNodes).find(
       (n) => n.nodeType === 3 && String(n.textContent || "").trim(),
     );
