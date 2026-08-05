@@ -1,8 +1,8 @@
-<!-- @ajan: cursor · @etiket: katman-2, eksik-raporu, oa-search, cascade-log -->
+<!-- @ajan: cursor · @etiket: katman-2, eksik-raporu, oa-search, cascade-log, no-clipboard -->
 
 # Cursor — Katman 2 Eksikler Raporu
 
-**Tarih:** 2026-08-05 · **Sürüm:** PDF Manager **v1.0.86**  
+**Tarih:** 2026-08-05 · **Sürüm:** PDF Manager **v1.0.87**  
 **Analiz:** ürün ↔ `referanslar/katman-2/` ↔ GitHub (Attanger, Zotadata, Zoplicate,
 ZotAssets, File Utility, Attachment Scanner, ozefe/yoktez).
 
@@ -14,13 +14,13 @@ ZotAssets, File Utility, Attachment Scanner, ozefe/yoktez).
 | Gerçek açık iş?           | Checklist Bölüm B (kullanıcı) + isteğe bağlı P3 |
 | Yeni zorunlu XPI portu?   | **Yok** — GitHub taraması yeni P1 üretmedi      |
 
-### Son eklenen (v1.0.86)
+### Son eklenen (v1.0.87)
 
 | Madde                                  | Not                                                                         |
 | -------------------------------------- | --------------------------------------------------------------------------- |
-| İndirme raporu → OA JSONL              | `POST /pdf-search-log`; TR makale / tez kaçırma `cache/logs/oa_pdf_search/` |
+| İndirme raporu panoya kopyalanmaz      | Sekme / toast kalır; clipboard fallback kaldırıldı                          |
+| İndirme raporu → OA JSONL (v1.0.86)    | `POST /pdf-search-log`; TR makale / tez kaçırma `cache/logs/oa_pdf_search/` |
 | OA Arama popup + menü çubuğu (v1.0.58) | `PDF Manager → OA Arama…`; Attanger federated aynı pencere                  |
-| Attach / yeni öğe / Related (v1.0.58)  | `oaSearchActions.ts` — Related = yeni künye + PDF seçiliye + bağla          |
 
 ---
 

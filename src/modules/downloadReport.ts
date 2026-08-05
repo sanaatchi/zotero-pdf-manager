@@ -1,3 +1,4 @@
+// @ajan: cursor · @etiket: katman-2, download-report, no-clipboard
 import { config } from "../../package.json";
 import { getPref } from "../utils/prefs";
 
@@ -159,8 +160,8 @@ ${rows}
 }
 
 /**
- * Open the download report as an HTML page in a Zotero tab. Falls back to
- * copying a plain-text report to the clipboard if the tab cannot be created.
+ * Open the download report as an HTML page in a Zotero tab.
+ * Never copies the report to the clipboard (user request).
  */
 export async function openDownloadReport(reports: ItemReport[]) {
   if (!reports.length || getPref("pdf.showReport") === false) return;
@@ -187,18 +188,15 @@ export async function openDownloadReport(reports: ItemReport[]) {
     browser.setAttribute("src", uri);
     container.appendChild(browser);
   } catch (e) {
-    ztoolkit.log("Report tab failed; copying to clipboard instead", e);
-    try {
-      new ztoolkit.Clipboard()
-        .addText(reportToText(reports), "text/unicode")
-        .copy();
-    } catch {
-      /* ignore clipboard failure */
-    }
+    ztoolkit.log("Report tab failed", e);
+    const failed = reports.filter((r) => r.result === "failed").length;
     new ztoolkit.ProgressWindow(config.addonName, { closeTime: 6000 })
       .createLine({
-        text: "Rapor sekmesi açılamadı; rapor panoya kopyalandı.",
-        type: "default",
+        text:
+          failed > 0
+            ? `Rapor sekmesi açılamadı (${failed} başarısız).`
+            : "Rapor sekmesi açılamadı.",
+        type: failed > 0 ? "fail" : "default",
       })
       .show();
   }

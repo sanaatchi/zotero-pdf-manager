@@ -1,4 +1,6 @@
+// @ajan: cursor · @etiket: katman-2, download-report, no-clipboard, test
 const assert = require("node:assert/strict");
+const fs = require("node:fs");
 const { test } = require("node:test");
 const path = require("node:path");
 const esbuild = require("esbuild");
@@ -89,4 +91,15 @@ test("generateHtml is valid enough to contain one <tr> per item", () => {
   const html = generateHtml(sampleReports);
   const rowCount = (html.match(/<tr data-status=/g) || []).length;
   assert.equal(rowCount, sampleReports.length);
+});
+
+test("openDownloadReport never copies the report to the clipboard", () => {
+  const source = fs.readFileSync(
+    path.join(process.cwd(), "src/modules/downloadReport.ts"),
+    "utf8",
+  );
+  assert.doesNotMatch(source, /Clipboard/);
+  assert.doesNotMatch(source, /copyStringToClipboard/);
+  assert.doesNotMatch(source, /panoya kopyalandı/);
+  assert.match(source, /openDownloadReport/);
 });
