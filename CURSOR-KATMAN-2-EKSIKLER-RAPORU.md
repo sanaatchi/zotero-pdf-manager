@@ -18,7 +18,7 @@ ZotAssets, File Utility, Attachment Scanner, ozefe/yoktez).
 
 | Madde                                         | Not                                                                                                        |
 | --------------------------------------------- | ---------------------------------------------------------------------------------------------------------- |
-| LibGen başlık ISBN/edition/``b l`` temizliği  | Adorno «Kültür endüstrisi…» attach; `cleanLibgenTitle` + ISBN bypass; köprü restart + XPI                  |
+| LibGen başlık ISBN/edition/`b l` temizliği    | Adorno «Kültür endüstrisi…» attach; `cleanLibgenTitle` + ISBN bypass; köprü restart + XPI                  |
 | 100’lük alan skoru + Şarkiyatçılık (v1.0.101) | Federated Σ(puan/100×kalite); paren sameWork; LibGen ov&lt;0.7 ISBN/same-work; OA attach ISBN              |
 | Uyumsuz PDF otomatik silme iptal (v1.0.100)   | mismatch → ek kalır + `#pdf-mismatch`; auto-detach yok; manuel audit onaylı detach                         |
 | Doğru PDF false-positive / yeniden indir (99) | Güçlü başlıkta yazarsız match; LLM ezemez; rejectedUrls                                                    |
