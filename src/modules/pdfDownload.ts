@@ -1,4 +1,4 @@
-// @ajan: cursor · @etiket: katman-2, pdfDownload, multi-job-progress, parallel
+// @ajan: cursor · @etiket: katman-2, pdfDownload, multi-job-progress, parallel, cascade-log
 import {
   ALL_SOURCES,
   downloadAndAttach,
@@ -31,6 +31,14 @@ import {
   prioritizeSourcesForItem,
 } from "./sourcePriority";
 import { mapPool } from "../utils/downloadProgress";
+import { buildOaSearchRequest, logOaCascadeMiss } from "./oaPdfBridge";
+import {
+  buildOaCascadeLogBody,
+  cascadeMissKind,
+  cascadeMissMessage,
+  fallbackCascadeMessage,
+  type CascadeMissHints,
+} from "../utils/oaCascadeMiss";
 
 export {
   resolveOaDownloadsDir,
@@ -177,9 +185,11 @@ export async function tryAutomaticOnlineSources(
   await ensureDOI(item);
   throwIfRunAborted();
 
+  const sources = orderedAutomaticSourcesForItem(item);
+  const attempts: SourceAttempt[] = [];
   const result = await cascadeAutomaticSources(
     item,
-    orderedAutomaticSourcesForItem(item) as CascadeSourceLike[],
+    sources as CascadeSourceLike[],
     {
       hasPDF: hasPDFAttachment as (item: unknown) => boolean,
       throwIfAborted: throwIfRunAborted,
@@ -189,47 +199,92 @@ export async function tryAutomaticOnlineSources(
         return next;
       },
       onSourceError: (id, e) => {
+        attempts.push({
+          source: id,
+          outcome: "error",
+          reason: e instanceof Error ? e.message : String(e),
+        });
         ztoolkit.log(`Automatic OA source ${id} failed`, e);
       },
     },
   );
+  if (!result) {
+    const seen = new Set(attempts.map((a) => a.source));
+    for (const src of sources) {
+      if (!src.isEnabled() || !src.supportsItem(item)) continue;
+      if (!seen.has(src.id)) {
+        attempts.push({ source: src.id, outcome: "no-match" });
+      }
+    }
+    queueCascadeMissLog(item, attempts, "auto-cascade");
+  }
   return result as AutomaticOnlineResult | null;
+}
+
+function cascadeHintsForItem(item: Zotero.Item): CascadeMissHints {
+  return {
+    isTurkishJournal: isScientificJournalArticle(item) && looksTurkish(item),
+    isBook: isBook(item),
+    isThesis: isThesis(item),
+  };
 }
 
 function failureHint(
   item: Zotero.Item,
   attempts: SourceAttempt[],
 ): string | undefined {
-  const tried = new Set(attempts.map((a) => a.source));
-  if (isScientificJournalArticle(item) && looksTurkish(item)) {
-    if (!tried.has("dergipark")) {
-      return (
-        "Türkçe makale: yalnızca DergiPark (+ DOI varsa Unpaywall) denenir. " +
-        "Tercihler → PDF Manager → DergiPark’ı açın."
-      );
+  return cascadeMissMessage(cascadeHintsForItem(item), attempts);
+}
+
+function queueCascadeMissLog(
+  item: Zotero.Item,
+  attempts: SourceAttempt[],
+  origin: "download-report" | "auto-cascade",
+  note?: string,
+) {
+  const hints = cascadeHintsForItem(item);
+  const message =
+    (note && String(note).trim()) ||
+    cascadeMissMessage(hints, attempts) ||
+    fallbackCascadeMessage(attempts);
+  const kind = cascadeMissKind(hints, attempts);
+  let title = "";
+  let doi = "";
+  let isbn = "";
+  let authors = "";
+  let year = "";
+  let language = "";
+  let itemType = "";
+  try {
+    const req = buildOaSearchRequest("doi", item, 1);
+    title = req.text || "";
+    doi = req.doi || "";
+    isbn = req.isbn || "";
+    authors = req.authors || "";
+    year = req.year || "";
+    language = req.language || "";
+    itemType = req.kind || "";
+  } catch {
+    try {
+      title = String(item.getDisplayTitle() || "");
+    } catch {
+      title = "";
     }
-    return tried.has("doi")
-      ? "Türkçe makale: DergiPark ve Unpaywall’da bulunamadı (başka kaynak aranmaz)."
-      : "Türkçe makale: DergiPark’ta bulunamadı (DOI yok, Unpaywall denenmedi; başka kaynak aranmaz).";
   }
-  if (isBook(item) && !tried.has("libgen")) {
-    return (
-      "Kitap: LibGen denenmedi. Tercihler → PDF Manager → LibGen’i açın " +
-      "(veya eklentiyi yeniden yükleyin; LibGen varsayılan açılır)."
-    );
-  }
-  if (isThesis(item) && !tried.has("yoktez")) {
-    return (
-      "Tez: yalnızca YÖKTez denenir. " +
-      "Tercihler → PDF Manager → YÖKTez’i açın."
-    );
-  }
-  if (isThesis(item)) {
-    const yok = attempts.find((a) => a.source === "yoktez" && a.reason);
-    if (yok?.reason) return yok.reason;
-    return "Tez: YÖKTez’te bulunamadı (başka kaynak aranmaz).";
-  }
-  return undefined;
+  const body = buildOaCascadeLogBody({
+    kind,
+    message,
+    origin,
+    title,
+    doi,
+    isbn,
+    authors,
+    year,
+    language,
+    itemType,
+    attempts,
+  });
+  void logOaCascadeMiss(body);
 }
 
 function notify(
@@ -318,18 +373,20 @@ export async function downloadPdfForSelectedItems() {
             outcome: e.reason === "review" ? "rejected" : "error",
             reason: e.reason,
           });
+          const stopNote =
+            e.reason === "review"
+              ? isBook(item)
+                ? "PDF doğrulanamadı — eklenti durdu (#pdf-review). Elle kontrol edin."
+                : "PDF review quarantine — cascade stopped"
+              : "Erase failed — cascade stopped; file kept";
+          queueCascadeMissLog(item, attempts, "download-report", stopNote);
           return {
             failed: true,
             report: {
               itemID: item.id,
               title,
               result: "failed" as const,
-              note:
-                e.reason === "review"
-                  ? isBook(item)
-                    ? "PDF doğrulanamadı — eklenti durdu (#pdf-review). Elle kontrol edin."
-                    : "PDF review quarantine — cascade stopped"
-                  : "Erase failed — cascade stopped; file kept",
+              note: stopNote,
               attempts,
             },
           };
@@ -364,6 +421,8 @@ export async function downloadPdfForSelectedItems() {
         },
       };
     }
+    const note = failureHint(item, attempts);
+    queueCascadeMissLog(item, attempts, "download-report", note);
     return {
       failed: true,
       report: {
@@ -371,7 +430,7 @@ export async function downloadPdfForSelectedItems() {
         title,
         result: "failed" as const,
         attempts,
-        note: failureHint(item, attempts),
+        note,
       },
     };
   });

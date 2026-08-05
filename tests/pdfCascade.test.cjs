@@ -1,4 +1,4 @@
-// @ajan: cursor · @etiket: katman-2, cascade, test
+// @ajan: cursor · @etiket: katman-2, cascade, test, cascade-log
 const assert = require("node:assert/strict");
 const fs = require("node:fs");
 const path = require("node:path");
@@ -121,6 +121,7 @@ test("pdfDownload wires cascadeAutomaticSources; prefs expose cancel UI", () => 
   );
   assert.match(download, /from "\.\.\/utils\/oaCascade"/);
   assert.match(download, /cascadeAutomaticSources\(/);
+  assert.match(download, /queueCascadeMissLog/);
 
   const prefs = fs.readFileSync(
     path.join(process.cwd(), "src/modules/preferenceScript.ts"),

@@ -1,4 +1,4 @@
-// @ajan: cursor · @etiket: katman-2, oa-pdf-bridge, fetch-error-detail
+// @ajan: cursor · @etiket: katman-2, oa-pdf-bridge, fetch-error-detail, cascade-log
 /**
  * Katman-2 → Kutuphane köprü (8756) `oa_pdf_search` client.
  * Online PDF discovery runs in Python; this module only POSTs queries.
@@ -292,6 +292,32 @@ export async function searchOaPdfBridgeDetailed(
     ztoolkit.log(`oa_pdf ${req.source}: soft-fail — ${body.error}`);
   }
   return body;
+}
+
+/** Fire-and-forget cascade / download-report miss → ``POST /pdf-search-log``. */
+export async function logOaCascadeMiss(
+  body: Record<string, unknown>,
+): Promise<boolean> {
+  const base = resolveOaBridgeUrl();
+  const endpoint = `${base}/pdf-search-log`;
+  try {
+    const xhr = await (Zotero.HTTP as any).request("POST", endpoint, {
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(body || {}),
+      responseType: "text",
+      timeout: 4000,
+      successCodes: false,
+    });
+    const status = Number(xhr?.status || 0);
+    return status >= 200 && status < 300;
+  } catch (e) {
+    try {
+      ztoolkit.log("oa_pdf cascade log failed", e);
+    } catch {
+      /* tests / headless */
+    }
+    return false;
+  }
 }
 
 /** Pref keys for federated download adapters (excludes local/proxy). */
