@@ -1,4 +1,4 @@
-// @ajan: cursor · @etiket: katman-2, python-pdf-sources, title-trust, book-review, thrash-guard
+// @ajan: cursor · @etiket: katman-2, python-pdf-sources, title-trust, thrash-url-skip
 /**
  * Online PDF sources backed by Kutuphane `oa_pdf_search` (8756 bridge).
  * Old in-plugin scrape/mirror logic was removed — discovery is Python-only.
@@ -142,10 +142,20 @@ export class OaPdfPythonSource implements PDFSource {
     let paywallHint = "";
     /** After content mismatch, skip sibling MD5s with the same catalog title. */
     const rejectedTitles = new Set<string>();
+    /** Never re-fetch the same URL in this tryAttach (delete→redownload loop). */
+    const rejectedUrls = new Set<string>();
     const { humanizeOaFetchError } = await import("./oaSearchActions");
     for (const hit of trusted) {
       const url = String(hit.pdfUrl || "").trim();
       if (!url) continue;
+      const urlKey = url.toLowerCase();
+      if (rejectedUrls.has(urlKey)) {
+        ztoolkit.log(
+          `oa_pdf ${this.id}: skip already-rejected URL`,
+          urlKey.slice(0, 80),
+        );
+        continue;
+      }
       const titleKey = String(hit.title || "")
         .trim()
         .toLowerCase();
@@ -171,6 +181,7 @@ export class OaPdfPythonSource implements PDFSource {
         });
         if (!bytes) {
           ztoolkit.log(`oa_pdf ${this.id} bridge fetch empty`, url);
+          rejectedUrls.add(urlKey);
           continue;
         }
         const att = await downloadAndAttach(item, url, {
@@ -178,14 +189,18 @@ export class OaPdfPythonSource implements PDFSource {
           bytes,
         });
         if (att) return att;
+        // Attached then detached by content validate → do not retry this URL.
+        rejectedUrls.add(urlKey);
       } catch (e) {
         rethrowAttachControlFlow(e);
         if (isContentMismatchError(e)) {
           mismatchRejects++;
+          rejectedUrls.add(urlKey);
           if (titleKey) rejectedTitles.add(titleKey);
           ztoolkit.log(`oa_pdf ${this.id} rejected by metadata check`, e);
           continue;
         }
+        rejectedUrls.add(urlKey);
         const hint = humanizeOaFetchError(
           e instanceof Error ? e.message : String(e),
         );

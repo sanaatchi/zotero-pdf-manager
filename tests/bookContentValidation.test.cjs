@@ -94,7 +94,7 @@ test("book validation: weak/wrong evidence is mismatch (tag, not erase)", () => 
     }),
     "match",
   );
-  // Same title evidence but missing author surname → wrong catalog / erase.
+  // Middling title without author surname → still mismatch (Devlet/Farabi).
   assert.equal(
     decideContentValidation({
       kind: "book",
@@ -108,7 +108,8 @@ test("book validation: weak/wrong evidence is mismatch (tag, not erase)", () => 
     }),
     "mismatch",
   );
-  // High combined score still cannot override missing author on books.
+  // Strong title evidence without author → keep (OCR miss / translator-first).
+  // Previously this erased correct PDFs → delete → re-download loop.
   assert.equal(
     decideContentValidation({
       kind: "book",
@@ -120,7 +121,7 @@ test("book validation: weak/wrong evidence is mismatch (tag, not erase)", () => 
       authorExpected: true,
       authorFound: false,
     }),
-    "mismatch",
+    "match",
   );
 });
 

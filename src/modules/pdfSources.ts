@@ -1,4 +1,4 @@
-// @ajan: cursor · @etiket: katman-2, pdf-sources, pdf-mismatch-detach, local-validate, post-truth, short-title-gate
+// @ajan: cursor · @etiket: katman-2, pdf-sources, false-positive-validate, thrash-url-skip
 import { getString } from "../utils/locale";
 import { getPref } from "../utils/prefs";
 import {
@@ -356,6 +356,24 @@ function firstAuthorSurname(item: Zotero.Item): string {
   }
 }
 
+/** True when any listed creator surname appears in PDF text (not only first). */
+function anyAuthorSurnameFound(item: Zotero.Item, rawText: string): boolean {
+  const text = normalizeSearchText(rawText);
+  if (!text) return false;
+  try {
+    const creators = (item.getCreators() as any[]) || [];
+    for (const c of creators.slice(0, 8)) {
+      const sn = normalizeSearchText(
+        String(c?.lastName || c?.name || ""),
+      ).trim();
+      if (sn.length > 2 && text.includes(sn)) return true;
+    }
+  } catch {
+    return false;
+  }
+  return false;
+}
+
 function itemYear(item: Zotero.Item): string {
   const date = (item.getField("date") as string) || "";
   const m = date.match(/\d{4}/);
@@ -438,9 +456,14 @@ export function decideContentValidation(input: {
   if (input.textChars < 50) return "unverifiable";
   if (input.hasIdConflict) return "mismatch";
   if (input.hasIdMatch) return "match";
-  // Books without the expected author in PDF text are almost always wrong OA.
+  // Books: missing author alone used to force mismatch and erase *correct*
+  // scans (surname OCR miss / translator listed first). Only kill when title
+  // evidence in the PDF is also weak — strong titleHit+score keeps the file.
   if (input.kind === "book" && input.authorExpected && !input.authorFound) {
-    return "mismatch";
+    const strongTitle = input.titleHit >= 0.65 && input.score >= 0.55;
+    if (!strongTitle) {
+      return "mismatch";
+    }
   }
   if (input.score >= 0.6) {
     if (input.kind !== "book" && (input.distinctiveCoverage ?? 1) < 1) {
@@ -518,19 +541,18 @@ export async function validateAttachmentContentDetailed(
 
     const structured = compareItemAgainstText(item, text);
     const surname = firstAuthorSurname(item);
-    const authorFound =
-      !!surname &&
-      surname.length > 2 &&
-      normalizeSearchText(text).includes(surname);
+    const authorFound = anyAuthorSurnameFound(item, text);
+    const titleHit = titleTokenHit(item, text);
+    const score = scoreText(item, text);
 
     let heuristic = decideContentValidation({
       kind: book ? "book" : "other",
       textChars,
-      titleHit: titleTokenHit(item, text),
-      score: scoreText(item, text),
+      titleHit,
+      score,
       hasIdConflict: hasIdentifierConflict(structured),
       hasIdMatch: hasIdentifierMatch(structured),
-      authorExpected: surname.length > 2,
+      authorExpected: surname.length > 2 || authorFound,
       authorFound,
       distinctiveCoverage: distinctiveTitleCoverage(
         String(item.getField("title") || ""),
@@ -561,11 +583,18 @@ export async function validateAttachmentContentDetailed(
           itemType: itemType(item),
           pdfText: text.slice(0, 8000),
         });
-        // Fail-closed: LLM may confirm mismatch / unblock unverifiable,
-        // but must NEVER upgrade a heuristic mismatch to match (wrong PDF).
-        if (llm?.verdict === "mismatch") {
+        // Fail-closed for upgrading mismatch→match. Do NOT let LLM erase a
+        // strong heuristic match (false "mismatch" → delete → re-download loop).
+        const strongHeuristicMatch =
+          heuristic === "match" && titleHit >= 0.65 && score >= 0.55;
+        if (llm?.verdict === "mismatch" && !strongHeuristicMatch) {
           heuristic = "mismatch";
           ztoolkit.log(`LLM content validation → mismatch`, llm.reason || "");
+        } else if (llm?.verdict === "mismatch" && strongHeuristicMatch) {
+          ztoolkit.log(
+            "LLM said mismatch but strong heuristic match — keeping PDF",
+            llm.reason || "",
+          );
         } else if (llm?.verdict === "match" && heuristic !== "mismatch") {
           heuristic = "match";
           ztoolkit.log(`LLM content validation → match`, llm.reason || "");

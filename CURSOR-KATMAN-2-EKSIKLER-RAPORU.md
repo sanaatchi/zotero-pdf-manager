@@ -1,8 +1,8 @@
-<!-- @ajan: cursor · @etiket: katman-2, eksik-raporu, oa-search, multi-source, download-attach, libgen-gate, prefetch-bar -->
+<!-- @ajan: cursor · @etiket: katman-2, eksik-raporu, false-positive-validate, thrash-url-skip -->
 
 # Cursor — Katman 2 Eksikler Raporu
 
-**Tarih:** 2026-08-06 · **Sürüm:** PDF Manager **v1.0.98**  
+**Tarih:** 2026-08-06 · **Sürüm:** PDF Manager **v1.0.99**  
 **Analiz:** ürün ↔ `referanslar/katman-2/` ↔ GitHub (Attanger, Zotadata, Zoplicate,
 ZotAssets, File Utility, Attachment Scanner, ozefe/yoktez).
 
@@ -14,11 +14,12 @@ ZotAssets, File Utility, Attachment Scanner, ozefe/yoktez).
 | Gerçek açık iş?           | Checklist Bölüm B (kullanıcı) + isteğe bağlı P3 |
 | Yeni zorunlu XPI portu?   | **Yok** — GitHub taraması yeni P1 üretmedi      |
 
-### Son eklenen (v1.0.98)
+### Son eklenen (v1.0.99)
 
 | Madde                                         | Not                                                                                                        |
 | --------------------------------------------- | ---------------------------------------------------------------------------------------------------------- |
-| Prefetch bar / thrash kapısı                  | Kısa başlık yazar zorunlu; LibGen ov≥0.7; sibling MD5 skip; köprü restart + XPI                            |
+| Doğru PDF false-positive / yeniden indir      | Güçlü başlıkta yazarsız match; LLM ezemez; rejectedUrls; doğru dosya silinip tekrar indirilmesin           |
+| Prefetch bar / thrash kapısı (v1.0.98)        | Kısa başlık yazar zorunlu; LibGen ov≥0.7; sibling MD5 skip; köprü restart + XPI                            |
 | LibGen agresif eşleştirme kapısı (v1.0.97)    | Sahte ov=1.0 / ISBN false-friend / kısa TR başlık / tek-token; köprü restart + XPI                         |
 | Download & attach yanlış PDF kapısı (v1.0.96) | LibGen phase1 early-stop yok (yalnız DOI/Zenodo/PMC); yerel kısa başlık+unverifiable reject; köprü restart |
 | OA Search çoklu kaynak fan-out (v1.0.95)      | Checkbox N kaynak → hepsi sorgulanır (ISBN LibGen phase1 short-circuit yok); köprüyü de yeniden başlat     |
