@@ -18,7 +18,7 @@ ZotAssets, File Utility, Attachment Scanner, ozefe/yoktez).
 
 | Madde                                        | Not                                                                                          |
 | -------------------------------------------- | -------------------------------------------------------------------------------------------- |
-| TR ALL-CAPS / yapışık başlık güveni          | `toLocaleLowerCase("tr")` I→ı hatası + `_expand_glued_tokens` parity; DergiPark hit→attach    |
+| TR ALL-CAPS / yapışık başlık güveni          | `toLocaleLowerCase("tr")` I→ı hatası + `_expand_glued_tokens` parity; DergiPark hit→attach   |
 | Post-truth era yanlış makale (v1.0.92)       | Keyes kitabı ≠ Ponce/Arendt SSRN; kısa başlık Jaccard + tire birleşimi; yerel içerik doğrula |
 | Yanlış kitap / inceleme / makale kapısı (91) | Rengin≠İlkel; Sinema≠Deleuze tezi; book-review yok; Avangard≠makale                          |
 | DOI paywall ipucu (v1.0.90)                  | «Açık PDF yok (ücretli/paywall)…» — köprü HTTP 500 crash metni yok                           |

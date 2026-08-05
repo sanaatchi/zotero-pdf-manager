@@ -349,10 +349,7 @@ test("filterTrustedHits keeps DergiPark glued-space titles", () => {
       "Sanat eğitimi alan ve almayan ergenlerin öz-yeterliklerinin incelenmesi",
       "SANATEĞİTİMİ ALAN VE ALMAYAN ERGENLERİN ÖZ-YETERLİKLERİNİN İNCELENMESİ",
     ],
-    [
-      "Sanata karşi başkaldiri: avangard",
-      "SANATAKARŞI BAŞKALDIRI: AVANGARD",
-    ],
+    ["Sanata karşi başkaldiri: avangard", "SANATAKARŞI BAŞKALDIRI: AVANGARD"],
   ];
   for (const [q, h] of cases) {
     const trusted = filterTrustedHits(
