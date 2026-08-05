@@ -16,14 +16,14 @@ ZotAssets, File Utility, Attachment Scanner, ozefe/yoktez).
 
 ### Son eklenen (v1.0.90)
 
-| Madde                                  | Not                                                                         |
-| -------------------------------------- | --------------------------------------------------------------------------- |
-| DOI paywall ipucu                      | «Açık PDF yok (ücretli/paywall)…» — köprü HTTP 500 crash metni yok          |
-| OA Search’ten arXiv çıkarıldı (v1.0.89)| Kaynak chip / prefs checkbox / federated `full` yok; adapter CLI’da kalır   |
-| OA attach 502 fallback (v1.0.88)       | `X-OA-Fetch-Error`; doi 502 → diğer hit (DergiPark); çıplak HTTP 502 yok    |
-| İndirme raporu panoya kopyalanmaz      | Sekme / toast kalır; clipboard fallback kaldırıldı (v1.0.87)                |
-| İndirme raporu → OA JSONL (v1.0.86)    | `POST /pdf-search-log`; TR makale / tez kaçırma `cache/logs/oa_pdf_search/` |
-| OA Arama popup + menü çubuğu (v1.0.58) | `PDF Manager → OA Arama…`; Attanger federated aynı pencere                  |
+| Madde                                   | Not                                                                         |
+| --------------------------------------- | --------------------------------------------------------------------------- |
+| DOI paywall ipucu                       | «Açık PDF yok (ücretli/paywall)…» — köprü HTTP 500 crash metni yok          |
+| OA Search’ten arXiv çıkarıldı (v1.0.89) | Kaynak chip / prefs checkbox / federated `full` yok; adapter CLI’da kalır   |
+| OA attach 502 fallback (v1.0.88)        | `X-OA-Fetch-Error`; doi 502 → diğer hit (DergiPark); çıplak HTTP 502 yok    |
+| İndirme raporu panoya kopyalanmaz       | Sekme / toast kalır; clipboard fallback kaldırıldı (v1.0.87)                |
+| İndirme raporu → OA JSONL (v1.0.86)     | `POST /pdf-search-log`; TR makale / tez kaçırma `cache/logs/oa_pdf_search/` |
+| OA Arama popup + menü çubuğu (v1.0.58)  | `PDF Manager → OA Arama…`; Attanger federated aynı pencere                  |
 
 ---
 
