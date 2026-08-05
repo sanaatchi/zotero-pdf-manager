@@ -1,4 +1,4 @@
-// @ajan: cursor · @etiket: katman-2, oa-search, actions, attach-detail
+// @ajan: cursor · @etiket: katman-2, oa-search, actions, attach-fallback
 /**
  * OA Search popup actions: attach hit PDF, create item from hit, Related Items.
  * Pure field mapping is unit-tested; Zotero I/O stays async.
@@ -127,8 +127,57 @@ export async function attachHitToItem(
   return result.ok;
 }
 
+export function isRetryableOaFetchError(msg: string): boolean {
+  const m = String(msg || "").toLowerCase();
+  if (!m.trim()) return false;
+  return /502|503|504|timeout|timed out|fetch|köprü|bridge returned no pdf|alınamadı|bad gateway|gateway time/.test(
+    m,
+  );
+}
+
+export function fallbackHitsForAttach(
+  selected: OaPdfHit,
+  all: OaPdfHit[],
+): OaPdfHit[] {
+  const selUrl = String(selected?.pdfUrl || "").trim();
+  const selSrc = String(selected?.source || "").toLowerCase();
+  const rest = (all || []).filter((h) => {
+    const url = String(h?.pdfUrl || "").trim();
+    if (!url) return false;
+    if (h === selected) return false;
+    if (String(h.source || "").toLowerCase() === selSrc && url === selUrl) {
+      return false;
+    }
+    return true;
+  });
+  const weight = (h: OaPdfHit) => {
+    const s = String(h.source || "").toLowerCase();
+    if (s === "dergipark") return 0;
+    if (s === "pmc") return 1;
+    if (s === "doi") return 2;
+    return 3;
+  };
+  return [...rest].sort((a, b) => weight(a) - weight(b));
+}
+
 /** Same as attachHitToItem but keeps the failure reason for OA Search status. */
 export async function attachHitToItemDetailed(
+  item: Zotero.Item,
+  hit: OaPdfHit,
+  opts?: { fallbackHits?: OaPdfHit[] },
+): Promise<{ ok: boolean; error?: string }> {
+  const queue = [hit, ...fallbackHitsForAttach(hit, opts?.fallbackHits || [])];
+  let lastError = "";
+  for (const cand of queue) {
+    const result = await attachOneHit(item, cand);
+    if (result.ok) return result;
+    lastError = result.error || lastError;
+    if (!isRetryableOaFetchError(lastError)) return result;
+  }
+  return { ok: false, error: lastError || "attach failed" };
+}
+
+async function attachOneHit(
   item: Zotero.Item,
   hit: OaPdfHit,
 ): Promise<{ ok: boolean; error?: string }> {

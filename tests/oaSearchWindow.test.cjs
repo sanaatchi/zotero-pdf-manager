@@ -42,7 +42,21 @@ test("createItemFieldsFromHit maps DOI article and ISBN book", () => {
     guessItemTypeFromHit,
     parseAuthorsField,
     relatedPairIds,
+    isRetryableOaFetchError,
+    fallbackHitsForAttach,
   } = loadActions();
+
+  assert.equal(isRetryableOaFetchError("oa_pdf fetch doi: HTTP 502"), true);
+  assert.equal(isRetryableOaFetchError("downloadAndAttach returned null (disk/link)"), false);
+  const fallbacks = fallbackHitsForAttach(
+    { source: "doi", pdfUrl: "https://a.example/a.pdf", title: "A" },
+    [
+      { source: "doi", pdfUrl: "https://a.example/a.pdf", title: "A" },
+      { source: "scihub", pdfUrl: "https://s.example/s.pdf", title: "S" },
+      { source: "dergipark", pdfUrl: "https://d.example/d.pdf", title: "D" },
+    ],
+  );
+  assert.equal(fallbacks[0].source, "dergipark");
 
   const article = createItemFieldsFromHit({
     source: "doi",

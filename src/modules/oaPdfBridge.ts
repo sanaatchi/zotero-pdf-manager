@@ -1,4 +1,4 @@
-// @ajan: cursor · @etiket: katman-2, oa-pdf-bridge, fetch-error-detail, cascade-log
+// @ajan: cursor · @etiket: katman-2, oa-pdf-bridge, fetch-502-header
 /**
  * Katman-2 → Kutuphane köprü (8756) `oa_pdf_search` client.
  * Online PDF discovery runs in Python; this module only POSTs queries.
@@ -1010,7 +1010,19 @@ export async function fetchOaPdfViaBridge(opts: {
     } catch {
       detail = "";
     }
-    if (!detail) detail = `HTTP ${status}`;
+    if (!detail) {
+      try {
+        const hdr =
+          xhr?.getResponseHeader?.("X-OA-Fetch-Error") ||
+          xhr?.getResponseHeader?.("x-oa-fetch-error");
+        if (hdr && String(hdr).trim()) detail = String(hdr).trim();
+      } catch {
+        /* ignore */
+      }
+    }
+    if (!detail) {
+      detail = `köprü PDF indirme başarısız (HTTP ${status})`;
+    }
     finishDownloadJob(jobId, { ok: false });
     throw new Error(`oa_pdf fetch ${opts.source}: ${detail}`);
   }

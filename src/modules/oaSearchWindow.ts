@@ -1,4 +1,4 @@
-// @ajan: cursor · @etiket: katman-2, oa-search, window, kinds-8
+// @ajan: cursor · @etiket: katman-2, oa-search, window, attach-fallback
 /**
  * Independent OA Search popup (openDialog) — federated results + attach actions.
  * UX: kind-specific criteria forms, per-field active toggles, optional
@@ -990,13 +990,15 @@ async function applyPrimaryAction(
   await withBusy(doc, async () => {
     if (state.targetItem) {
       await withDownloadStatus(doc, "oa-search-attaching", async () => {
-        const result = await attachHitToItemDetailed(state.targetItem!, hit);
+        const result = await attachHitToItemDetailed(state.targetItem!, hit, {
+          fallbackHits: state.hits,
+        });
         setStatus(
           doc,
           result.ok
             ? uiString("oa-search-attach-ok")
             : uiString("oa-search-attach-fail-detail", {
-                message: String(result.error || "").slice(0, 160),
+                message: String(result.error || "").slice(0, 280),
               }) || uiString("oa-search-attach-fail"),
           !result.ok,
         );
@@ -1330,13 +1332,15 @@ function wireActions(win: Window): void {
         }
         setStatus(doc, uiString("oa-search-attaching"));
         await withDownloadStatus(doc, "oa-search-attaching", async () => {
-          const result = await attachHitToItemDetailed(item, hit);
+          const result = await attachHitToItemDetailed(item, hit, {
+            fallbackHits: state.hits,
+          });
           setStatus(
             doc,
             result.ok
               ? uiString("oa-search-attach-ok")
               : uiString("oa-search-attach-fail-detail", {
-                  message: String(result.error || "").slice(0, 160),
+                  message: String(result.error || "").slice(0, 280),
                 }) || uiString("oa-search-attach-fail"),
             !result.ok,
           );
