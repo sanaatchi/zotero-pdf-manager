@@ -1189,9 +1189,10 @@ export function filterTrustedHits(
     ].join(" ");
     const isbnOkHit =
       (isbnDigits.length === 10 || isbnDigits.length === 13) &&
-      hitIsbnBlob.replace(/[^0-9Xx]/gi, "").toUpperCase().includes(
-        isbnDigits.toUpperCase(),
-      );
+      hitIsbnBlob
+        .replace(/[^0-9Xx]/gi, "")
+        .toUpperCase()
+        .includes(isbnDigits.toUpperCase());
     if (
       kindBookish &&
       shortGeneric &&
