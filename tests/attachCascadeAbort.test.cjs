@@ -116,7 +116,9 @@ test("validation + cascade: mismatch detaches; ContentMismatch continues sources
 test("hasAcceptedPdfAttachment: mismatch tag means not done", () => {
   // Pure logic mirror of pdfDownload.hasAcceptedPdfAttachment
   function hasPDFAttachment(item) {
-    return (item.attachments || []).some((a) => a.contentType === "application/pdf");
+    return (item.attachments || []).some(
+      (a) => a.contentType === "application/pdf",
+    );
   }
   function hasAcceptedPdfAttachment(item) {
     if (!hasPDFAttachment(item)) return false;
