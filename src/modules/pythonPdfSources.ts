@@ -1,4 +1,4 @@
-// @ajan: cursor · @etiket: katman-2, python-pdf-sources, title-trust, thrash-url-skip
+// @ajan: cursor · @etiket: katman-2, python-pdf-sources, thrash-url-skip, keep-mismatch
 /**
  * Online PDF sources backed by Kutuphane `oa_pdf_search` (8756 bridge).
  * Old in-plugin scrape/mirror logic was removed — discovery is Python-only.
@@ -189,7 +189,7 @@ export class OaPdfPythonSource implements PDFSource {
           bytes,
         });
         if (att) return att;
-        // Attached then detached by content validate → do not retry this URL.
+        // Empty / failed attach — do not retry this URL.
         rejectedUrls.add(urlKey);
       } catch (e) {
         rethrowAttachControlFlow(e);

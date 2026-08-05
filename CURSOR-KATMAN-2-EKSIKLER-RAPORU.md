@@ -1,8 +1,8 @@
-<!-- @ajan: cursor · @etiket: katman-2, eksik-raporu, false-positive-validate, thrash-url-skip -->
+<!-- @ajan: cursor · @etiket: katman-2, eksik-raporu, keep-mismatch, no-auto-detach -->
 
 # Cursor — Katman 2 Eksikler Raporu
 
-**Tarih:** 2026-08-06 · **Sürüm:** PDF Manager **v1.0.99**  
+**Tarih:** 2026-08-06 · **Sürüm:** PDF Manager **v1.0.100**  
 **Analiz:** ürün ↔ `referanslar/katman-2/` ↔ GitHub (Attanger, Zotadata, Zoplicate,
 ZotAssets, File Utility, Attachment Scanner, ozefe/yoktez).
 
@@ -14,16 +14,17 @@ ZotAssets, File Utility, Attachment Scanner, ozefe/yoktez).
 | Gerçek açık iş?           | Checklist Bölüm B (kullanıcı) + isteğe bağlı P3 |
 | Yeni zorunlu XPI portu?   | **Yok** — GitHub taraması yeni P1 üretmedi      |
 
-### Son eklenen (v1.0.99)
+### Son eklenen (v1.0.100)
 
 | Madde                                         | Not                                                                                                        |
 | --------------------------------------------- | ---------------------------------------------------------------------------------------------------------- |
-| Doğru PDF false-positive / yeniden indir      | Güçlü başlıkta yazarsız match; LLM ezemez; rejectedUrls; doğru dosya silinip tekrar indirilmesin           |
+| Uyumsuz PDF otomatik silme iptal              | mismatch → ek kalır + `#pdf-mismatch`; auto-detach yok; manuel audit onaylı detach duruyor                 |
+| Doğru PDF false-positive / yeniden indir (99) | Güçlü başlıkta yazarsız match; LLM ezemez; rejectedUrls                                                    |
 | Prefetch bar / thrash kapısı (v1.0.98)        | Kısa başlık yazar zorunlu; LibGen ov≥0.7; sibling MD5 skip; köprü restart + XPI                            |
 | LibGen agresif eşleştirme kapısı (v1.0.97)    | Sahte ov=1.0 / ISBN false-friend / kısa TR başlık / tek-token; köprü restart + XPI                         |
 | Download & attach yanlış PDF kapısı (v1.0.96) | LibGen phase1 early-stop yok (yalnız DOI/Zenodo/PMC); yerel kısa başlık+unverifiable reject; köprü restart |
 | OA Search çoklu kaynak fan-out (v1.0.95)      | Checkbox N kaynak → hepsi sorgulanır (ISBN LibGen phase1 short-circuit yok); köprüyü de yeniden başlat     |
-| `#pdf-mismatch` yanlış PDF kapısı (v1.0.94)   | OA mismatch artık eki bırakmıyor (unlink+disk kalır); etiketli öğe «done» sayılmıyor; cascade devam        |
+| `#pdf-mismatch` yanlış PDF kapısı (v1.0.94)   | (süperseeded by 1.0.100 keep) eski: unlink+disk; etiketli «done» değildi                                   |
 | TR ALL-CAPS / yapışık başlık güveni (v1.0.93) | `toLocaleLowerCase("tr")` I→ı hatası + `_expand_glued_tokens` parity; DergiPark hit→attach                 |
 | Post-truth era yanlış makale (v1.0.92)        | Keyes kitabı ≠ Ponce/Arendt SSRN; kısa başlık Jaccard + tire birleşimi; yerel içerik doğrula               |
 | Yanlış kitap / inceleme / makale kapısı (91)  | Rengin≠İlkel; Sinema≠Deleuze tezi; book-review yok; Avangard≠makale                                        |

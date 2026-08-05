@@ -39,7 +39,7 @@ Do **not** merge the three addons. Data flows 1 → 2 → 3.
 - Startup / periodic / on-add **reconcile** with confidence thresholds and `#pdf-review`
 - **OA download** into `{watchRoot}/downloads/` (DOI, arXiv, PMC, S2, DergiPark automatic list)
 - **OA Search popup** (menubar **PDF Manager → OA Search…**, also Attanger “Search all PDF sources…”): federated results table; attach to selected / new item + PDF / attach + Related Items
-- **PDF content audit** (menu): detect wrong attachments via PDF text → `#pdf-mismatch`; auto-download mismatch **detaches** the link (disk kept) and continues cascade
+- **PDF content audit** (menu): detect wrong attachments via PDF text → `#pdf-mismatch`; auto-download mismatch **keeps** the PDF + tags (no auto-detach; optional manual detach after confirm)
 - Orphan PDF report / optional auto-create (pref-gated, dry-run)
 - Metadata check, embed, clean; filename → metadata; duplicate PDF merge
 - Automation **audit log** + dry-run mode

@@ -1,10 +1,10 @@
-// @ajan: cursor · @etiket: katman-2, tests, pdf-mismatch-detach, local-validate
+// @ajan: cursor · @etiket: katman-2, tests, keep-mismatch, no-auto-detach
 const assert = require("node:assert/strict");
 const fs = require("node:fs");
 const path = require("node:path");
 const { test } = require("node:test");
 
-test("validation verdicts: match clears tags; mismatch detaches; unverifiable keeps", () => {
+test("validation verdicts: match clears tags; mismatch+unverifiable keep", () => {
   const source = fs.readFileSync(
     path.join(process.cwd(), "src/modules/pdfSources.ts"),
     "utf8",
@@ -14,10 +14,10 @@ test("validation verdicts: match clears tags; mismatch detaches; unverifiable ke
   assert.match(source, /removeAutomationTag\(item,\s*"#pdf-mismatch"\)/);
   assert.match(source, /ContentMismatchError/);
   assert.match(source, /decideContentValidation/);
-  // OA download mismatch: detach link (same gate as local), never keep as success.
-  assert.match(source, /detaching link \(#pdf-mismatch\)/);
-  assert.doesNotMatch(source, /keeping attachment \(#pdf-mismatch\)/);
-  assert.match(source, /İndirilen PDF künye ile uyuşmuyor/);
+  // OA + local mismatch: keep attachment + tag (auto-detach cancelled).
+  assert.match(source, /keeping attachment \(#pdf-mismatch\)/);
+  assert.doesNotMatch(source, /detaching link \(#pdf-mismatch\)/);
+  assert.doesNotMatch(source, /İndirilen PDF künye ile uyuşmuyor/);
   assert.match(source, /renameRejectedPdfOnDisk/);
   assert.match(source, /Never IOUtils\.remove the PDF/);
   // Linked path must not be unlinked before overwrite (attachment "vanishes").
@@ -31,16 +31,16 @@ test("validation verdicts: match clears tags; mismatch detaches; unverifiable ke
     source,
     /unverifiable[\s\S]*?keeping attachment \(#pdf-review\)/,
   );
-  // Local title-only + unverifiable must NOT stick (cascade continues).
-  assert.match(
+  // Local title-only + unverifiable also keep (no auto-detach).
+  assert.doesNotMatch(
     source,
     /Yerel PDF doğrulanamadı \(başlık eşleşmesi; içerik okunamadı\)/,
   );
   assert.match(source, /short title without author match/);
-  // Auto-download never throws review-stop; mismatch throws ContentMismatchError.
+  // Auto-download never throws review-stop; mismatch keeps (no ContentMismatch throw from download).
   assert.doesNotMatch(source, /throw new AttachStoppedError\("review"/);
   assert.match(source, /finalizeLocalAttachment/);
-  assert.match(source, /Yerel PDF künye ile uyuşmuyor/);
+  assert.doesNotMatch(source, /Yerel PDF künye ile uyuşmuyor/);
   // Manual audit / cleanup may still erase via cleanupRejectedAttachment.
   assert.match(source, /await opts\.attachment\.eraseTx\(\)/);
   assert.doesNotMatch(

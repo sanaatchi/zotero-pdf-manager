@@ -1,7 +1,6 @@
-// @ajan: cursor · @etiket: katman-2, pdfDownload, pdf-mismatch-detach, paywall-hint
+// @ajan: cursor · @etiket: katman-2, pdfDownload, keep-mismatch, no-auto-detach
 import {
   ALL_SOURCES,
-  cleanupRejectedAttachment,
   downloadAndAttach,
   ensureDOI,
   isAttachStoppedError,
@@ -178,38 +177,21 @@ export function itemHasPdfMismatchTag(item: Zotero.Item): boolean {
 }
 
 /**
- * Successful attach gate for skip/cascade: a mismatch-tagged item is NOT done
- * even if a PDF attachment still exists (wrong file must not block retry).
+ * Successful attach gate for skip/cascade: any PDF attachment counts as done.
+ * Mismatch PDFs are kept + tagged (#pdf-mismatch); they are not auto-detached.
  */
 export function hasAcceptedPdfAttachment(item: Zotero.Item): boolean {
-  if (!hasPDFAttachment(item)) return false;
-  if (itemHasPdfMismatchTag(item)) return false;
-  return true;
+  return hasPDFAttachment(item);
 }
 
 /**
- * Before retrying cascade on a `#pdf-mismatch` item, detach linked PDFs so a
- * second wrong file is never stacked. Disk copies stay (cleanupRejectedAttachment).
+ * No-op: auto-detach of mismatch PDFs cancelled. Kept for call-site
+ * compatibility; manual content-audit can still detach with confirm.
  */
 export async function detachMismatchPdfAttachments(
-  item: Zotero.Item,
+  _item: Zotero.Item,
 ): Promise<number> {
-  if (!itemHasPdfMismatchTag(item) || !hasPDFAttachment(item)) return 0;
-  let detached = 0;
-  for (const id of [...item.getAttachments()]) {
-    const att = Zotero.Items.get(id) as Zotero.Item | undefined;
-    if (!att || att.attachmentContentType !== "application/pdf") continue;
-    try {
-      const cleaned = await cleanupRejectedAttachment({
-        attachment: att,
-        finalCreatedByThisRun: false,
-      });
-      if (cleaned === "cleaned") detached++;
-    } catch (e) {
-      ztoolkit.log("detach mismatch PDF failed", item.id, e);
-    }
-  }
-  return detached;
+  return 0;
 }
 
 /**
@@ -222,8 +204,6 @@ export async function tryAutomaticOnlineSources(
 ): Promise<AutomaticOnlineResult | null> {
   throwIfRunAborted();
   if (hasAcceptedPdfAttachment(item)) return null;
-  // Wrong PDF still linked under #pdf-mismatch — drop the link before retry.
-  await detachMismatchPdfAttachments(item);
   if (!isFolderIndexComplete()) {
     const meta = getLastIndexBuildMeta();
     ztoolkit.log(
@@ -406,8 +386,6 @@ export async function downloadPdfForSelectedItems() {
         },
       };
     }
-    // #pdf-mismatch + wrong PDF: unlink before cascade so we never stack a second wrong file.
-    await detachMismatchPdfAttachments(item);
 
     await ensureDOI(item);
 

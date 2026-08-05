@@ -1,4 +1,4 @@
-// @ajan: cursor · @etiket: katman-2, pdf-sources, false-positive-validate, thrash-url-skip
+// @ajan: cursor · @etiket: katman-2, pdf-sources, keep-mismatch, no-auto-detach
 import { getString } from "../utils/locale";
 import { getPref } from "../utils/prefs";
 import {
@@ -422,9 +422,9 @@ function scoreText(item: Zotero.Item, rawText: string): number {
  * metadata.
  *
  * - match: extractable text supports the item
- * - mismatch: extractable text conflicts — **detach link** (disk kept /
- *   renamed); tag `#pdf-mismatch` + `#pdf-review`; cascade continues for a
- *   better PDF (local + OA download share this gate)
+ * - mismatch: extractable text conflicts — **keep** attachment; tag
+ *   `#pdf-mismatch` + `#pdf-review` (auto-detach cancelled; manual audit
+ *   can still detach with confirm)
  * - unverifiable: too little extractable text / PDFWorker failure — **keep**
  *   attachment and tag `#pdf-review`
  * - skipped: validation pref off
@@ -950,24 +950,16 @@ export async function downloadAndAttach(
       await tagItem(item, "#pdf-review");
       return attachment;
     }
-    // mismatch: detach link (disk stays); never treat wrong PDF as success.
+    // mismatch: keep attachment; tag for review (no auto erase/detach).
     ztoolkit.log(
-      `PDF content mismatch for ${item.id} — detaching link (#pdf-mismatch)`,
+      `PDF content mismatch for ${item.id} — keeping attachment (#pdf-mismatch)`,
     );
-    const cleaned = await cleanupRejectedAttachment({
-      attachment,
-      persistedPath,
-      finalCreatedByThisRun,
-      pdfText,
-    });
     await tagItem(item, "#pdf-mismatch");
     await tagItem(item, "#pdf-review");
-    if (cleaned !== "cleaned") {
-      throw new AttachStoppedError("erase-failed", attachment);
-    }
-    throw new ContentMismatchError(
-      "İndirilen PDF künye ile uyuşmuyor (yanlış eser)",
-    );
+    void pdfText;
+    void persistedPath;
+    void finalCreatedByThisRun;
+    return attachment;
   }
   return attachment;
 }
@@ -1187,11 +1179,8 @@ export class LocalFolderSource implements PDFSource {
   }
 
   /**
-   * Filename match is not proof of content — a misnamed watch-root PDF
-   * (Keyes book name wrapping an Arendt/Ponce article) must not stick.
-   * Mismatch: detach the link only; disk file stays. Cascade may continue.
-   * Title-only matches that are unverifiable (scanned / PDFWorker fail) are
-   * also rejected so Download & attach does not stop on a wrong silent PDF.
+   * Filename match is not proof of content. Mismatch / unverifiable title:
+   * keep the link and tag for review — auto-detach cancelled.
    */
   private async finalizeLocalAttachment(
     item: Zotero.Item,
@@ -1211,39 +1200,20 @@ export class LocalFolderSource implements PDFSource {
       return attachment;
     }
     if (detailed.verdict === "unverifiable") {
-      // DOI/ISBN index hits: keep + review tag (scanned book still likely right).
-      // Filename/title containment alone: reject — cascade must try OA next.
-      if (via === "doi" || via === "isbn") {
-        await tagItem(item, "#pdf-review");
-        return attachment;
-      }
-      const cleanedUnverifiable = await cleanupRejectedAttachment({
-        attachment,
-        persistedPath: diskPath,
-        finalCreatedByThisRun: false,
-      });
-      if (cleanedUnverifiable !== "cleaned") {
-        await tagItem(item, "#pdf-mismatch");
-        await tagItem(item, "#pdf-review");
-        throw new AttachStoppedError("erase-failed", attachment);
-      }
-      throw new ContentMismatchError(
-        "Yerel PDF doğrulanamadı (başlık eşleşmesi; içerik okunamadı)",
+      ztoolkit.log(
+        `Local PDF unverifiable for ${item.id} via=${via} — keeping (#pdf-review)`,
+        diskPath,
       );
-    }
-    const cleaned = await cleanupRejectedAttachment({
-      attachment,
-      persistedPath: diskPath,
-      finalCreatedByThisRun: false,
-    });
-    if (cleaned !== "cleaned") {
-      await tagItem(item, "#pdf-mismatch");
       await tagItem(item, "#pdf-review");
-      throw new AttachStoppedError("erase-failed", attachment);
+      return attachment;
     }
-    throw new ContentMismatchError(
-      "Yerel PDF künye ile uyuşmuyor (yanlış dosya adı / başka eser)",
+    ztoolkit.log(
+      `Local PDF mismatch for ${item.id} — keeping attachment (#pdf-mismatch)`,
+      diskPath,
     );
+    await tagItem(item, "#pdf-mismatch");
+    await tagItem(item, "#pdf-review");
+    return attachment;
   }
 
   matchItem(item: Zotero.Item, index: IndexedFile[]): LocalMatchResult {

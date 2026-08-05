@@ -1,4 +1,4 @@
-// @ajan: cursor · @etiket: katman-2, tests, cascade-abort, pdf-mismatch-detach
+// @ajan: cursor · @etiket: katman-2, tests, cascade-abort, keep-mismatch
 const assert = require("node:assert/strict");
 const fs = require("node:fs");
 const path = require("node:path");
@@ -51,20 +51,20 @@ function loadPdfSourcesExports() {
   return module.exports;
 }
 
-test("validation + cascade: mismatch detaches; ContentMismatch continues sources", () => {
+test("validation + cascade: mismatch keeps PDF; ContentMismatch soft-fail still wired", () => {
   const source = fs.readFileSync(
     path.join(process.cwd(), "src/modules/pdfSources.ts"),
     "utf8",
   );
   assert.match(source, /class AttachStoppedError/);
-  // OA + local mismatch: detach link + tag; never keep wrong PDF as success.
-  assert.match(source, /detaching link \(#pdf-mismatch\)/);
-  assert.doesNotMatch(source, /keeping attachment \(#pdf-mismatch\)/);
+  // OA + local mismatch: keep attachment + tag; no auto-detach.
+  assert.match(source, /keeping attachment \(#pdf-mismatch\)/);
+  assert.doesNotMatch(source, /detaching link \(#pdf-mismatch\)/);
   assert.match(source, /keeping attachment \(#pdf-review\)/);
   assert.doesNotMatch(source, /throw new AttachStoppedError\("review"/);
   assert.match(source, /finalizeLocalAttachment/);
-  assert.match(source, /Yerel PDF künye ile uyuşmuyor/);
-  assert.match(source, /İndirilen PDF künye ile uyuşmuyor/);
+  assert.doesNotMatch(source, /Yerel PDF künye ile uyuşmuyor/);
+  assert.doesNotMatch(source, /İndirilen PDF künye ile uyuşmuyor/);
   assert.match(source, /ContentMismatchError/);
   assert.match(source, /rethrowAttachControlFlow/);
 
@@ -79,8 +79,8 @@ test("validation + cascade: mismatch detaches; ContentMismatch continues sources
   assert.match(download, /hasAcceptedPdfAttachment/);
   assert.match(download, /detachMismatchPdfAttachments/);
   assert.match(download, /itemHasPdfMismatchTag/);
-  // Mismatch-tagged items must not count as "already have PDF".
-  assert.match(download, /hasAcceptedPdfAttachment\(item\)/);
+  // Any PDF counts as done (mismatch kept, not auto-detached).
+  assert.match(download, /return hasPDFAttachment\(item\)/);
   assert.match(
     download,
     /isContentMismatchError\(e\)[\s\S]*?outcome:\s*"rejected"/,
@@ -113,7 +113,7 @@ test("validation + cascade: mismatch detaches; ContentMismatch continues sources
   assert.deepEqual(sourcesTried, ["pmc"]);
 });
 
-test("hasAcceptedPdfAttachment: mismatch tag means not done", () => {
+test("hasAcceptedPdfAttachment: any PDF is done (mismatch kept)", () => {
   // Pure logic mirror of pdfDownload.hasAcceptedPdfAttachment
   function hasPDFAttachment(item) {
     return (item.attachments || []).some(
@@ -121,9 +121,7 @@ test("hasAcceptedPdfAttachment: mismatch tag means not done", () => {
     );
   }
   function hasAcceptedPdfAttachment(item) {
-    if (!hasPDFAttachment(item)) return false;
-    if (item.tags && item.tags.includes("#pdf-mismatch")) return false;
-    return true;
+    return hasPDFAttachment(item);
   }
 
   assert.equal(
@@ -138,7 +136,7 @@ test("hasAcceptedPdfAttachment: mismatch tag means not done", () => {
       attachments: [{ contentType: "application/pdf" }],
       tags: ["#pdf-mismatch"],
     }),
-    false,
+    true,
   );
   assert.equal(
     hasAcceptedPdfAttachment({
