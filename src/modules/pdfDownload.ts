@@ -1,4 +1,4 @@
-// @ajan: cursor · @etiket: katman-2, pdfDownload, multi-job-progress, parallel, cascade-log
+// @ajan: cursor · @etiket: katman-2, pdfDownload, paywall-hint
 import {
   ALL_SOURCES,
   downloadAndAttach,
@@ -233,6 +233,10 @@ function failureHint(
   item: Zotero.Item,
   attempts: SourceAttempt[],
 ): string | undefined {
+  const paywall = attempts.find((a) =>
+    /paywall|ücretli|açık pdf yok/i.test(String(a.reason || "")),
+  );
+  if (paywall?.reason) return String(paywall.reason).trim();
   return cascadeMissMessage(cascadeHintsForItem(item), attempts);
 }
 

@@ -1,4 +1,4 @@
-// @ajan: cursor · @etiket: katman-2, python-pdf-sources, search-kind-auto
+// @ajan: cursor · @etiket: katman-2, python-pdf-sources, paywall-hint
 /**
  * Online PDF sources backed by Kutuphane `oa_pdf_search` (8756 bridge).
  * Old in-plugin scrape/mirror logic was removed — discovery is Python-only.
@@ -136,6 +136,8 @@ export class OaPdfPythonSource implements PDFSource {
     }
     let mismatchRejects = 0;
     let attempted = 0;
+    let paywallHint = "";
+    const { humanizeOaFetchError } = await import("./oaSearchActions");
     for (const hit of trusted) {
       const url = String(hit.pdfUrl || "").trim();
       if (!url) continue;
@@ -168,6 +170,10 @@ export class OaPdfPythonSource implements PDFSource {
           ztoolkit.log(`oa_pdf ${this.id} rejected by metadata check`, e);
           continue;
         }
+        const hint = humanizeOaFetchError(
+          e instanceof Error ? e.message : String(e),
+        );
+        if (/paywall|ücretli|açık pdf yok/i.test(hint)) paywallHint = hint;
         ztoolkit.log(`oa_pdf ${this.id} attach failed`, e);
       }
     }
@@ -175,6 +181,9 @@ export class OaPdfPythonSource implements PDFSource {
       throw new pdfSources.ContentMismatchError(
         `${this.id}: ${mismatchRejects} aday PDF künye ile uyuşmadı`,
       );
+    }
+    if (this.id === "doi" && paywallHint) {
+      throw new Error(paywallHint);
     }
     return null;
   }

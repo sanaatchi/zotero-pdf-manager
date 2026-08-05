@@ -44,9 +44,23 @@ test("createItemFieldsFromHit maps DOI article and ISBN book", () => {
     relatedPairIds,
     isRetryableOaFetchError,
     fallbackHitsForAttach,
+    humanizeOaFetchError,
+    DOI_PAYWALL_HINT,
   } = loadActions();
 
   assert.equal(isRetryableOaFetchError("oa_pdf fetch doi: HTTP 502"), true);
+  assert.equal(
+    humanizeOaFetchError(
+      "oa_pdf fetch doi: köprü PDF indirme başarısız (HTTP 500)",
+    ),
+    DOI_PAYWALL_HINT,
+  );
+  assert.equal(
+    humanizeOaFetchError(
+      "oa_pdf fetch doi: Açık PDF yok (ücretli/paywall) — Unpaywall’da tam metin yok.",
+    ),
+    DOI_PAYWALL_HINT,
+  );
   assert.equal(
     isRetryableOaFetchError("downloadAndAttach returned null (disk/link)"),
     false,

@@ -1,4 +1,4 @@
-// @ajan: cursor · @etiket: katman-2, oa-search, actions, attach-fallback
+// @ajan: cursor · @etiket: katman-2, oa-search, actions, paywall-hint
 /**
  * OA Search popup actions: attach hit PDF, create item from hit, Related Items.
  * Pure field mapping is unit-tested; Zotero I/O stays async.
@@ -127,10 +127,29 @@ export async function attachHitToItem(
   return result.ok;
 }
 
+export const DOI_PAYWALL_HINT =
+  "Açık PDF yok (ücretli/paywall) — Unpaywall’da tam metin yok.";
+
+export function humanizeOaFetchError(msg: string): string {
+  const raw = String(msg || "").trim();
+  const stripped = raw.replace(/^oa_pdf fetch [a-z0-9_-]+:\s*/i, "").trim();
+  if (
+    /oa_pdf fetch doi/i.test(raw) &&
+    /köprü pdf indirme başarısız/i.test(raw)
+  ) {
+    return DOI_PAYWALL_HINT;
+  }
+  if (/paywall|ücretli|açık pdf yok/i.test(raw)) {
+    return /açık pdf yok/i.test(stripped) ? stripped : DOI_PAYWALL_HINT;
+  }
+  return stripped || raw;
+}
+
 export function isRetryableOaFetchError(msg: string): boolean {
   const m = String(msg || "").toLowerCase();
   if (!m.trim()) return false;
-  return /502|503|504|timeout|timed out|fetch|köprü|bridge returned no pdf|alınamadı|bad gateway|gateway time/.test(
+  if (/paywall|ücretli|açık pdf yok/.test(m)) return true;
+  return /502|503|504|500|timeout|timed out|fetch|köprü|bridge returned no pdf|alınamadı|bad gateway|gateway time/.test(
     m,
   );
 }
@@ -171,8 +190,10 @@ export async function attachHitToItemDetailed(
   for (const cand of queue) {
     const result = await attachOneHit(item, cand);
     if (result.ok) return result;
-    lastError = result.error || lastError;
-    if (!isRetryableOaFetchError(lastError)) return result;
+    lastError = humanizeOaFetchError(result.error || lastError);
+    if (!isRetryableOaFetchError(result.error || lastError)) {
+      return { ok: false, error: lastError };
+    }
   }
   return { ok: false, error: lastError || "attach failed" };
 }
