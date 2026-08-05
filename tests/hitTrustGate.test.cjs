@@ -309,3 +309,60 @@ test("filterTrustedHits drops post-truth era Arendt article", () => {
   assert.equal(trusted.length, 1);
   assert.equal(trusted[0].pdfUrl, "https://example.com/keyes-book.pdf");
 });
+
+test("filterTrustedHits keeps ALL-CAPS Turkish DergiPark titles (TR I fold)", () => {
+  const { filterTrustedHits } = loadBridge();
+  const itemTitle =
+    "Yüksek öğretim kurumlarındaki çağdaş sanat eğitimi müfredatının yeni medya sanatını kapsayıcılığı";
+  const trusted = filterTrustedHits(
+    [
+      {
+        source: "dergipark",
+        title:
+          "YÜKSEK ÖĞRETİM KURUMLARINDAKİ ÇAĞDAŞ SANAT EĞİTİMİ MÜFREDATININ YENİ MEDYA SANATINI KAPSAYICILIĞI",
+        pdfUrl: "https://example.com/yuksek.pdf",
+        doi: "10.22252/ijca.1091443",
+      },
+    ],
+    {
+      title: itemTitle,
+      doi: "10.22252/ijca.1091443",
+      sourceId: "dergipark",
+    },
+  );
+  assert.equal(trusted.length, 1);
+  assert.equal(trusted[0].pdfUrl, "https://example.com/yuksek.pdf");
+});
+
+test("filterTrustedHits keeps DergiPark glued-space titles", () => {
+  const { filterTrustedHits } = loadBridge();
+  const cases = [
+    [
+      "Görsel okuryazarlık ve eleştirel pedagoji: sanatın toplumsal ve pedagojik temellerine gelecekçi bir bakış",
+      "Görselokuryazarlık ve eleştirel pedagoji: Sanatın toplumsal ve pedagojik temellerine gelecekçi bir bakış",
+    ],
+    [
+      "Müzik eğitiminin 3-6 yaş çocuğunun gelişiminde özerk olma sürecindeki işlevi",
+      "Müzikeğitiminin 3-6 yaş çocuğunun gelişiminde özerk olma sürecindeki işlevi",
+    ],
+    [
+      "Sanat eğitimi alan ve almayan ergenlerin öz-yeterliklerinin incelenmesi",
+      "SANATEĞİTİMİ ALAN VE ALMAYAN ERGENLERİN ÖZ-YETERLİKLERİNİN İNCELENMESİ",
+    ],
+    [
+      "Sanata karşi başkaldiri: avangard",
+      "SANATAKARŞI BAŞKALDIRI: AVANGARD",
+    ],
+  ];
+  for (const [q, h] of cases) {
+    const trusted = filterTrustedHits(
+      [{ source: "dergipark", title: h, pdfUrl: "https://example.com/ok.pdf" }],
+      { title: q, sourceId: "dergipark" },
+    );
+    assert.equal(
+      trusted.length,
+      1,
+      `expected keep for glued/ALLCAPS: ${q.slice(0, 40)}`,
+    );
+  }
+});

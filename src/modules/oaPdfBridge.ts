@@ -1,4 +1,4 @@
-// @ajan: cursor · @etiket: katman-2, oa-pdf-bridge, title-trust, post-truth, hyphen-token
+// @ajan: cursor · @etiket: katman-2, oa-pdf-bridge, title-trust, tr-fold, glued-token
 /**
  * Katman-2 → Kutuphane köprü (8756) `oa_pdf_search` client.
  * Online PDF discovery runs in Python; this module only POSTs queries.
@@ -624,20 +624,51 @@ function glueHyphenCompounds(value: string): string {
   return prev;
 }
 
-function normTokens(value: string): string[] {
+function foldTitleText(value: string): string {
+  // NFKD then strip marks turns İ→I. Turkish locale then maps I→ı (dotless).
+  // Python match_util uses casefold (I→i). Re-map ı/İ → i *after* locale lower
+  // so ALL-CAPS DergiPark titles match mixed-case Zotero titles.
   return glueHyphenCompounds(
     (value || "")
       .normalize("NFKD")
       .replace(/\p{Mark}/gu, "")
-      // Turkish ı / İ → i so Sebastıan ≈ Sebastian (matches Python match_util).
+      .toLocaleLowerCase("tr")
       .replace(/\u0131/g, "i")
       .replace(/\u0130/g, "i")
-      .toLocaleLowerCase("tr")
       .replace(/['`´\u2019]/g, " "),
-  )
+  );
+}
+
+function normTokens(value: string): string[] {
+  return foldTitleText(value)
     .replace(/[^\p{L}\p{N}\s]/gu, " ")
     .split(/\s+/)
     .filter((w) => w.length > 3);
+}
+
+/** Python ``_expand_glued_tokens``: ``Görselokuryazarlık`` ← görsel+okuryazarlık. */
+function expandGluedTokens(query: string, title: string): Set<string> {
+  const splitMin3 = (value: string) =>
+    foldTitleText(value)
+      .replace(/[^\p{L}\p{N}\s]/gu, " ")
+      .split(/\s+/)
+      .filter((w) => w.length >= 3);
+  const qToks = splitMin3(query);
+  const hitMin3 = new Set(splitMin3(title));
+  const qSet = new Set(qToks);
+  const extra = new Set<string>();
+  for (const h of hitMin3) {
+    for (const q of qSet) {
+      if (q.length < 4 || h.length <= q.length) continue;
+      if (!h.startsWith(q)) continue;
+      const rest = h.slice(q.length);
+      if (qSet.has(rest) || hitMin3.has(rest)) {
+        extra.add(q);
+        extra.add(rest);
+      }
+    }
+  }
+  return new Set([...hitMin3, ...extra]);
 }
 
 function titleOverlap(a: string, b: string): number {
@@ -984,7 +1015,7 @@ function titleTrustOk(
     }
   }
   if (!need.length) return ov >= 0.6;
-  const hitToks = new Set(normTokens(hitTitle));
+  const hitToks = expandGluedTokens(itemTitle, hitTitle);
   if (need.every((t) => tokenInFuzzy(t, hitToks))) return true;
   if (shortQuery || ov < 0.85) return false;
   const misses = need.filter((t) => !tokenInFuzzy(t, hitToks));
