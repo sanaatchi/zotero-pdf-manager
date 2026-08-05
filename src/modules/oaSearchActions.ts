@@ -214,10 +214,12 @@ async function attachOneHit(
   let itemYear = "";
   let itemAuthors = "";
   let itemKind = "";
+  let itemIsbn = "";
   try {
     itemTitle = String(item.getField("title") || item.getDisplayTitle() || "");
     itemDoi = String(item.getField("DOI") || "");
     itemYear = String(item.getField("date") || "");
+    itemIsbn = String(item.getField("ISBN") || "");
     itemKind = String(
       (Zotero.ItemTypes as any)?.getName?.(item.itemTypeID) || "",
     );
@@ -232,6 +234,7 @@ async function attachOneHit(
   const trusted = filterTrustedHits([hit], {
     title: itemTitle,
     doi: itemDoi,
+    isbn: itemIsbn,
     sourceId,
     year: itemYear,
     authors: itemAuthors,

@@ -1,4 +1,4 @@
-// @ajan: cursor · @etiket: katman-2, oa-pdf-bridge, title-trust, tr-fold, glued-token, libgen-gate, prefetch-bar
+// @ajan: cursor · @etiket: katman-2, oa-pdf-bridge, weighted-score, paren-subtitle, sarkiyatcilik, isbn-bypass
 /**
  * Katman-2 → Kutuphane köprü (8756) `oa_pdf_search` client.
  * Online PDF discovery runs in Python; this module only POSTs queries.
@@ -788,6 +788,13 @@ const TITLE_STOP_TRUST = new Set([
   "degerlendirme",
 ]);
 
+function stripTrailingParenSubtitle(raw: string): string {
+  // Must run on RAW text — foldedPhrase turns () into spaces.
+  return String(raw || "")
+    .replace(/\s*[\(（][^\)）]*[\)）]\s*$/u, "")
+    .trim();
+}
+
 function foldedPhrase(value: string): string {
   return (value || "")
     .normalize("NFKD")
@@ -802,7 +809,8 @@ function foldedPhrase(value: string): string {
 }
 
 function titleCorePhrase(value: string): string {
-  const s = foldedPhrase(value);
+  // Strip ``Title (subtitle)`` before fold so Şarkiyatçılık LibGen rows match.
+  let s = foldedPhrase(stripTrailingParenSubtitle(value));
   if (!s) return "";
   return s.split(/\s*[:;–—|/]\s+|\s+-\s+/)[0]!.trim();
 }
@@ -815,6 +823,7 @@ export function sameWorkTitle(query: string, title: string): boolean {
   const qCore = titleCorePhrase(query);
   const tCore = titleCorePhrase(title);
   if (qCore && tCore && qCore === tCore) return true;
+  // Dash / colon / slash subtitles (parens already handled via core).
   return (
     t.startsWith(`${q}:`) ||
     t.startsWith(`${q} -`) ||
@@ -1240,7 +1249,15 @@ export function filterTrustedHits(
         (hit.extra as Record<string, unknown> | undefined)?.title_overlap,
       );
       // Prefetch floor 0.7 — soft 0.5 matches fail content_validate later.
-      if (Number.isFinite(ovExtra) && ovExtra < 0.7 && !authorOkHit) {
+      // ISBN identity or same-work subtitle (Şarkiyatçılık (alt başlık)) may
+      // report honest Jaccard <0.7; do not drop those before titleTrustOk.
+      if (
+        Number.isFinite(ovExtra) &&
+        ovExtra < 0.7 &&
+        !authorOkHit &&
+        !isbnOkHit &&
+        !(itemTitle && hitTitle && sameWorkTitle(itemTitle, hitTitle))
+      ) {
         continue;
       }
       // Fabricated perfect overlap: adapter claims ≥0.99 but titles share

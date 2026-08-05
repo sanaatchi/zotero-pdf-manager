@@ -445,6 +445,38 @@ test("filterTrustedHits drops Dünya tarihi wrong chronicle LibGen hit", () => {
   assert.equal(trusted.length, 0);
 });
 
+test("filterTrustedHits keeps Şarkiyatçılık LibGen paren subtitle + ISBN", () => {
+  const { filterTrustedHits, sameWorkTitle } = loadBridge();
+  assert.equal(
+    sameWorkTitle(
+      "Şarkiyatçılık",
+      "Şarkiyatçılık (Batı'nın Şark Anlayışları)",
+    ),
+    true,
+  );
+  const trusted = filterTrustedHits(
+    [
+      {
+        source: "libgen",
+        title: "Şarkiyatçılık (Batı'nın Şark Anlayışları)",
+        pdfUrl: "https://example.com/said.pdf",
+        authors: "Edward Said",
+        year: "2013",
+        extra: { title_overlap: 0.5, isbn: "9789753422369" },
+      },
+    ],
+    {
+      title: "Şarkiyatçılık",
+      authors: "Edward W. Said; Berna Ülner",
+      isbn: "9789753422369",
+      year: "2013",
+      sourceId: "libgen",
+      kind: "book",
+    },
+  );
+  assert.equal(trusted.length, 1);
+});
+
 test("filterTrustedHits drops short Devlet with wrong author (thrash gate)", () => {
   const { filterTrustedHits } = loadBridge();
   const trusted = filterTrustedHits(
