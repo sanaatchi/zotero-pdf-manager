@@ -1,3 +1,4 @@
+// @ajan: cursor · @etiket: katman-2, tests, watch-root-parent
 const assert = require("node:assert/strict");
 const { test } = require("node:test");
 const path = require("node:path");
@@ -50,18 +51,30 @@ test("watch roots are de-duplicated case-insensitively", () => {
   ]);
 });
 
-test("ensurePathInWatchRoots appends Kütüphane Dışı path once", () => {
-  const { ensurePathInWatchRoots, DEFAULT_DISI_WATCH_ROOT } = loadModule();
-  const once = ensurePathInWatchRoots("", DEFAULT_DISI_WATCH_ROOT);
-  assert.equal(once, DEFAULT_DISI_WATCH_ROOT);
-  const twice = ensurePathInWatchRoots(once, DEFAULT_DISI_WATCH_ROOT);
-  assert.equal(twice, DEFAULT_DISI_WATCH_ROOT);
-  const withParent = ensurePathInWatchRoots(
-    "D:\\OneDrive\\1A_E_KAYNAKLARIM",
-    DEFAULT_DISI_WATCH_ROOT,
+test("ensurePathInWatchRoots appends default parent once", () => {
+  const { ensurePathInWatchRoots, DEFAULT_WATCH_ROOT } = loadModule();
+  const once = ensurePathInWatchRoots("", DEFAULT_WATCH_ROOT);
+  assert.equal(once, DEFAULT_WATCH_ROOT);
+  const twice = ensurePathInWatchRoots(once, DEFAULT_WATCH_ROOT);
+  assert.equal(twice, DEFAULT_WATCH_ROOT);
+});
+
+test("collapseNestedWatchRoots drops Dışı under parent", () => {
+  const {
+    collapseNestedWatchRoots,
+    normalizeDefaultWatchRoots,
+    DEFAULT_WATCH_ROOT,
+  } = loadModule();
+  const disi = `${DEFAULT_WATCH_ROOT}\\Kütüphane Dışı Kaynaklar`;
+  assert.equal(collapseNestedWatchRoots(`${DEFAULT_WATCH_ROOT};${disi}`), DEFAULT_WATCH_ROOT);
+  assert.equal(collapseNestedWatchRoots(disi), disi);
+  // migrate: Dışı-only → parent (covers all buckets/subfolders recursively)
+  assert.equal(normalizeDefaultWatchRoots(disi), DEFAULT_WATCH_ROOT);
+  assert.equal(normalizeDefaultWatchRoots(""), DEFAULT_WATCH_ROOT);
+  assert.equal(
+    normalizeDefaultWatchRoots(`E:\\Other;${disi}`),
+    `E:\\Other;${DEFAULT_WATCH_ROOT}`,
   );
-  assert.ok(withParent.includes("D:\\OneDrive\\1A_E_KAYNAKLARIM"));
-  assert.ok(withParent.includes(DEFAULT_DISI_WATCH_ROOT));
 });
 
 test("filesystem roots retain their required trailing separator", () => {

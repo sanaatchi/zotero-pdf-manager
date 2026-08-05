@@ -1,4 +1,4 @@
-// @ajan: cursor · @etiket: katman-2, folderIndex, disi-watch-root
+// @ajan: cursor · @etiket: katman-2, folderIndex, watch-root-parent
 import { getPref } from "../utils/prefs";
 import { parseFilenameMetadata } from "./filenameMetadata";
 import { readJsonOrQuarantine, writeJsonAtomic } from "../utils/atomicJson";
@@ -138,11 +138,14 @@ export function parseWatchRoots(raw: string): string[] {
 }
 
 /**
- * Default staging / external library root used for local PDF search.
- * Must stay in sync with prefs.js watchRoots default + preference migrate.
+ * Default local PDF search root (full OneDrive tree: Zotero / Kütüphane /
+ * Dışı buckets and nested folders). Indexing walks recursively up to
+ * MAX_WALK_DEPTH. Must stay in sync with prefs.js + preference migrate.
  */
-export const DEFAULT_DISI_WATCH_ROOT =
-  "D:\\OneDrive\\1A_E_KAYNAKLARIM\\Kütüphane Dışı Kaynaklar";
+export const DEFAULT_WATCH_ROOT = "D:\\OneDrive\\1A_E_KAYNAKLARIM";
+
+/** @deprecated Use DEFAULT_WATCH_ROOT — kept as alias for older callers. */
+export const DEFAULT_DISI_WATCH_ROOT = DEFAULT_WATCH_ROOT;
 
 /**
  * Append ``pathToAdd`` to a watchRoots string when not already listed
@@ -161,6 +164,41 @@ export function ensurePathInWatchRoots(
   }
   return parseWatchRoots([...roots, want].join(";")).join(";");
 }
+
+function watchRootKey(root: string): string {
+  return root.toLocaleLowerCase().replace(/[\\/]+$/, "");
+}
+
+/**
+ * Drop roots nested under another listed root (parent alone covers the tree).
+ * Example: parent + ``…\\Kütüphane Dışı Kaynaklar`` → parent only.
+ */
+export function collapseNestedWatchRoots(current: string): string {
+  const roots = parseWatchRoots(current || "");
+  const keys = roots.map(watchRootKey);
+  const kept = roots.filter((_root, i) => {
+    const key = keys[i];
+    if (!key) return false;
+    return !keys.some((other, j) => {
+      if (i === j || !other) return false;
+      return key.startsWith(`${other}\\`) || key.startsWith(`${other}/`);
+    });
+  });
+  return kept.join(";");
+}
+
+/**
+ * Ensure ``DEFAULT_WATCH_ROOT`` is listed and collapse nested children of it
+ * (or any parent/child pair). Used by preference migrate on upgrade.
+ */
+export function normalizeDefaultWatchRoots(current: string): string {
+  const withDefault = ensurePathInWatchRoots(
+    current || "",
+    DEFAULT_WATCH_ROOT,
+  );
+  return collapseNestedWatchRoots(withDefault);
+}
+
 export function mergeWatchRoots(
   configured: string[],
   linkedBase: string | null | undefined,

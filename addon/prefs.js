@@ -1,4 +1,4 @@
-// @ajan: cursor · @etiket: katman-2, prefs, arxiv-hidden
+// @ajan: cursor · @etiket: katman-2, prefs, watch-root-parent
 /* eslint-disable no-undef */
 pref("extensions.zotero.__addonRef__.enable", true);
 pref("extensions.zotero.__addonRef__.attachType", "linking");
@@ -89,11 +89,12 @@ pref(
   "extensions.zotero.__addonRef__.pdf.localFolder",
   "D:\\OneDrive\\1A_E_KAYNAKLARIM",
 );
-// Semicolon/newline-separated roots. Empty migrates from localFolder and
-// always ensures Kütüphane Dışı Kaynaklar is present (preferenceScript).
+// Semicolon/newline-separated roots. Empty migrates from localFolder;
+// migrate always ensures 1A_E_KAYNAKLARIM (recursive subfolders) and drops
+// nested children of that parent (preferenceScript + folderIndex).
 pref(
   "extensions.zotero.__addonRef__.pdf.watchRoots",
-  "D:\\OneDrive\\1A_E_KAYNAKLARIM\\Kütüphane Dışı Kaynaklar",
+  "D:\\OneDrive\\1A_E_KAYNAKLARIM",
 );
 pref("extensions.zotero.__addonRef__.pdf.useLinkedAttachmentBase", true);
 pref("extensions.zotero.__addonRef__.pdf.localAsLink", true);

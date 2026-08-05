@@ -1,12 +1,11 @@
-// @ajan: cursor · @etiket: katman-2, prefs, disi-watch-root
+// @ajan: cursor · @etiket: katman-2, prefs, watch-root-parent
 import { config } from "../../package.json";
 import { getString } from "../utils/locale";
 import { getPref, setPref } from "../utils/prefs";
 import { listenShortcut } from "../utils/shortcut";
 import {
   invalidateIndex,
-  ensurePathInWatchRoots,
-  DEFAULT_DISI_WATCH_ROOT,
+  normalizeDefaultWatchRoots,
 } from "./folderIndex";
 import {
   normalizeAddSettleMs,
@@ -196,11 +195,9 @@ function migratePDFWatchRoots() {
       roots = "";
     }
   }
-  // Always ensure Kütüphane Dışı Kaynaklar is a local search root.
-  const next = ensurePathInWatchRoots(
-    String(roots || ""),
-    DEFAULT_DISI_WATCH_ROOT,
-  );
+  // Parent 1A_E_KAYNAKLARIM covers all buckets/subfolders recursively;
+  // drop nested Dışı (or any child) when the parent is listed.
+  const next = normalizeDefaultWatchRoots(String(roots || ""));
   setPref("pdf.watchRoots", next);
   if (next !== String(roots || "").trim()) {
     try {

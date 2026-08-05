@@ -1,3 +1,4 @@
+// @ajan: cursor · @etiket: katman-2, tests, watch-root-parent
 const assert = require("node:assert/strict");
 const fs = require("node:fs");
 const path = require("node:path");
@@ -117,11 +118,15 @@ test("multi-root PDF indexing is exposed in preferences", () => {
 
   assert.match(
     prefs,
+    /pdf\.watchRoots",\s*"D:\\\\OneDrive\\\\1A_E_KAYNAKLARIM"/,
+  );
+  assert.doesNotMatch(
+    prefs,
     /pdf\.watchRoots",\s*"D:\\\\OneDrive\\\\1A_E_KAYNAKLARIM\\\\Kütüphane Dışı Kaynaklar"/,
   );
   assert.match(
     preferenceScript,
-    /DEFAULT_DISI_WATCH_ROOT|ensurePathInWatchRoots/,
+    /normalizeDefaultWatchRoots|DEFAULT_WATCH_ROOT|ensurePathInWatchRoots/,
   );
   assert.match(prefs, /pdf\.useLinkedAttachmentBase", true/);
   assert.match(prefs, /pdf\.localAsLink", true/);

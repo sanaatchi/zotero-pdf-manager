@@ -1,8 +1,8 @@
-<!-- @ajan: cursor · @etiket: katman-2, eksik-raporu, subtitle-core, seargeant-trust -->
+<!-- @ajan: cursor · @etiket: katman-2, eksik-raporu, watch-root-parent -->
 
 # Cursor — Katman 2 Eksikler Raporu
 
-**Tarih:** 2026-08-06 · **Sürüm:** PDF Manager **v1.0.103**  
+**Tarih:** 2026-08-06 · **Sürüm:** PDF Manager **v1.0.104**  
 **Analiz:** ürün ↔ `referanslar/katman-2/` ↔ GitHub (Attanger, Zotadata, Zoplicate,
 ZotAssets, File Utility, Attachment Scanner, ozefe/yoktez).
 
@@ -14,11 +14,12 @@ ZotAssets, File Utility, Attachment Scanner, ozefe/yoktez).
 | Gerçek açık iş?           | Checklist Bölüm B (kullanıcı) + isteğe bağlı P3 |
 | Yeni zorunlu XPI portu?   | **Yok** — GitHub taraması yeni P1 üretmedi      |
 
-### Son eklenen (v1.0.103)
+### Son eklenen (v1.0.104)
 
 | Madde                                         | Not                                                                                                        |
 | --------------------------------------------- | ---------------------------------------------------------------------------------------------------------- |
-| Seargeant alt başlık çekirdek trust           | LibGen kısa core + boş yazar; `titleCorePhrase` colon-before-fold; Devlet thrash korunur; köprü + XPI      |
+| Watch root = `1A_E_KAYNAKLARIM` (tüm altklasör) | Varsayılan + migrate parent; nested Dışı düşer; indeks recursive (`MAX_WALK_DEPTH` 8)                      |
+| Seargeant alt başlık çekirdek trust (v1.0.103)| LibGen kısa core + boş yazar; `titleCorePhrase` colon-before-fold; Devlet thrash korunur; köprü + XPI      |
 | LibGen başlık ISBN/edition/`b l` temizliği    | Adorno attach; `cleanLibgenTitle` + ISBN bypass (v1.0.102)                                                 |
 | 100’lük alan skoru + Şarkiyatçılık (v1.0.101) | Federated Σ(puan/100×kalite); paren sameWork; LibGen ov&lt;0.7 ISBN/same-work; OA attach ISBN              |
 | Uyumsuz PDF otomatik silme iptal (v1.0.100)   | mismatch → ek kalır + `#pdf-mismatch`; auto-detach yok; manuel audit onaylı detach                         |
