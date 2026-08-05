@@ -1,4 +1,4 @@
-// @ajan: cursor · @etiket: katman-2, oa-search, window, attach-fallback
+// @ajan: cursor · @etiket: katman-2, oa-search, window, multi-source
 /**
  * Independent OA Search popup (openDialog) — federated results + attach actions.
  * UX: kind-specific criteria forms, per-field active toggles, optional
@@ -7,6 +7,8 @@
  * Search runs only on Ara (or Enter in query fields) — never auto on open.
  * Ara never stays disabled during long bridge calls (generation supersede).
  * Concurrent downloads: status shows one segment per progressJob (not a single %).
+ * Multi-source: selected checkboxes are always sent as ``sources[]`` with
+ * ``source=all``; status prefers the longer of selected vs bridge sourcesQueried.
  */
 import { config } from "../../package.json";
 import { getPref, setPref } from "../utils/prefs";
@@ -629,7 +631,17 @@ function formatResultStatus(state: OaSearchWindowState): string {
     state.pdfOnly && raw !== n
       ? `${uiString("oa-search-results", { count: n })} (${raw} toplam)`
       : uiString("oa-search-results", { count: n });
-  const src = (state.meta.sourcesQueried || []).join(", ");
+  const selected = state.selectedSources || [];
+  const queried = state.meta.sourcesQueried || [];
+  // Prefer the longer list so a stale bridge that only returns phase1
+  // (e.g. ``[libgen]``) does not hide the user's multi-source selection.
+  const srcList =
+    queried.length >= selected.length && queried.length
+      ? queried
+      : selected.length
+        ? selected
+        : queried;
+  const src = srcList.join(", ");
   const errEntries = Object.entries(state.meta.errors || {});
   const errBits = errEntries
     .slice(0, 4)
@@ -1092,8 +1104,16 @@ async function runSearch(win: Window): Promise<void> {
       if (gen !== state.searchGeneration) return;
       const body = mergeFederatedBodies(bodies, sources);
       state.rawHits = Array.isArray(body.hits) ? body.hits : [];
+      const queried = body.sourcesQueried || [];
       state.meta = {
-        sourcesQueried: body.sourcesQueried || sources,
+        // Keep the full checkbox selection visible when the bridge only
+        // reports a phase1 subset (ISBN LibGen short-circuit on old builds).
+        sourcesQueried:
+          queried.length >= sources.length && queried.length
+            ? queried
+            : sources.length
+              ? sources.slice()
+              : queried,
         errors: body.errors || {},
       };
       applyHitFilter(state);

@@ -1,4 +1,4 @@
-// @ajan: cursor · @etiket: katman-2, tests, oa-search, arxiv-hidden
+// @ajan: cursor · @etiket: katman-2, tests, oa-search, multi-source
 const assert = require("node:assert/strict");
 const fs = require("node:fs");
 const path = require("node:path");
@@ -220,6 +220,8 @@ test("OA search surface: xhtml + menubar + locales + menu wiring", () => {
   assert.match(win, /renderSourcePicker/);
   assert.match(win, /persistSelectedSources/);
   assert.match(win, /oa-search-need-sources/);
+  assert.match(win, /sources,\s*\n\s*\}/);
+  assert.match(win, /profile:\s*"full"/);
   assert.match(
     win,
     /arama için gerekmez|selection is optional|Zotero selection is optional|gerekmez/,
