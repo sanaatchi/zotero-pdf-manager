@@ -448,10 +448,7 @@ test("filterTrustedHits drops Dünya tarihi wrong chronicle LibGen hit", () => {
 test("filterTrustedHits keeps Şarkiyatçılık LibGen paren subtitle + ISBN", () => {
   const { filterTrustedHits, sameWorkTitle } = loadBridge();
   assert.equal(
-    sameWorkTitle(
-      "Şarkiyatçılık",
-      "Şarkiyatçılık (Batı'nın Şark Anlayışları)",
-    ),
+    sameWorkTitle("Şarkiyatçılık", "Şarkiyatçılık (Batı'nın Şark Anlayışları)"),
     true,
   );
   const trusted = filterTrustedHits(
