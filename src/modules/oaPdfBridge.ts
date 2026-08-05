@@ -1,4 +1,4 @@
-// @ajan: cursor · @etiket: katman-2, oa-pdf-bridge, title-trust, book-review
+// @ajan: cursor · @etiket: katman-2, oa-pdf-bridge, title-trust, post-truth, hyphen-token
 /**
  * Katman-2 → Kutuphane köprü (8756) `oa_pdf_search` client.
  * Online PDF discovery runs in Python; this module only POSTs queries.
@@ -611,8 +611,21 @@ export function pdfUrlsFromHits(hits: OaPdfHit[]): string[] {
   return out;
 }
 
+function glueHyphenCompounds(value: string): string {
+  let prev = value;
+  for (let i = 0; i < 4; i++) {
+    const next = prev.replace(
+      /(\p{L}|\p{N})[\u2010\u2011\u2012\u2013\u2014\-]+(\p{L}|\p{N})/gu,
+      "$1$2",
+    );
+    if (next === prev) return next;
+    prev = next;
+  }
+  return prev;
+}
+
 function normTokens(value: string): string[] {
-  return (
+  return glueHyphenCompounds(
     (value || "")
       .normalize("NFKD")
       .replace(/\p{Mark}/gu, "")
@@ -620,11 +633,11 @@ function normTokens(value: string): string[] {
       .replace(/\u0131/g, "i")
       .replace(/\u0130/g, "i")
       .toLocaleLowerCase("tr")
-      .replace(/['`´\u2019]/g, " ")
-      .replace(/[^\p{L}\p{N}\s]/gu, " ")
-      .split(/\s+/)
-      .filter((w) => w.length > 3)
-  );
+      .replace(/['`´\u2019]/g, " "),
+  )
+    .replace(/[^\p{L}\p{N}\s]/gu, " ")
+    .split(/\s+/)
+    .filter((w) => w.length > 3);
 }
 
 function titleOverlap(a: string, b: string): number {
@@ -959,17 +972,15 @@ function titleTrustOk(
   if (shortQuery) {
     need = qToks.length ? qToks : normTokens(itemTitle);
     if (ov < 0.75) return false;
-    if (
-      muchLongerTitle(itemTitle, hitTitle) &&
-      !sameWorkTitle(itemTitle, hitTitle) &&
-      !authorYearStronglyMatch(
+    if (!sameWorkTitle(itemTitle, hitTitle)) {
+      const authorOk = authorYearStronglyMatch(
         opts.authors || "",
         opts.hitAuthors || "",
         opts.year || "",
         opts.hitYear || "",
-      )
-    ) {
-      return false;
+      );
+      if (jac < 0.6 && !authorOk) return false;
+      if (muchLongerTitle(itemTitle, hitTitle) && !authorOk) return false;
     }
   }
   if (!need.length) return ov >= 0.6;

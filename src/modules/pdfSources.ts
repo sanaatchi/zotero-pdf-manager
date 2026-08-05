@@ -1,4 +1,4 @@
-// @ajan: cursor · @etiket: katman-2, pdf-sources, no-dup-copy, link-reuse
+// @ajan: cursor · @etiket: katman-2, pdf-sources, no-dup-copy, local-validate, post-truth
 import { getString } from "../utils/locale";
 import { getPref } from "../utils/prefs";
 import {
@@ -1114,19 +1114,65 @@ export class LocalFolderSource implements PDFSource {
     // Same disk file must never get a second attachment on this parent
     // (and never be import-copied into Zotero storage from the watch root).
     const existing = await findParentLinkedPdfByPath(item, match.path);
-    if (existing) return existing;
+    if (existing) {
+      return this.finalizeLocalAttachment(item, existing, match.path);
+    }
     try {
-      return await (Zotero.Attachments as any).linkFromFile({
+      const attachment = await (Zotero.Attachments as any).linkFromFile({
         file: match.path,
         libraryID: item.libraryID,
         parentItemID: item.id,
         title: getString("pdf-attachment-title"),
         contentType: "application/pdf",
       });
+      if (!attachment) return null;
+      return this.finalizeLocalAttachment(item, attachment, match.path);
     } catch (e) {
+      rethrowAttachControlFlow(e);
+      if (isContentMismatchError(e)) throw e;
       ztoolkit.log("Local attach failed", e);
       return null;
     }
+  }
+
+  /**
+   * Filename match is not proof of content — a misnamed watch-root PDF
+   * (Keyes book name wrapping an Arendt/Ponce article) must not stick.
+   * Mismatch: detach the link only; disk file stays. Cascade may continue.
+   */
+  private async finalizeLocalAttachment(
+    item: Zotero.Item,
+    attachment: Zotero.Item,
+    diskPath: string,
+  ): Promise<Zotero.Item | null> {
+    if (getPref("pdf.validateContent") === false) return attachment;
+    const detailed = await validateAttachmentContentDetailed(
+      item,
+      attachment.id,
+    );
+    if (detailed.verdict === "match" || detailed.verdict === "skipped") {
+      await removeAutomationTag(item, "#pdf-review");
+      await removeAutomationTag(item, "#pdf-quarantine");
+      await removeAutomationTag(item, "#pdf-mismatch");
+      return attachment;
+    }
+    if (detailed.verdict === "unverifiable") {
+      await tagItem(item, "#pdf-review");
+      return attachment;
+    }
+    const cleaned = await cleanupRejectedAttachment({
+      attachment,
+      persistedPath: diskPath,
+      finalCreatedByThisRun: false,
+    });
+    if (cleaned !== "cleaned") {
+      await tagItem(item, "#pdf-mismatch");
+      await tagItem(item, "#pdf-review");
+      throw new AttachStoppedError("erase-failed", attachment);
+    }
+    throw new ContentMismatchError(
+      "Yerel PDF künye ile uyuşmuyor (yanlış dosya adı / başka eser)",
+    );
   }
 
   matchItem(item: Zotero.Item, index: IndexedFile[]): LocalMatchResult {

@@ -269,3 +269,43 @@ test("filterTrustedHits drops Avangard kuramı journal article", () => {
   assert.equal(trusted.length, 1);
   assert.equal(trusted[0].pdfUrl, "https://example.com/book.pdf");
 });
+
+test("filterTrustedHits drops post-truth era Arendt article", () => {
+  const { filterTrustedHits } = loadBridge();
+  const trusted = filterTrustedHits(
+    [
+      {
+        source: "doi",
+        title: "Hannah Arendt's Truth and Politics in the Post-Truth Era",
+        pdfUrl: "https://ssrn.com/abstract=3209057.pdf",
+        authors: "Marcelo F. Ponce",
+        year: "2018",
+        extra: { crossref_type: "journal-article" },
+      },
+      {
+        source: "libgen",
+        title: "Hannah Arendt's Truth and Politics in the Post-Truth Era",
+        pdfUrl: "https://example.com/ponce-libgen.pdf",
+        authors: "Marcelo F. Ponce",
+        year: "2018",
+      },
+      {
+        source: "libgen",
+        title:
+          "The Post-Truth Era: Dishonesty and Deception in Contemporary Life",
+        pdfUrl: "https://example.com/keyes-book.pdf",
+        authors: "Ralph Keyes",
+        year: "2013",
+        extra: { title_overlap: 1.0 },
+      },
+    ],
+    {
+      title: "The post-truth era",
+      kind: "book",
+      authors: "Ralph Keyes",
+      year: "2013",
+    },
+  );
+  assert.equal(trusted.length, 1);
+  assert.equal(trusted[0].pdfUrl, "https://example.com/keyes-book.pdf");
+});
