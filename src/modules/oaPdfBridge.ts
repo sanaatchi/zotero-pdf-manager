@@ -615,7 +615,7 @@ function glueHyphenCompounds(value: string): string {
   let prev = value;
   for (let i = 0; i < 4; i++) {
     const next = prev.replace(
-      /(\p{L}|\p{N})[\u2010\u2011\u2012\u2013\u2014\-]+(\p{L}|\p{N})/gu,
+      /(\p{L}|\p{N})[\u2010\u2011\u2012\u2013\u2014-]+(\p{L}|\p{N})/gu,
       "$1$2",
     );
     if (next === prev) return next;
