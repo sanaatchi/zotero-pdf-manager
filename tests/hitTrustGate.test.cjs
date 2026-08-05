@@ -392,3 +392,55 @@ test("filterTrustedHits drops LibGen hits with low title_overlap extra", () => {
   assert.equal(trusted.length, 1);
   assert.equal(trusted[0].pdfUrl, "https://example.com/right.pdf");
 });
+
+test("filterTrustedHits drops fabricated LibGen title_overlap 1.0 (Chinese ISBN set)", () => {
+  const { filterTrustedHits } = loadBridge();
+  const trusted = filterTrustedHits(
+    [
+      {
+        source: "libgen",
+        title: "人大社新闻传播学文库精选第一辑（套装共11册）",
+        pdfUrl: "https://example.com/cn-set.pdf",
+        extra: { title_overlap: 1.0, via: "json.php" },
+      },
+      {
+        source: "libgen",
+        title: "The Post-Truth Era",
+        pdfUrl: "https://example.com/keyes.pdf",
+        authors: "Ralph Keyes",
+        extra: { title_overlap: 1.0 },
+      },
+    ],
+    {
+      title: "The post-truth era",
+      authors: "Ralph Keyes",
+      isbn: "9781429976220",
+      sourceId: "libgen",
+      kind: "book",
+    },
+  );
+  assert.equal(trusted.length, 1);
+  assert.match(trusted[0].title, /Post-Truth/i);
+});
+
+test("filterTrustedHits drops Dünya tarihi wrong chronicle LibGen hit", () => {
+  const { filterTrustedHits } = loadBridge();
+  const trusted = filterTrustedHits(
+    [
+      {
+        source: "libgen",
+        title: "Dünya Tarihi: Kronolojik Zaman Çizelgeli",
+        pdfUrl: "https://example.com/wrong-chronicle.pdf",
+        authors: "Kolektif",
+        extra: { title_overlap: 1.2 },
+      },
+    ],
+    {
+      title: "Dünya tarihi",
+      authors: "William H. McNeill; Alaeddin Şenel",
+      sourceId: "libgen",
+      kind: "book",
+    },
+  );
+  assert.equal(trusted.length, 0);
+});

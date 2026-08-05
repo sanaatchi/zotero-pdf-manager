@@ -1,8 +1,8 @@
-<!-- @ajan: cursor · @etiket: katman-2, eksik-raporu, oa-search, multi-source, download-attach -->
+<!-- @ajan: cursor · @etiket: katman-2, eksik-raporu, oa-search, multi-source, download-attach, libgen-gate -->
 
 # Cursor — Katman 2 Eksikler Raporu
 
-**Tarih:** 2026-08-06 · **Sürüm:** PDF Manager **v1.0.96**  
+**Tarih:** 2026-08-06 · **Sürüm:** PDF Manager **v1.0.97**  
 **Analiz:** ürün ↔ `referanslar/katman-2/` ↔ GitHub (Attanger, Zotadata, Zoplicate,
 ZotAssets, File Utility, Attachment Scanner, ozefe/yoktez).
 
@@ -14,11 +14,12 @@ ZotAssets, File Utility, Attachment Scanner, ozefe/yoktez).
 | Gerçek açık iş?           | Checklist Bölüm B (kullanıcı) + isteğe bağlı P3 |
 | Yeni zorunlu XPI portu?   | **Yok** — GitHub taraması yeni P1 üretmedi      |
 
-### Son eklenen (v1.0.96)
+### Son eklenen (v1.0.97)
 
 | Madde                                         | Not                                                                                                        |
 | --------------------------------------------- | ---------------------------------------------------------------------------------------------------------- |
-| Download & attach yanlış PDF kapısı           | LibGen phase1 early-stop yok (yalnız DOI/Zenodo/PMC); yerel kısa başlık+unverifiable reject; köprü restart |
+| LibGen agresif eşleştirme kapısı              | Sahte ov=1.0 / ISBN false-friend / kısa TR başlık / tek-token; köprü restart + XPI                         |
+| Download & attach yanlış PDF kapısı (v1.0.96) | LibGen phase1 early-stop yok (yalnız DOI/Zenodo/PMC); yerel kısa başlık+unverifiable reject; köprü restart |
 | OA Search çoklu kaynak fan-out (v1.0.95)      | Checkbox N kaynak → hepsi sorgulanır (ISBN LibGen phase1 short-circuit yok); köprüyü de yeniden başlat     |
 | `#pdf-mismatch` yanlış PDF kapısı (v1.0.94)   | OA mismatch artık eki bırakmıyor (unlink+disk kalır); etiketli öğe «done» sayılmıyor; cascade devam        |
 | TR ALL-CAPS / yapışık başlık güveni (v1.0.93) | `toLocaleLowerCase("tr")` I→ı hatası + `_expand_glued_tokens` parity; DergiPark hit→attach                 |

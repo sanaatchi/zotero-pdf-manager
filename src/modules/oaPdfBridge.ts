@@ -1,4 +1,4 @@
-// @ajan: cursor · @etiket: katman-2, oa-pdf-bridge, title-trust, tr-fold, glued-token, libgen-overlap
+// @ajan: cursor · @etiket: katman-2, oa-pdf-bridge, title-trust, tr-fold, glued-token, libgen-gate
 /**
  * Katman-2 → Kutuphane köprü (8756) `oa_pdf_search` client.
  * Online PDF discovery runs in Python; this module only POSTs queries.
@@ -1000,16 +1000,25 @@ function titleTrustOk(
     (t) => t.length >= 7 && !TITLE_STOP_TRUST.has(t),
   );
   const shortQuery = qToks.length <= 3 || need.length <= 1;
+  const authorOk = authorYearStronglyMatch(
+    opts.authors || "",
+    opts.hitAuthors || "",
+    opts.year || "",
+    opts.hitYear || "",
+  );
   if (shortQuery) {
     need = qToks.length ? qToks : normTokens(itemTitle);
     if (ov < 0.75) return false;
-    if (!sameWorkTitle(itemTitle, hitTitle)) {
-      const authorOk = authorYearStronglyMatch(
-        opts.authors || "",
-        opts.hitAuthors || "",
-        opts.year || "",
-        opts.hitYear || "",
-      );
+    const same = sameWorkTitle(itemTitle, hitTitle);
+    // Generic short cores (Dünya tarihi / Devlet) matching a much longer
+    // subtitled row need author — rare ≥7-char anchors (posttruth) may keep
+    // the subtitle-of-same-work path without author.
+    if (same && muchLongerTitle(itemTitle, hitTitle)) {
+      const pool = qToks.length ? qToks : normTokens(itemTitle);
+      const hasRare = pool.some((t) => t.length >= 7);
+      if (!hasRare && !authorOk) return false;
+    }
+    if (!same) {
       if (jac < 0.6 && !authorOk) return false;
       if (muchLongerTitle(itemTitle, hitTitle) && !authorOk) return false;
     }
@@ -1166,16 +1175,38 @@ export function filterTrustedHits(
       scored.push({ hit, rank: 0.9 });
       continue;
     }
-    // LibGen historically set hit.title = query (always matches item title).
-    // Require Python title_overlap (row vs query) when titles look identical.
-    // Also reject when adapter reports a low overlap even if titles differ
-    // enough to limp past Jaccard (json.php used to hardcode 1.0).
+    // LibGen historically set hit.title = query (always matches item title)
+    // and json.php used to hardcode title_overlap=1.0 for any ISBN hit
+    // (Chinese false-friend sets, Spanish twins with 0 Jaccard).
+    // Require honest Python title_overlap AND client-side title trust.
     if (ctx.sourceId === "libgen" || hit.source === "libgen") {
       const ovExtra = Number(
         (hit.extra as Record<string, unknown> | undefined)?.title_overlap,
       );
       if (Number.isFinite(ovExtra) && ovExtra < 0.5) {
         continue;
+      }
+      // Fabricated perfect overlap: adapter claims ≥0.99 but titles share
+      // almost nothing (Chinese ISBN false-friend sets). Do NOT trip on
+      // same-work subtitles where scaled match_score dips below 0.45.
+      if (
+        Number.isFinite(ovExtra) &&
+        ovExtra >= 0.99 &&
+        itemTitle &&
+        hitTitle &&
+        titleOverlap(itemTitle, hitTitle) < 0.15 &&
+        !sameWorkTitle(itemTitle, hitTitle)
+      ) {
+        continue;
+      }
+      // Multi-token queries must share ≥2 content tokens (one-word bag noise).
+      const qToks = normTokens(itemTitle);
+      const hToks = new Set(normTokens(hitTitle));
+      if (qToks.length >= 2) {
+        const shared = qToks.filter((t) => hToks.has(t)).length;
+        if (shared < 2 && !(ovExtra >= 0.85)) {
+          continue;
+        }
       }
       if (
         itemTitle &&
@@ -1184,6 +1215,26 @@ export function filterTrustedHits(
           .toLowerCase() === itemTitle.trim().toLowerCase()
       ) {
         if (!(ovExtra >= 0.5)) {
+          continue;
+        }
+      }
+      // Books: when the item has authors, require author agreement unless
+      // title Jaccard is near-exact (LibGen bag-of-words + ISBN false friends).
+      const kindBook = ["book", "monograph"].includes(
+        String(ctx.kind || "")
+          .trim()
+          .toLowerCase()
+          .replace(/_/g, ""),
+      );
+      if (kindBook && (ctx.authors || "").trim()) {
+        const jacBook = titleOverlap(itemTitle, hitTitle);
+        const authorOkBook = authorYearStronglyMatch(
+          ctx.authors || "",
+          String(hit.authors || ""),
+          ctx.year || "",
+          String(hit.year || ""),
+        );
+        if (jacBook < 0.85 && !authorOkBook) {
           continue;
         }
       }
