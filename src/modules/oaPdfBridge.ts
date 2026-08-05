@@ -1387,7 +1387,12 @@ export function filterTrustedHits(
         const jacBook = titleOverlap(itemTitle, hitTitle);
         if (shortGeneric) {
           if (!authorOkHit && !isbnOkHit && !sameCoreOk) continue;
-        } else if (jacBook < 0.85 && !authorOkHit && !isbnOkHit && !sameCoreOk) {
+        } else if (
+          jacBook < 0.85 &&
+          !authorOkHit &&
+          !isbnOkHit &&
+          !sameCoreOk
+        ) {
           continue;
         } else if (
           jacBook >= 0.85 &&
