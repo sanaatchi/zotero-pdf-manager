@@ -16,28 +16,28 @@ ZotAssets, File Utility, Attachment Scanner, ozefe/yoktez).
 
 ### Son eklenen (v1.0.104)
 
-| Madde                                         | Not                                                                                                        |
-| --------------------------------------------- | ---------------------------------------------------------------------------------------------------------- |
+| Madde                                           | Not                                                                                                        |
+| ----------------------------------------------- | ---------------------------------------------------------------------------------------------------------- |
 | Watch root = `1A_E_KAYNAKLARIM` (tüm altklasör) | Varsayılan + migrate parent; nested Dışı düşer; indeks recursive (`MAX_WALK_DEPTH` 8)                      |
-| Seargeant alt başlık çekirdek trust (v1.0.103)| LibGen kısa core + boş yazar; `titleCorePhrase` colon-before-fold; Devlet thrash korunur; köprü + XPI      |
-| LibGen başlık ISBN/edition/`b l` temizliği    | Adorno attach; `cleanLibgenTitle` + ISBN bypass (v1.0.102)                                                 |
-| 100’lük alan skoru + Şarkiyatçılık (v1.0.101) | Federated Σ(puan/100×kalite); paren sameWork; LibGen ov&lt;0.7 ISBN/same-work; OA attach ISBN              |
-| Uyumsuz PDF otomatik silme iptal (v1.0.100)   | mismatch → ek kalır + `#pdf-mismatch`; auto-detach yok; manuel audit onaylı detach                         |
-| Doğru PDF false-positive / yeniden indir (99) | Güçlü başlıkta yazarsız match; LLM ezemez; rejectedUrls                                                    |
-| Prefetch bar / thrash kapısı (v1.0.98)        | Kısa başlık yazar zorunlu; LibGen ov≥0.7; sibling MD5 skip; köprü restart + XPI                            |
-| LibGen agresif eşleştirme kapısı (v1.0.97)    | Sahte ov=1.0 / ISBN false-friend / kısa TR başlık / tek-token; köprü restart + XPI                         |
-| Download & attach yanlış PDF kapısı (v1.0.96) | LibGen phase1 early-stop yok (yalnız DOI/Zenodo/PMC); yerel kısa başlık+unverifiable reject; köprü restart |
-| OA Search çoklu kaynak fan-out (v1.0.95)      | Checkbox N kaynak → hepsi sorgulanır (ISBN LibGen phase1 short-circuit yok); köprüyü de yeniden başlat     |
-| `#pdf-mismatch` yanlış PDF kapısı (v1.0.94)   | (süperseeded by 1.0.100 keep) eski: unlink+disk; etiketli «done» değildi                                   |
-| TR ALL-CAPS / yapışık başlık güveni (v1.0.93) | `toLocaleLowerCase("tr")` I→ı hatası + `_expand_glued_tokens` parity; DergiPark hit→attach                 |
-| Post-truth era yanlış makale (v1.0.92)        | Keyes kitabı ≠ Ponce/Arendt SSRN; kısa başlık Jaccard + tire birleşimi; yerel içerik doğrula               |
-| Yanlış kitap / inceleme / makale kapısı (91)  | Rengin≠İlkel; Sinema≠Deleuze tezi; book-review yok; Avangard≠makale                                        |
-| DOI paywall ipucu (v1.0.90)                   | «Açık PDF yok (ücretli/paywall)…» — köprü HTTP 500 crash metni yok                                         |
-| OA Search’ten arXiv çıkarıldı (v1.0.89)       | Kaynak chip / prefs checkbox / federated `full` yok; adapter CLI’da kalır                                  |
-| OA attach 502 fallback (v1.0.88)              | `X-OA-Fetch-Error`; doi 502 → diğer hit (DergiPark); çıplak HTTP 502 yok                                   |
-| İndirme raporu panoya kopyalanmaz             | Sekme / toast kalır; clipboard fallback kaldırıldı (v1.0.87)                                               |
-| İndirme raporu → OA JSONL (v1.0.86)           | `POST /pdf-search-log`; TR makale / tez kaçırma `cache/logs/oa_pdf_search/`                                |
-| OA Arama popup + menü çubuğu (v1.0.58)        | `PDF Manager → OA Arama…`; Attanger federated aynı pencere                                                 |
+| Seargeant alt başlık çekirdek trust (v1.0.103)  | LibGen kısa core + boş yazar; `titleCorePhrase` colon-before-fold; Devlet thrash korunur; köprü + XPI      |
+| LibGen başlık ISBN/edition/`b l` temizliği      | Adorno attach; `cleanLibgenTitle` + ISBN bypass (v1.0.102)                                                 |
+| 100’lük alan skoru + Şarkiyatçılık (v1.0.101)   | Federated Σ(puan/100×kalite); paren sameWork; LibGen ov&lt;0.7 ISBN/same-work; OA attach ISBN              |
+| Uyumsuz PDF otomatik silme iptal (v1.0.100)     | mismatch → ek kalır + `#pdf-mismatch`; auto-detach yok; manuel audit onaylı detach                         |
+| Doğru PDF false-positive / yeniden indir (99)   | Güçlü başlıkta yazarsız match; LLM ezemez; rejectedUrls                                                    |
+| Prefetch bar / thrash kapısı (v1.0.98)          | Kısa başlık yazar zorunlu; LibGen ov≥0.7; sibling MD5 skip; köprü restart + XPI                            |
+| LibGen agresif eşleştirme kapısı (v1.0.97)      | Sahte ov=1.0 / ISBN false-friend / kısa TR başlık / tek-token; köprü restart + XPI                         |
+| Download & attach yanlış PDF kapısı (v1.0.96)   | LibGen phase1 early-stop yok (yalnız DOI/Zenodo/PMC); yerel kısa başlık+unverifiable reject; köprü restart |
+| OA Search çoklu kaynak fan-out (v1.0.95)        | Checkbox N kaynak → hepsi sorgulanır (ISBN LibGen phase1 short-circuit yok); köprüyü de yeniden başlat     |
+| `#pdf-mismatch` yanlış PDF kapısı (v1.0.94)     | (süperseeded by 1.0.100 keep) eski: unlink+disk; etiketli «done» değildi                                   |
+| TR ALL-CAPS / yapışık başlık güveni (v1.0.93)   | `toLocaleLowerCase("tr")` I→ı hatası + `_expand_glued_tokens` parity; DergiPark hit→attach                 |
+| Post-truth era yanlış makale (v1.0.92)          | Keyes kitabı ≠ Ponce/Arendt SSRN; kısa başlık Jaccard + tire birleşimi; yerel içerik doğrula               |
+| Yanlış kitap / inceleme / makale kapısı (91)    | Rengin≠İlkel; Sinema≠Deleuze tezi; book-review yok; Avangard≠makale                                        |
+| DOI paywall ipucu (v1.0.90)                     | «Açık PDF yok (ücretli/paywall)…» — köprü HTTP 500 crash metni yok                                         |
+| OA Search’ten arXiv çıkarıldı (v1.0.89)         | Kaynak chip / prefs checkbox / federated `full` yok; adapter CLI’da kalır                                  |
+| OA attach 502 fallback (v1.0.88)                | `X-OA-Fetch-Error`; doi 502 → diğer hit (DergiPark); çıplak HTTP 502 yok                                   |
+| İndirme raporu panoya kopyalanmaz               | Sekme / toast kalır; clipboard fallback kaldırıldı (v1.0.87)                                               |
+| İndirme raporu → OA JSONL (v1.0.86)             | `POST /pdf-search-log`; TR makale / tez kaçırma `cache/logs/oa_pdf_search/`                                |
+| OA Arama popup + menü çubuğu (v1.0.58)          | `PDF Manager → OA Arama…`; Attanger federated aynı pencere                                                 |
 
 ---
 

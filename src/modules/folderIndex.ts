@@ -192,10 +192,7 @@ export function collapseNestedWatchRoots(current: string): string {
  * (or any parent/child pair). Used by preference migrate on upgrade.
  */
 export function normalizeDefaultWatchRoots(current: string): string {
-  const withDefault = ensurePathInWatchRoots(
-    current || "",
-    DEFAULT_WATCH_ROOT,
-  );
+  const withDefault = ensurePathInWatchRoots(current || "", DEFAULT_WATCH_ROOT);
   return collapseNestedWatchRoots(withDefault);
 }
 

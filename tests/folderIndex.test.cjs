@@ -66,7 +66,10 @@ test("collapseNestedWatchRoots drops Dışı under parent", () => {
     DEFAULT_WATCH_ROOT,
   } = loadModule();
   const disi = `${DEFAULT_WATCH_ROOT}\\Kütüphane Dışı Kaynaklar`;
-  assert.equal(collapseNestedWatchRoots(`${DEFAULT_WATCH_ROOT};${disi}`), DEFAULT_WATCH_ROOT);
+  assert.equal(
+    collapseNestedWatchRoots(`${DEFAULT_WATCH_ROOT};${disi}`),
+    DEFAULT_WATCH_ROOT,
+  );
   assert.equal(collapseNestedWatchRoots(disi), disi);
   // migrate: Dışı-only → parent (covers all buckets/subfolders recursively)
   assert.equal(normalizeDefaultWatchRoots(disi), DEFAULT_WATCH_ROOT);

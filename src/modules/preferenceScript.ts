@@ -3,10 +3,7 @@ import { config } from "../../package.json";
 import { getString } from "../utils/locale";
 import { getPref, setPref } from "../utils/prefs";
 import { listenShortcut } from "../utils/shortcut";
-import {
-  invalidateIndex,
-  normalizeDefaultWatchRoots,
-} from "./folderIndex";
+import { invalidateIndex, normalizeDefaultWatchRoots } from "./folderIndex";
 import {
   normalizeAddSettleMs,
   normalizePeriodicMinutes,
