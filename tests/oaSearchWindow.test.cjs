@@ -47,7 +47,10 @@ test("createItemFieldsFromHit maps DOI article and ISBN book", () => {
   } = loadActions();
 
   assert.equal(isRetryableOaFetchError("oa_pdf fetch doi: HTTP 502"), true);
-  assert.equal(isRetryableOaFetchError("downloadAndAttach returned null (disk/link)"), false);
+  assert.equal(
+    isRetryableOaFetchError("downloadAndAttach returned null (disk/link)"),
+    false,
+  );
   const fallbacks = fallbackHitsForAttach(
     { source: "doi", pdfUrl: "https://a.example/a.pdf", title: "A" },
     [
