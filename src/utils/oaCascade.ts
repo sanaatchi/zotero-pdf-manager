@@ -1,7 +1,8 @@
-// @ajan: cursor · @etiket: katman-2, p2, oa-cascade, testable
+// @ajan: cursor · @etiket: katman-2, p2, oa-cascade, content-mismatch-continue
 /**
  * Pure automatic OA cascade loop (no Zotero globals).
  * Stops on AttachStoppedError / RunAbortedError; skips once hasPDF is true.
+ * ContentMismatchError is soft-fail via onSourceError — cascade continues.
  */
 
 export type CascadeSourceLike = {

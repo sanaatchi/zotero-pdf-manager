@@ -1,6 +1,7 @@
-// @ajan: cursor · @etiket: katman-2, pdfDownload, paywall-hint
+// @ajan: cursor · @etiket: katman-2, pdfDownload, pdf-mismatch-detach, paywall-hint
 import {
   ALL_SOURCES,
+  cleanupRejectedAttachment,
   downloadAndAttach,
   ensureDOI,
   isAttachStoppedError,
@@ -39,6 +40,8 @@ import {
   fallbackCascadeMessage,
   type CascadeMissHints,
 } from "../utils/oaCascadeMiss";
+
+const PDF_MISMATCH_TAG = "#pdf-mismatch";
 
 export {
   resolveOaDownloadsDir,
@@ -165,6 +168,50 @@ function hasPDFAttachment(item: Zotero.Item): boolean {
   });
 }
 
+/** True when the parent already carries `#pdf-mismatch` (wrong PDF linked). */
+export function itemHasPdfMismatchTag(item: Zotero.Item): boolean {
+  try {
+    return !!item.hasTag?.(PDF_MISMATCH_TAG);
+  } catch {
+    return false;
+  }
+}
+
+/**
+ * Successful attach gate for skip/cascade: a mismatch-tagged item is NOT done
+ * even if a PDF attachment still exists (wrong file must not block retry).
+ */
+export function hasAcceptedPdfAttachment(item: Zotero.Item): boolean {
+  if (!hasPDFAttachment(item)) return false;
+  if (itemHasPdfMismatchTag(item)) return false;
+  return true;
+}
+
+/**
+ * Before retrying cascade on a `#pdf-mismatch` item, detach linked PDFs so a
+ * second wrong file is never stacked. Disk copies stay (cleanupRejectedAttachment).
+ */
+export async function detachMismatchPdfAttachments(
+  item: Zotero.Item,
+): Promise<number> {
+  if (!itemHasPdfMismatchTag(item) || !hasPDFAttachment(item)) return 0;
+  let detached = 0;
+  for (const id of [...item.getAttachments()]) {
+    const att = Zotero.Items.get(id) as Zotero.Item | undefined;
+    if (!att || att.attachmentContentType !== "application/pdf") continue;
+    try {
+      const cleaned = await cleanupRejectedAttachment({
+        attachment: att,
+        finalCreatedByThisRun: false,
+      });
+      if (cleaned === "cleaned") detached++;
+    } catch (e) {
+      ztoolkit.log("detach mismatch PDF failed", item.id, e);
+    }
+  }
+  return detached;
+}
+
 /**
  * Automatic OA-only fallback. Deliberately excludes Sci-Hub, LibGen,
  * institutional proxies, YÖKTEZ and ProQuest even when those manual sources
@@ -174,7 +221,9 @@ export async function tryAutomaticOnlineSources(
   item: Zotero.Item,
 ): Promise<AutomaticOnlineResult | null> {
   throwIfRunAborted();
-  if (hasPDFAttachment(item)) return null;
+  if (hasAcceptedPdfAttachment(item)) return null;
+  // Wrong PDF still linked under #pdf-mismatch — drop the link before retry.
+  await detachMismatchPdfAttachments(item);
   if (!isFolderIndexComplete()) {
     const meta = getLastIndexBuildMeta();
     ztoolkit.log(
@@ -191,7 +240,7 @@ export async function tryAutomaticOnlineSources(
     item,
     sources as CascadeSourceLike[],
     {
-      hasPDF: hasPDFAttachment as (item: unknown) => boolean,
+      hasPDF: hasAcceptedPdfAttachment as (item: unknown) => boolean,
       throwIfAborted: throwIfRunAborted,
       afterAttach: async (parent, attachment, id) => {
         const next = attachment as Zotero.Item;
@@ -199,6 +248,14 @@ export async function tryAutomaticOnlineSources(
         return next;
       },
       onSourceError: (id, e) => {
+        if (isContentMismatchError(e)) {
+          attempts.push({
+            source: id,
+            outcome: "rejected",
+            reason: e instanceof Error ? e.message : String(e),
+          });
+          return;
+        }
         attempts.push({
           source: id,
           outcome: "error",
@@ -337,7 +394,7 @@ export async function downloadPdfForSelectedItems() {
 
   const outcomes = await mapPool(items, CONCURRENCY, async (item) => {
     const title = item.getDisplayTitle();
-    if (skipExisting && hasPDFAttachment(item)) {
+    if (skipExisting && hasAcceptedPdfAttachment(item)) {
       return {
         skipped: true,
         report: {
@@ -349,6 +406,8 @@ export async function downloadPdfForSelectedItems() {
         },
       };
     }
+    // #pdf-mismatch + wrong PDF: unlink before cascade so we never stack a second wrong file.
+    await detachMismatchPdfAttachments(item);
 
     await ensureDOI(item);
 

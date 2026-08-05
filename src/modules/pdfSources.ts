@@ -1,4 +1,4 @@
-// @ajan: cursor · @etiket: katman-2, pdf-sources, no-dup-copy, local-validate, post-truth
+// @ajan: cursor · @etiket: katman-2, pdf-sources, pdf-mismatch-detach, local-validate, post-truth
 import { getString } from "../utils/locale";
 import { getPref } from "../utils/prefs";
 import {
@@ -398,14 +398,15 @@ function scoreText(item: Zotero.Item, rawText: string): number {
  * metadata.
  *
  * - match: extractable text supports the item
- * - mismatch: extractable text conflicts — **keep** attachment; tag
- *   `#pdf-mismatch` + `#pdf-review` (never auto-erase on download)
+ * - mismatch: extractable text conflicts — **detach link** (disk kept /
+ *   renamed); tag `#pdf-mismatch` + `#pdf-review`; cascade continues for a
+ *   better PDF (local + OA download share this gate)
  * - unverifiable: too little extractable text / PDFWorker failure — **keep**
  *   attachment and tag `#pdf-review`
  * - skipped: validation pref off
  *
  * Books: ISBN/DOI conflict → mismatch. Strong title/score or ISBN match → keep.
- * Manual content-audit menu may still detach when the user confirms.
+ * Manual content-audit menu can still scan already-linked wrong files.
  */
 export type ContentValidation =
   "match" | "mismatch" | "unverifiable" | "skipped";
@@ -896,7 +897,7 @@ export async function downloadAndAttach(
   }
 
   if (opts.validate !== false) {
-    const { verdict } = await validateAttachmentContentDetailed(
+    const { verdict, pdfText } = await validateAttachmentContentDetailed(
       item,
       attachment.id,
     );
@@ -914,13 +915,24 @@ export async function downloadAndAttach(
       await tagItem(item, "#pdf-review");
       return attachment;
     }
-    // mismatch: keep attachment; tag for review (no eraseTx on auto-download).
+    // mismatch: detach link (disk stays); never treat wrong PDF as success.
     ztoolkit.log(
-      `PDF content mismatch for ${item.id} — keeping attachment (#pdf-mismatch)`,
+      `PDF content mismatch for ${item.id} — detaching link (#pdf-mismatch)`,
     );
+    const cleaned = await cleanupRejectedAttachment({
+      attachment,
+      persistedPath,
+      finalCreatedByThisRun,
+      pdfText,
+    });
     await tagItem(item, "#pdf-mismatch");
     await tagItem(item, "#pdf-review");
-    return attachment;
+    if (cleaned !== "cleaned") {
+      throw new AttachStoppedError("erase-failed", attachment);
+    }
+    throw new ContentMismatchError(
+      "İndirilen PDF künye ile uyuşmuyor (yanlış eser)",
+    );
   }
   return attachment;
 }
