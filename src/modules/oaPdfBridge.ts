@@ -791,7 +791,7 @@ const TITLE_STOP_TRUST = new Set([
 function stripTrailingParenSubtitle(raw: string): string {
   // Must run on RAW text — foldedPhrase turns () into spaces.
   return String(raw || "")
-    .replace(/\s*[\(（][^\)）]*[\)）]\s*$/u, "")
+    .replace(/\s*[（(][^）)]*[）)]\s*$/u, "")
     .trim();
 }
 
@@ -810,7 +810,7 @@ function foldedPhrase(value: string): string {
 
 function titleCorePhrase(value: string): string {
   // Strip ``Title (subtitle)`` before fold so Şarkiyatçılık LibGen rows match.
-  let s = foldedPhrase(stripTrailingParenSubtitle(value));
+  const s = foldedPhrase(stripTrailingParenSubtitle(value));
   if (!s) return "";
   return s.split(/\s*[:;–—|/]\s+|\s+-\s+/)[0]!.trim();
 }
