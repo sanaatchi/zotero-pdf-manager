@@ -1,4 +1,4 @@
-// @ajan: cursor · @etiket: katman-2, oa-pdf-bridge, arxiv-hidden
+// @ajan: cursor · @etiket: katman-2, oa-pdf-bridge, title-trust, book-review
 /**
  * Katman-2 → Kutuphane köprü (8756) `oa_pdf_search` client.
  * Online PDF discovery runs in Python; this module only POSTs queries.
@@ -654,13 +654,22 @@ function titleContainment(needle: string, haystack: string): number {
  */
 function titleMatchScore(a: string, b: string): number {
   const jac = titleOverlap(a, b);
-  const cAb = titleContainment(a, b);
+  let cAb = titleContainment(a, b);
   const ta = normTokens(a);
   const tb = normTokens(b);
   const cBa =
     tb.length && ta.length && tb.length >= ta.length
       ? titleContainment(b, a)
       : 0;
+  if (
+    ta.length &&
+    tb.length &&
+    cAb > jac &&
+    muchLongerTitle(a, b) &&
+    !sameWorkTitle(a, b)
+  ) {
+    cAb *= ta.length / Math.max(tb.length, 1);
+  }
   return Math.max(jac, cAb, cBa);
 }
 
@@ -735,8 +744,212 @@ const TITLE_STOP_TRUST = new Set([
   "degerlendirme",
 ]);
 
-function titleTrustOk(itemTitle: string, hitTitle: string): boolean {
-  const ov = titleMatchScore(itemTitle, hitTitle);
+function foldedPhrase(value: string): string {
+  return (value || "")
+    .normalize("NFKD")
+    .replace(/\p{Mark}/gu, "")
+    .replace(/\u0131/g, "i")
+    .replace(/\u0130/g, "i")
+    .toLocaleLowerCase("tr")
+    .replace(/['`´\u2019]/g, " ")
+    .replace(/[^\p{L}\p{N}\s]/gu, " ")
+    .replace(/\s+/g, " ")
+    .trim();
+}
+
+function titleCorePhrase(value: string): string {
+  const s = foldedPhrase(value);
+  if (!s) return "";
+  return s.split(/\s*[:;–—|/]\s+|\s+-\s+/)[0]!.trim();
+}
+
+export function sameWorkTitle(query: string, title: string): boolean {
+  const q = foldedPhrase(query);
+  const t = foldedPhrase(title);
+  if (!q || !t) return false;
+  if (q === t) return true;
+  const qCore = titleCorePhrase(query);
+  const tCore = titleCorePhrase(title);
+  if (qCore && tCore && qCore === tCore) return true;
+  return (
+    t.startsWith(`${q}:`) ||
+    t.startsWith(`${q} -`) ||
+    t.startsWith(`${q} –`) ||
+    t.startsWith(`${q} —`) ||
+    t.startsWith(`${q} / `) ||
+    q.startsWith(`${t}:`) ||
+    q.startsWith(`${t} -`) ||
+    q.startsWith(`${t} –`) ||
+    q.startsWith(`${t} —`) ||
+    q.startsWith(`${t} / `)
+  );
+}
+
+function contentTokenCount(text: string): number {
+  return normTokens(text).filter((t) => !TITLE_STOP_TRUST.has(t)).length;
+}
+
+export function muchLongerTitle(query: string, title: string): boolean {
+  const qn = contentTokenCount(query);
+  const tn = contentTokenCount(title);
+  if (!qn || tn <= qn) return false;
+  if (qn <= 3) return tn >= qn + 3;
+  return tn > Math.max(qn + 4, Math.floor(qn * 1.8) + 1);
+}
+
+function authorYearStronglyMatch(
+  queryAuthors: string,
+  hitAuthors: string,
+  queryYear = "",
+  hitYear = "",
+): boolean {
+  const qa = String(queryAuthors || "").trim();
+  const ha = String(hitAuthors || "").trim();
+  if (!qa || !ha) return false;
+  const qToks = new Set(normTokens(qa).filter((t) => t.length >= 4));
+  const hToks = new Set(normTokens(ha).filter((t) => t.length >= 4));
+  if (!qToks.size || !hToks.size || ![...qToks].some((t) => hToks.has(t))) {
+    return false;
+  }
+  const qy = yearToken(queryYear);
+  const hy = yearToken(hitYear);
+  if (qy && hy && Math.abs(Number(qy) - Number(hy)) > 1) return false;
+  return true;
+}
+
+const REVIEW_TITLE_RE =
+  /^\s*(?:book\s+reviews?|review\s+essay|review\s+of|reviews?)\b|\bbook\s+reviews?\b|\(\s*reviews?\s*\)|\breviewed\s+by\b|\bkitap\s+(?:incelemesi|ele[sş]tirisi)\b/i;
+
+export function queryLooksLikeReview(query: string, kind = ""): boolean {
+  const k = String(kind || "")
+    .trim()
+    .toLowerCase()
+    .replace(/_/g, "-");
+  if (k === "review" || k === "book-review" || k === "bookreview") return true;
+  return REVIEW_TITLE_RE.test(String(query || ""));
+}
+
+export function isBookReviewHit(
+  title: string,
+  extra?: Record<string, unknown> | null,
+): boolean {
+  const typeBits = [
+    extra?.crossref_type,
+    extra?.type,
+    extra?.workType,
+    extra?.work_type,
+    extra?.openalex_type,
+    extra?.genre,
+  ];
+  for (const raw of typeBits) {
+    const tl = String(raw || "")
+      .trim()
+      .toLowerCase()
+      .replace(/[_\s]+/g, "-");
+    if (!tl) continue;
+    if (
+      tl === "book-review" ||
+      tl === "bookreview" ||
+      tl === "review" ||
+      tl === "reviews" ||
+      tl === "review-article" ||
+      tl.includes("book-review")
+    ) {
+      return true;
+    }
+  }
+  if (REVIEW_TITLE_RE.test(String(title || ""))) return true;
+  const containers = [
+    extra?.containerTitle,
+    extra?.container_title,
+    extra?.publication,
+    extra?.journal,
+    extra?.["container-title"],
+  ];
+  for (const c of containers) {
+    const cl = String(c || "");
+    if (/\bbook\s+reviews?\b/i.test(cl)) return true;
+    if (/\breviews?\s+(?:section|supplement)\b/i.test(cl)) return true;
+  }
+  return false;
+}
+
+export function isJournalArticleHit(
+  extra?: Record<string, unknown> | null,
+  source = "",
+): boolean {
+  const bits = [
+    extra?.crossref_type,
+    extra?.type,
+    extra?.openalex_type,
+    extra?.workType,
+    extra?.work_type,
+    extra?.genre,
+    extra?.itemType,
+  ];
+  let seenBook = false;
+  for (const raw of bits) {
+    const tl = String(raw || "")
+      .trim()
+      .toLowerCase()
+      .replace(/[_\s]+/g, "-");
+    if (!tl) continue;
+    if (
+      tl === "book" ||
+      tl === "monograph" ||
+      tl === "edited-book" ||
+      tl === "book-chapter" ||
+      tl === "book-section" ||
+      tl === "booksection"
+    ) {
+      seenBook = true;
+    }
+    if (
+      tl === "journal-article" ||
+      tl === "journalarticle" ||
+      tl === "article" ||
+      tl === "proceedings-article" ||
+      tl === "conference-paper" ||
+      tl === "conferencepaper"
+    ) {
+      return true;
+    }
+  }
+  if (seenBook) return false;
+  const src = String(source || extra?.source || "")
+    .trim()
+    .toLowerCase();
+  if (src === "dergipark" || src === "pmc") return true;
+  const cont = String(
+    extra?.containerTitle ||
+      extra?.journal ||
+      extra?.publication ||
+      extra?.["container-title"] ||
+      "",
+  ).trim();
+  if (cont && ["doi", "s2", "openaire", "core"].includes(src)) return true;
+  return false;
+}
+
+function titleTrustOk(
+  itemTitle: string,
+  hitTitle: string,
+  opts: {
+    authors?: string;
+    hitAuthors?: string;
+    year?: string;
+    hitYear?: string;
+  } = {},
+): boolean {
+  const jac = titleOverlap(itemTitle, hitTitle);
+  const cAb = titleContainment(itemTitle, hitTitle);
+  const ta = normTokens(itemTitle);
+  const tb = normTokens(hitTitle);
+  const cBa =
+    tb.length && ta.length && tb.length >= ta.length
+      ? titleContainment(hitTitle, itemTitle)
+      : 0;
+  const ov = Math.max(jac, cAb, cBa);
   if (ov < 0.45) return false;
   const qToks = normTokens(itemTitle).filter((t) => !TITLE_STOP_TRUST.has(t));
   let need = normTokens(itemTitle).filter(
@@ -746,6 +959,18 @@ function titleTrustOk(itemTitle: string, hitTitle: string): boolean {
   if (shortQuery) {
     need = qToks.length ? qToks : normTokens(itemTitle);
     if (ov < 0.75) return false;
+    if (
+      muchLongerTitle(itemTitle, hitTitle) &&
+      !sameWorkTitle(itemTitle, hitTitle) &&
+      !authorYearStronglyMatch(
+        opts.authors || "",
+        opts.hitAuthors || "",
+        opts.year || "",
+        opts.hitYear || "",
+      )
+    ) {
+      return false;
+    }
   }
   if (!need.length) return ov >= 0.6;
   const hitToks = new Set(normTokens(hitTitle));
@@ -789,6 +1014,8 @@ export type HitTrustContext = {
   sourceId?: string;
   /** Soft year gate (Download & attach / OA criteria). */
   year?: string;
+  authors?: string;
+  kind?: string;
 };
 
 function yearToken(raw: string): string {
@@ -813,6 +1040,47 @@ export function filterTrustedHits(
   for (const hit of hits || []) {
     const url = String(hit.pdfUrl || "").trim();
     if (!url) continue;
+    const hitTitle = String(hit.title || "");
+    const extra = (hit.extra || {}) as Record<string, unknown>;
+    if (
+      isBookReviewHit(hitTitle, extra) &&
+      !queryLooksLikeReview(itemTitle, ctx.kind)
+    ) {
+      const k = String(ctx.kind || "")
+        .trim()
+        .toLowerCase()
+        .replace(/_/g, "");
+      const hitDoiEarly = normalizeDOI(String(hit.doi || ""));
+      const sameDoi = !!(itemDoi && hitDoiEarly && itemDoi === hitDoiEarly);
+      if (!sameDoi || k === "book" || k === "booksection" || k === "thesis") {
+        continue;
+      }
+    }
+    const kindNorm = String(ctx.kind || "")
+      .trim()
+      .toLowerCase()
+      .replace(/_/g, "");
+    if (
+      (kindNorm === "book" || kindNorm === "monograph") &&
+      isJournalArticleHit(extra, String(hit.source || ""))
+    ) {
+      const hitDoiBook = normalizeDOI(String(hit.doi || ""));
+      const sameDoiBook = !!(itemDoi && hitDoiBook && itemDoi === hitDoiBook);
+      const strongBook =
+        titleTrustOk(itemTitle, hitTitle, {
+          authors: ctx.authors || "",
+          hitAuthors: String(hit.authors || ""),
+          year: ctx.year || "",
+          hitYear: String(hit.year || ""),
+        }) &&
+        authorYearStronglyMatch(
+          ctx.authors || "",
+          String(hit.authors || ""),
+          ctx.year || "",
+          String(hit.year || ""),
+        );
+      if (!sameDoiBook && !strongBook) continue;
+    }
     if (wantYear) {
       const hitYear = yearToken(
         String(hit.year || "") || String((hit.extra as any)?.year || ""),
@@ -824,12 +1092,21 @@ export function filterTrustedHits(
     }
     const hitDoi = normalizeDOI(String(hit.doi || ""));
     const doiMatch = !!(itemDoi && hitDoi && itemDoi === hitDoi);
-    const hitTitle = String(hit.title || "");
+    const trustOpts = {
+      authors: ctx.authors || "",
+      hitAuthors: String(hit.authors || ""),
+      year: ctx.year || "",
+      hitYear: String(hit.year || ""),
+    };
     const ov = titleMatchScore(itemTitle, hitTitle);
     // DOI match is not enough alone: a wrong DOI on the item (or Unpaywall
     // returning another Golub paper) must still pass the title gate.
     if (doiMatch) {
-      if (itemTitle && hitTitle && !titleTrustOk(itemTitle, hitTitle)) {
+      if (
+        itemTitle &&
+        hitTitle &&
+        !titleTrustOk(itemTitle, hitTitle, trustOpts)
+      ) {
         continue;
       }
       scored.push({ hit, rank: 1 + ov });
@@ -837,7 +1114,11 @@ export function filterTrustedHits(
     }
     // Sci-Hub is DOI-keyed; still require title when both sides have one.
     if (ctx.sourceId === "scihub" && itemDoi) {
-      if (itemTitle && hitTitle && !titleTrustOk(itemTitle, hitTitle)) {
+      if (
+        itemTitle &&
+        hitTitle &&
+        !titleTrustOk(itemTitle, hitTitle, trustOpts)
+      ) {
         continue;
       }
       scored.push({ hit, rank: 0.9 });
@@ -859,7 +1140,10 @@ export function filterTrustedHits(
         continue;
       }
     }
-    if (itemTitle && titleTrustOk(itemTitle, String(hit.title || ""))) {
+    if (
+      itemTitle &&
+      titleTrustOk(itemTitle, String(hit.title || ""), trustOpts)
+    ) {
       scored.push({ hit, rank: ov });
       continue;
     }

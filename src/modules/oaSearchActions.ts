@@ -1,11 +1,12 @@
-// @ajan: cursor · @etiket: katman-2, oa-search, actions, paywall-hint
+// @ajan: cursor · @etiket: katman-2, oa-search, actions, title-trust, book-review
 /**
  * OA Search popup actions: attach hit PDF, create item from hit, Related Items.
  * Pure field mapping is unit-tested; Zotero I/O stays async.
- * User-picked hits skip content validation (same trust as manual URL paste).
+ * User-picked hits still pass title/review gate; PDF-text validation stays off
+ * (same as manual URL paste) after a trusted hit is chosen.
  */
 import type { OaPdfHit } from "./oaPdfBridge";
-import { fetchOaPdfViaBridge } from "./oaPdfBridge";
+import { fetchOaPdfViaBridge, filterTrustedHits } from "./oaPdfBridge";
 
 export type CreatorField = {
   firstName: string;
@@ -208,6 +209,40 @@ async function attachOneHit(
     return { ok: false, error: "no pdfUrl/landingUrl on hit" };
   }
   const sourceId = String(hit.source || "oa").trim() || "oa";
+  let itemTitle = "";
+  let itemDoi = "";
+  let itemYear = "";
+  let itemAuthors = "";
+  let itemKind = "";
+  try {
+    itemTitle = String(item.getField("title") || item.getDisplayTitle() || "");
+    itemDoi = String(item.getField("DOI") || "");
+    itemYear = String(item.getField("date") || "");
+    itemKind = String(
+      (Zotero.ItemTypes as any)?.getName?.(item.itemTypeID) || "",
+    );
+    itemAuthors = ((item.getCreators() as any[]) || [])
+      .slice(0, 6)
+      .map((c) => `${c.firstName || ""} ${c.lastName || c.name || ""}`.trim())
+      .filter(Boolean)
+      .join("; ");
+  } catch {
+    itemTitle = String(item.getDisplayTitle?.() || "");
+  }
+  const trusted = filterTrustedHits([hit], {
+    title: itemTitle,
+    doi: itemDoi,
+    sourceId,
+    year: itemYear,
+    authors: itemAuthors,
+    kind: itemKind,
+  });
+  if (!trusted.length) {
+    return {
+      ok: false,
+      error: "aday kitap incelemesi veya başlık künye ile uyuşmuyor",
+    };
+  }
   const { downloadAndAttach, rethrowAttachControlFlow } =
     await import("./pdfSources");
   const extraBase = {

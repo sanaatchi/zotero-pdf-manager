@@ -18,7 +18,10 @@ function loadActions() {
   const module = { exports: {} };
   const req = (id) => {
     if (id.includes("oaPdfBridge")) {
-      return { fetchOaPdfViaBridge: async () => null };
+      return {
+        fetchOaPdfViaBridge: async () => null,
+        filterTrustedHits: (hits) => hits,
+      };
     }
     if (id.includes("pdfSources")) {
       return {

@@ -161,3 +161,111 @@ test("filterTrustedHits drops Eğitim Örgütlerinde Makyavelist/Çevik false fr
   assert.equal(trusted.length, 1);
   assert.equal(trusted[0].pdfUrl, "https://example.com/right.pdf");
 });
+
+test("filterTrustedHits drops Rengin vs İlkel and Sinema containment", () => {
+  const { filterTrustedHits } = loadBridge();
+  assert.equal(
+    filterTrustedHits(
+      [
+        {
+          source: "libgen",
+          title: "İlkel topluluktan uygar topluma",
+          pdfUrl: "https://example.com/ilkel.pdf",
+        },
+      ],
+      { title: "Rengin etkileşimi", kind: "book", authors: "Josef Albers" },
+    ).length,
+    0,
+  );
+  assert.equal(
+    filterTrustedHits(
+      [
+        {
+          source: "yoktez",
+          title: "Gilles Deleuze'de imge hareketi olarak sinemanın felsefesi",
+          pdfUrl: "https://example.com/deleuze.pdf",
+        },
+      ],
+      { title: "Sinemanın felsefesi", kind: "book" },
+    ).length,
+    0,
+  );
+  assert.equal(
+    filterTrustedHits(
+      [
+        {
+          source: "libgen",
+          title: "Sinemanın felsefesi: bir giriş",
+          pdfUrl: "https://example.com/ok.pdf",
+        },
+      ],
+      { title: "Sinemanın felsefesi", kind: "book" },
+    ).length,
+    1,
+  );
+});
+
+test("filterTrustedHits drops mystic-way book reviews", () => {
+  const { filterTrustedHits, isBookReviewHit } = loadBridge();
+  const mystic =
+    "The mystic way in postmodernity: transcending theological boundaries in the writings of iris murdoch, denise levertov and annie dillard";
+  assert.equal(isBookReviewHit(`Book Review: ${mystic}`), true);
+  assert.equal(isBookReviewHit(mystic, { crossref_type: "book-review" }), true);
+  const trusted = filterTrustedHits(
+    [
+      {
+        source: "doi",
+        title: `Book Review: ${mystic}`,
+        pdfUrl: "https://example.com/review.pdf",
+        extra: { crossref_type: "book-review" },
+      },
+      {
+        source: "doi",
+        title: mystic,
+        pdfUrl: "https://example.com/typed-review.pdf",
+        extra: { crossref_type: "book-review" },
+      },
+      {
+        source: "libgen",
+        title: mystic,
+        pdfUrl: "https://example.com/book.pdf",
+        extra: { title_overlap: 1.0 },
+      },
+    ],
+    { title: mystic, kind: "book" },
+  );
+  assert.equal(trusted.length, 1);
+  assert.equal(trusted[0].pdfUrl, "https://example.com/book.pdf");
+});
+
+test("filterTrustedHits drops Avangard kuramı journal article", () => {
+  const { filterTrustedHits, isJournalArticleHit } = loadBridge();
+  assert.equal(
+    isJournalArticleHit({ crossref_type: "journal-article" }, "doi"),
+    true,
+  );
+  const trusted = filterTrustedHits(
+    [
+      {
+        source: "dergipark",
+        title: "Sanata karşı başkaldırı: avangard",
+        pdfUrl: "https://example.com/article.pdf",
+        extra: { crossref_type: "journal-article" },
+      },
+      {
+        source: "libgen",
+        title: "Avangard kuramı",
+        pdfUrl: "https://example.com/book.pdf",
+        authors: "Peter Bürger",
+        extra: { title_overlap: 1.0 },
+      },
+    ],
+    {
+      title: "Avangard kuramı",
+      kind: "book",
+      authors: "Peter Bürger",
+    },
+  );
+  assert.equal(trusted.length, 1);
+  assert.equal(trusted[0].pdfUrl, "https://example.com/book.pdf");
+});

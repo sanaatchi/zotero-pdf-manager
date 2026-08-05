@@ -1,4 +1,4 @@
-// @ajan: cursor · @etiket: katman-2, python-pdf-sources, paywall-hint
+// @ajan: cursor · @etiket: katman-2, python-pdf-sources, title-trust, book-review
 /**
  * Online PDF sources backed by Kutuphane `oa_pdf_search` (8756 bridge).
  * Old in-plugin scrape/mirror logic was removed — discovery is Python-only.
@@ -129,6 +129,8 @@ export class OaPdfPythonSource implements PDFSource {
       doi: req.doi || "",
       sourceId: this.id,
       year: req.year || "",
+      authors: req.authors || "",
+      kind: req.kind || "",
     });
     if (!trusted.length) {
       ztoolkit.log(`oa_pdf ${this.id}: no trusted hits after title/DOI gate`);

@@ -1,8 +1,8 @@
-<!-- @ajan: cursor · @etiket: katman-2, eksik-raporu, oa-search, paywall-hint -->
+<!-- @ajan: cursor · @etiket: katman-2, eksik-raporu, oa-search, title-trust, book-review -->
 
 # Cursor — Katman 2 Eksikler Raporu
 
-**Tarih:** 2026-08-05 · **Sürüm:** PDF Manager **v1.0.90**  
+**Tarih:** 2026-08-05 · **Sürüm:** PDF Manager **v1.0.91**  
 **Analiz:** ürün ↔ `referanslar/katman-2/` ↔ GitHub (Attanger, Zotadata, Zoplicate,
 ZotAssets, File Utility, Attachment Scanner, ozefe/yoktez).
 
@@ -14,11 +14,12 @@ ZotAssets, File Utility, Attachment Scanner, ozefe/yoktez).
 | Gerçek açık iş?           | Checklist Bölüm B (kullanıcı) + isteğe bağlı P3 |
 | Yeni zorunlu XPI portu?   | **Yok** — GitHub taraması yeni P1 üretmedi      |
 
-### Son eklenen (v1.0.90)
+### Son eklenen (v1.0.91)
 
 | Madde                                   | Not                                                                         |
 | --------------------------------------- | --------------------------------------------------------------------------- |
-| DOI paywall ipucu                       | «Açık PDF yok (ücretli/paywall)…» — köprü HTTP 500 crash metni yok          |
+| Yanlış kitap / inceleme / makale kapısı | Rengin≠İlkel; Sinema≠Deleuze tezi; book-review yok; Avangard≠makale         |
+| DOI paywall ipucu (v1.0.90)             | «Açık PDF yok (ücretli/paywall)…» — köprü HTTP 500 crash metni yok          |
 | OA Search’ten arXiv çıkarıldı (v1.0.89) | Kaynak chip / prefs checkbox / federated `full` yok; adapter CLI’da kalır   |
 | OA attach 502 fallback (v1.0.88)        | `X-OA-Fetch-Error`; doi 502 → diğer hit (DergiPark); çıplak HTTP 502 yok    |
 | İndirme raporu panoya kopyalanmaz       | Sekme / toast kalır; clipboard fallback kaldırıldı (v1.0.87)                |
