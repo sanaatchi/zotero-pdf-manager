@@ -589,3 +589,79 @@ test("filterTrustedHits keeps Adorno LibGen title with ISBN/edition chrome", () 
   );
   assert.equal(wrong.length, 0);
 });
+
+test("filterTrustedHits keeps Seargeant LibGen short core with blank authors", () => {
+  const { filterTrustedHits, sameWorkTitle } = loadBridge();
+  const itemTitle =
+    "The art of political storytelling: why stories win votes in post-truth politics";
+  const hitTitle = "The Art of Political Storytelling";
+  assert.equal(sameWorkTitle(itemTitle, hitTitle), true);
+
+  const trusted = filterTrustedHits(
+    [
+      {
+        source: "libgen",
+        title: hitTitle,
+        authors: "",
+        year: "",
+        pdfUrl: "https://example.com/seargeant.pdf",
+        extra: { title_overlap: 0.33 },
+      },
+    ],
+    {
+      title: itemTitle,
+      authors: "Philip Seargeant",
+      year: "2020",
+      kind: "book",
+      sourceId: "libgen",
+      isbn: "9781350107410",
+    },
+  );
+  assert.equal(trusted.length, 1);
+  assert.equal(trusted[0].pdfUrl, "https://example.com/seargeant.pdf");
+
+  // Distinctive same-work core alone (no item ISBN) still attaches.
+  const trustedNoIsbn = filterTrustedHits(
+    [
+      {
+        source: "libgen",
+        title: hitTitle,
+        authors: "",
+        year: "",
+        pdfUrl: "https://example.com/seargeant.pdf",
+        extra: { title_overlap: 0.33 },
+      },
+    ],
+    {
+      title: itemTitle,
+      authors: "Philip Seargeant",
+      year: "2020",
+      kind: "book",
+      sourceId: "libgen",
+    },
+  );
+  assert.equal(trustedNoIsbn.length, 1);
+
+  // ISBN + wrong core must still reject.
+  const wrong = filterTrustedHits(
+    [
+      {
+        source: "libgen",
+        title: "Completely Different Political Book 9781350107410",
+        authors: "",
+        year: "2020",
+        pdfUrl: "https://example.com/wrong.pdf",
+        extra: { title_overlap: 0.2 },
+      },
+    ],
+    {
+      title: itemTitle,
+      authors: "Philip Seargeant",
+      year: "2020",
+      kind: "book",
+      sourceId: "libgen",
+      isbn: "9781350107410",
+    },
+  );
+  assert.equal(wrong.length, 0);
+});

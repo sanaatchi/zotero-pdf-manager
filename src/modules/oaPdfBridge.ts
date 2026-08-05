@@ -1,4 +1,4 @@
-// @ajan: cursor · @etiket: katman-2, oa-pdf-bridge, libgen-title-clean, adorno-trust, isbn-bypass
+// @ajan: cursor · @etiket: katman-2, oa-pdf-bridge, subtitle-core, seargeant-trust
 /**
  * Katman-2 → Kutuphane köprü (8756) `oa_pdf_search` client.
  * Online PDF discovery runs in Python; this module only POSTs queries.
@@ -7,6 +7,7 @@
  * Manual OA Search sends allowWebSearch=true (DergiPark DDG last-resort).
  * Download & attach embeds kind criteria from the Zotero item automatically.
  * LibGen titles: strip ISBN/edition/``b l id`` chrome before trust gates.
+ * Same-work subtitle cores (Seargeant) pass without hit authors when distinctive.
  */
 import { getPref, setPref } from "../utils/prefs";
 import { normalizeDOI } from "../utils/metadataNormalize";
@@ -809,11 +810,26 @@ function foldedPhrase(value: string): string {
     .trim();
 }
 
+/** Like Python ``_folded_phrase`` — keeps colon/dash for same-work prefix checks. */
+function foldedPhraseKeepDelim(value: string): string {
+  return (value || "")
+    .normalize("NFKD")
+    .replace(/\p{Mark}/gu, "")
+    .replace(/\u0131/g, "i")
+    .replace(/\u0130/g, "i")
+    .toLocaleLowerCase("tr")
+    .replace(/['`´\u2019]/g, " ")
+    .replace(/\s+/g, " ")
+    .trim();
+}
+
 function titleCorePhrase(value: string): string {
-  // Strip ``Title (subtitle)`` before fold so Şarkiyatçılık LibGen rows match.
-  const s = foldedPhrase(stripTrailingParenSubtitle(value));
-  if (!s) return "";
-  return s.split(/\s*[:;–—|/]\s+|\s+-\s+/)[0]!.trim();
+  // Strip ``Title (subtitle)`` and colon/dash subtitles *before* fold so
+  // punctuation is not erased (``storytelling: why…`` → core match).
+  const raw = stripTrailingParenSubtitle(value);
+  if (!raw) return "";
+  const head = raw.split(/\s*[:;–—|/]\s+|\s+-\s+/)[0] || raw;
+  return foldedPhrase(head);
 }
 
 /** Mirror Python ``clean_libgen_title`` — ISBN/edition/``b l id`` chrome. */
@@ -836,13 +852,14 @@ export function cleanLibgenTitle(value: string): string {
 }
 
 export function sameWorkTitle(query: string, title: string): boolean {
-  const q = foldedPhrase(query);
-  const t = foldedPhrase(title);
-  if (!q || !t) return false;
-  if (q === t) return true;
   const qCore = titleCorePhrase(query);
   const tCore = titleCorePhrase(title);
   if (qCore && tCore && qCore === tCore) return true;
+  // Prefix checks on a fold that keeps subtitle delimiters (colon/dash).
+  const q = foldedPhraseKeepDelim(query);
+  const t = foldedPhraseKeepDelim(title);
+  if (!q || !t) return false;
+  if (q === t) return true;
   // Dash / colon / slash subtitles (parens already handled via core).
   return (
     t.startsWith(`${q}:`) ||
@@ -850,11 +867,13 @@ export function sameWorkTitle(query: string, title: string): boolean {
     t.startsWith(`${q} –`) ||
     t.startsWith(`${q} —`) ||
     t.startsWith(`${q} / `) ||
+    t.startsWith(`${q} (`) ||
     q.startsWith(`${t}:`) ||
     q.startsWith(`${t} -`) ||
     q.startsWith(`${t} –`) ||
     q.startsWith(`${t} —`) ||
-    q.startsWith(`${t} / `)
+    q.startsWith(`${t} / `) ||
+    q.startsWith(`${t} (`)
   );
 }
 
@@ -1004,6 +1023,39 @@ export function isJournalArticleHit(
   return false;
 }
 
+/** Mirror Python ``is_short_generic_title`` for an arbitrary title string. */
+function isShortGenericTitle(title: string): boolean {
+  const qToksContent = normTokens(title).filter(
+    (t) => !TITLE_STOP_TRUST.has(t),
+  );
+  if (qToksContent.length <= 1) {
+    return !(qToksContent[0] && qToksContent[0].length >= 7);
+  }
+  if (qToksContent.length <= 3) {
+    return !qToksContent.some((t) => t.length >= 7);
+  }
+  return false;
+}
+
+/**
+ * Same-work core gate (Python ``_same_work_core_trust_ok``).
+ * ``true`` accept, ``false`` unused, ``null`` fall through.
+ */
+function sameWorkCoreTrustOk(
+  itemTitle: string,
+  hitTitle: string,
+  authorOk: boolean,
+): boolean | null {
+  if (!sameWorkTitle(itemTitle, hitTitle)) return null;
+  const qCore = titleCorePhrase(itemTitle) || String(itemTitle || "").trim();
+  const tCore = titleCorePhrase(hitTitle) || String(hitTitle || "").trim();
+  if (!qCore || !tCore) return null;
+  if (foldedPhrase(qCore) !== foldedPhrase(tCore)) return null;
+  if (!isShortGenericTitle(qCore) && !isShortGenericTitle(tCore)) return true;
+  if (authorOk) return true;
+  return null;
+}
+
 function titleTrustOk(
   itemTitle: string,
   hitTitle: string,
@@ -1014,6 +1066,17 @@ function titleTrustOk(
     hitYear?: string;
   } = {},
 ): boolean {
+  const authorOk = authorYearStronglyMatch(
+    opts.authors || "",
+    opts.hitAuthors || "",
+    opts.year || "",
+    opts.hitYear || "",
+  );
+  // Seargeant: long subtitled künye vs LibGen short core — accept distinctive
+  // shared core without requiring subtitle tokens on the hit.
+  if (sameWorkCoreTrustOk(itemTitle, hitTitle, authorOk) === true) {
+    return true;
+  }
   const jac = titleOverlap(itemTitle, hitTitle);
   const cAb = titleContainment(itemTitle, hitTitle);
   const ta = normTokens(itemTitle);
@@ -1029,12 +1092,6 @@ function titleTrustOk(
     (t) => t.length >= 7 && !TITLE_STOP_TRUST.has(t),
   );
   const shortQuery = qToks.length <= 3 || need.length <= 1;
-  const authorOk = authorYearStronglyMatch(
-    opts.authors || "",
-    opts.hitAuthors || "",
-    opts.year || "",
-    opts.hitYear || "",
-  );
   if (shortQuery) {
     need = qToks.length ? qToks : normTokens(itemTitle);
     if (ov < 0.75) return false;
@@ -1121,20 +1178,9 @@ export function filterTrustedHits(
   const itemTitle = ctx.title || "";
   const wantYear = yearToken(ctx.year || "");
   const scored: { hit: OaPdfHit; rank: number }[] = [];
-  const qToksContent = normTokens(itemTitle).filter(
-    (t) => !TITLE_STOP_TRUST.has(t),
-  );
   // Mirror Python ``is_short_generic_title``: generic short cores
   // (Devlet/Gece/Dünya tarihi). Rare ≥7-char anchors (posttruth) are not.
-  const shortGeneric = (() => {
-    if (qToksContent.length <= 1) {
-      return !(qToksContent[0] && qToksContent[0].length >= 7);
-    }
-    if (qToksContent.length <= 3) {
-      return !qToksContent.some((t) => t.length >= 7);
-    }
-    return false;
-  })();
+  const shortGeneric = isShortGenericTitle(itemTitle);
   for (const hit of hits || []) {
     const url = String(hit.pdfUrl || "").trim();
     if (!url) continue;
@@ -1231,6 +1277,19 @@ export function filterTrustedHits(
         .replace(/[^0-9Xx]/gi, "")
         .toUpperCase()
         .includes(isbnDigits.toUpperCase());
+    const sameWorkHit = !!(
+      itemTitle &&
+      hitTitle &&
+      sameWorkTitle(itemTitle, hitTitle)
+    );
+    const qCore = titleCorePhrase(itemTitle) || itemTitle;
+    const tCore = titleCorePhrase(hitTitle) || hitTitle;
+    // Distinctive same-work core (Seargeant), or ISBN confirmed in hit blob.
+    // Item ISBN alone must NOT clear short-generic (Devlet anon thrash).
+    const sameCoreOk =
+      sameWorkHit &&
+      ((!isShortGenericTitle(qCore) && !isShortGenericTitle(tCore)) ||
+        isbnOkHit);
     if (
       kindBookish &&
       shortGeneric &&
@@ -1239,8 +1298,8 @@ export function filterTrustedHits(
     ) {
       const hitAuth = String(hit.authors || "").trim();
       if (hitAuth && !authorOkHit) continue;
-      if (!hitAuth && !authorOkHit && !isbnOkHit) {
-        // No hit author and no ISBN confirm → short title is ambiguous.
+      if (!hitAuth && !authorOkHit && !isbnOkHit && !sameCoreOk) {
+        // No hit author and no ISBN/same-core confirm → short title ambiguous.
         continue;
       }
     }
@@ -1285,7 +1344,7 @@ export function filterTrustedHits(
         ovExtra < 0.7 &&
         !authorOkHit &&
         !isbnOkHit &&
-        !(itemTitle && hitTitle && sameWorkTitle(itemTitle, hitTitle))
+        !sameWorkHit
       ) {
         continue;
       }
@@ -1298,7 +1357,7 @@ export function filterTrustedHits(
         itemTitle &&
         hitTitle &&
         titleOverlap(itemTitle, hitTitle) < 0.15 &&
-        !sameWorkTitle(itemTitle, hitTitle)
+        !sameWorkHit
       ) {
         continue;
       }
@@ -1315,7 +1374,7 @@ export function filterTrustedHits(
         itemTitle &&
         hitTitle.trim().toLowerCase() === itemTitle.trim().toLowerCase()
       ) {
-        if (!(ovExtra >= 0.7) && !authorOkHit && !isbnOkHit) {
+        if (!(ovExtra >= 0.7) && !authorOkHit && !isbnOkHit && !sameCoreOk) {
           continue;
         }
       }
@@ -1323,11 +1382,12 @@ export function filterTrustedHits(
       // title Jaccard is near-exact *and* the title is long enough to be
       // identity (short Devlet/Gece still need author). ISBN in the LibGen
       // title blob (even before clean) may confirm when authors are blank.
+      // Same-work distinctive core (Seargeant) also confirms without authors.
       if (kindBookish && (ctx.authors || "").trim()) {
         const jacBook = titleOverlap(itemTitle, hitTitle);
         if (shortGeneric) {
-          if (!authorOkHit && !isbnOkHit) continue;
-        } else if (jacBook < 0.85 && !authorOkHit && !isbnOkHit) {
+          if (!authorOkHit && !isbnOkHit && !sameCoreOk) continue;
+        } else if (jacBook < 0.85 && !authorOkHit && !isbnOkHit && !sameCoreOk) {
           continue;
         } else if (
           jacBook >= 0.85 &&
@@ -1345,11 +1405,18 @@ export function filterTrustedHits(
         shortGeneric &&
         (ctx.authors || "").trim() &&
         !authorOkHit &&
-        !isbnOkHit
+        !isbnOkHit &&
+        !sameCoreOk
       ) {
         continue;
       }
-      if (!authorOkHit && !isbnOkHit && ov < 0.7 && kindBookish) {
+      if (
+        !authorOkHit &&
+        !isbnOkHit &&
+        ov < 0.7 &&
+        kindBookish &&
+        !sameCoreOk
+      ) {
         continue;
       }
       scored.push({ hit, rank: ov });

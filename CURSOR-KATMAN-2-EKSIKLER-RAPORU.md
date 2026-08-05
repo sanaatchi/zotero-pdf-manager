@@ -1,8 +1,8 @@
-<!-- @ajan: cursor · @etiket: katman-2, eksik-raporu, libgen-title-clean, adorno-trust -->
+<!-- @ajan: cursor · @etiket: katman-2, eksik-raporu, subtitle-core, seargeant-trust -->
 
 # Cursor — Katman 2 Eksikler Raporu
 
-**Tarih:** 2026-08-06 · **Sürüm:** PDF Manager **v1.0.102**  
+**Tarih:** 2026-08-06 · **Sürüm:** PDF Manager **v1.0.103**  
 **Analiz:** ürün ↔ `referanslar/katman-2/` ↔ GitHub (Attanger, Zotadata, Zoplicate,
 ZotAssets, File Utility, Attachment Scanner, ozefe/yoktez).
 
@@ -14,11 +14,12 @@ ZotAssets, File Utility, Attachment Scanner, ozefe/yoktez).
 | Gerçek açık iş?           | Checklist Bölüm B (kullanıcı) + isteğe bağlı P3 |
 | Yeni zorunlu XPI portu?   | **Yok** — GitHub taraması yeni P1 üretmedi      |
 
-### Son eklenen (v1.0.102)
+### Son eklenen (v1.0.103)
 
 | Madde                                         | Not                                                                                                        |
 | --------------------------------------------- | ---------------------------------------------------------------------------------------------------------- |
-| LibGen başlık ISBN/edition/`b l` temizliği    | Adorno «Kültür endüstrisi…» attach; `cleanLibgenTitle` + ISBN bypass; köprü restart + XPI                  |
+| Seargeant alt başlık çekirdek trust           | LibGen kısa core + boş yazar; `titleCorePhrase` colon-before-fold; Devlet thrash korunur; köprü + XPI     |
+| LibGen başlık ISBN/edition/`b l` temizliği    | Adorno attach; `cleanLibgenTitle` + ISBN bypass (v1.0.102)                                                  |
 | 100’lük alan skoru + Şarkiyatçılık (v1.0.101) | Federated Σ(puan/100×kalite); paren sameWork; LibGen ov&lt;0.7 ISBN/same-work; OA attach ISBN              |
 | Uyumsuz PDF otomatik silme iptal (v1.0.100)   | mismatch → ek kalır + `#pdf-mismatch`; auto-detach yok; manuel audit onaylı detach                         |
 | Doğru PDF false-positive / yeniden indir (99) | Güçlü başlıkta yazarsız match; LLM ezemez; rejectedUrls                                                    |
