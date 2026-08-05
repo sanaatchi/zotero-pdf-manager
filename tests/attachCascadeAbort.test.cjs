@@ -61,16 +61,13 @@ test("validation + cascade: AttachStoppedError stops further sources", () => {
   assert.match(source, /keeping attachment \(#pdf-mismatch\)/);
   assert.match(source, /keeping attachment \(#pdf-review\)/);
   assert.doesNotMatch(source, /throw new AttachStoppedError\("review"/);
-  const downloadFn = source.slice(
-    source.indexOf("export async function downloadAndAttach"),
-  );
-  assert.doesNotMatch(
-    downloadFn,
-    /throw new AttachStoppedError\("erase-failed"/,
-  );
-  // Local misnamed PDF: detach link and continue cascade.
+  // Local misnamed PDF: detach link and continue cascade (OA download still keeps+tags).
   assert.match(source, /finalizeLocalAttachment/);
   assert.match(source, /Yerel PDF künye ile uyuşmuyor/);
+  assert.match(
+    source,
+    /keeping attachment \(#pdf-mismatch\)[\s\S]*?finalizeLocalAttachment|finalizeLocalAttachment[\s\S]*?keeping attachment \(#pdf-mismatch\)/,
+  );
   assert.match(source, /ContentMismatchError/);
   assert.match(source, /rethrowAttachControlFlow/);
 

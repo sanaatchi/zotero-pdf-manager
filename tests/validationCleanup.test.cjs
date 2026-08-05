@@ -27,15 +27,8 @@ test("validation verdicts: match clears tags; mismatch/unverifiable keep + tag",
     source,
     /unverifiable[\s\S]*?keeping attachment \(#pdf-review\)/,
   );
-  // Auto-download never throws AttachStoppedError / eraseTx on mismatch.
+  // Auto-download never throws review-stop; local mismatch may detach the link.
   assert.doesNotMatch(source, /throw new AttachStoppedError\("review"/);
-  const downloadFn = source.slice(
-    source.indexOf("export async function downloadAndAttach"),
-  );
-  assert.doesNotMatch(
-    downloadFn,
-    /throw new AttachStoppedError\("erase-failed"/,
-  );
   assert.match(source, /finalizeLocalAttachment/);
   assert.match(source, /Yerel PDF künye ile uyuşmuyor/);
   // Manual audit may still erase via cleanupRejectedAttachment.
