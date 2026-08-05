@@ -444,3 +444,41 @@ test("filterTrustedHits drops Dünya tarihi wrong chronicle LibGen hit", () => {
   );
   assert.equal(trusted.length, 0);
 });
+
+test("filterTrustedHits drops short Devlet with wrong author (thrash gate)", () => {
+  const { filterTrustedHits } = loadBridge();
+  const trusted = filterTrustedHits(
+    [
+      {
+        source: "libgen",
+        title: "Devlet",
+        pdfUrl: "https://example.com/farabi.pdf",
+        authors: "Farabi",
+        extra: { title_overlap: 1.0 },
+      },
+      {
+        source: "libgen",
+        title: "Devlet",
+        pdfUrl: "https://example.com/platon.pdf",
+        authors: "Platon",
+        extra: { title_overlap: 1.0 },
+      },
+      {
+        source: "libgen",
+        title: "Devlet",
+        pdfUrl: "https://example.com/anon.pdf",
+        extra: { title_overlap: 1.0 },
+      },
+    ],
+    {
+      title: "Devlet",
+      authors: "Platon; Sabahattin Eyüboğlu",
+      isbn: "9789754587173",
+      sourceId: "libgen",
+      kind: "book",
+      year: "2010",
+    },
+  );
+  assert.equal(trusted.length, 1);
+  assert.equal(trusted[0].pdfUrl, "https://example.com/platon.pdf");
+});

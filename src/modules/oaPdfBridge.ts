@@ -1,4 +1,4 @@
-// @ajan: cursor · @etiket: katman-2, oa-pdf-bridge, title-trust, tr-fold, glued-token, libgen-gate
+// @ajan: cursor · @etiket: katman-2, oa-pdf-bridge, title-trust, tr-fold, glued-token, libgen-gate, prefetch-bar
 /**
  * Katman-2 → Kutuphane köprü (8756) `oa_pdf_search` client.
  * Online PDF discovery runs in Python; this module only POSTs queries.
@@ -1061,6 +1061,8 @@ function editDistanceAllow2(a: string, b: string): number {
 export type HitTrustContext = {
   title?: string;
   doi?: string;
+  /** ISBN digits — short-title identity when LibGen omits hit authors. */
+  isbn?: string;
   /** Source id — scihub is DOI-keyed and skips title gate when DOI matches. */
   sourceId?: string;
   /** Soft year gate (Download & attach / OA criteria). */
@@ -1079,6 +1081,8 @@ function yearToken(raw: string): string {
 /**
  * Drop low-confidence OA hits before download.
  * Keep when: DOI matches, or title match ≥ 0.45, or scihub+DOI on item.
+ * Prefetch bar: short/generic book titles need author (or high LibGen
+ * overlap alone is not enough) — otherwise content_validate thrashes.
  */
 export function filterTrustedHits(
   hits: OaPdfHit[],
@@ -1088,6 +1092,20 @@ export function filterTrustedHits(
   const itemTitle = ctx.title || "";
   const wantYear = yearToken(ctx.year || "");
   const scored: { hit: OaPdfHit; rank: number }[] = [];
+  const qToksContent = normTokens(itemTitle).filter(
+    (t) => !TITLE_STOP_TRUST.has(t),
+  );
+  // Mirror Python ``is_short_generic_title``: generic short cores
+  // (Devlet/Gece/Dünya tarihi). Rare ≥7-char anchors (posttruth) are not.
+  const shortGeneric = (() => {
+    if (qToksContent.length <= 1) {
+      return !(qToksContent[0] && qToksContent[0].length >= 7);
+    }
+    if (qToksContent.length <= 3) {
+      return !qToksContent.some((t) => t.length >= 7);
+    }
+    return false;
+  })();
   for (const hit of hits || []) {
     const url = String(hit.pdfUrl || "").trim();
     if (!url) continue;
@@ -1150,6 +1168,43 @@ export function filterTrustedHits(
       hitYear: String(hit.year || ""),
     };
     const ov = titleMatchScore(itemTitle, hitTitle);
+    const authorOkHit = authorYearStronglyMatch(
+      ctx.authors || "",
+      String(hit.authors || ""),
+      ctx.year || "",
+      String(hit.year || ""),
+    );
+    // Short book/thesis titles: jac=1.0 (Devlet==Devlet) is not identity.
+    const kindBookish = ["book", "monograph", "booksection", "thesis"].includes(
+      kindNorm,
+    );
+    const isbnDigits = String(ctx.isbn || "").replace(/[^0-9Xx]/g, "");
+    const hitIsbnBlob = [
+      hitTitle,
+      String(hit.authors || ""),
+      String(extra.isbn || ""),
+      String(extra.ISBN || ""),
+      String(extra.isbn13 || ""),
+      String(extra.hit_isbn || ""),
+    ].join(" ");
+    const isbnOkHit =
+      (isbnDigits.length === 10 || isbnDigits.length === 13) &&
+      hitIsbnBlob.replace(/[^0-9Xx]/gi, "").toUpperCase().includes(
+        isbnDigits.toUpperCase(),
+      );
+    if (
+      kindBookish &&
+      shortGeneric &&
+      (ctx.authors || "").trim() &&
+      !doiMatch
+    ) {
+      const hitAuth = String(hit.authors || "").trim();
+      if (hitAuth && !authorOkHit) continue;
+      if (!hitAuth && !authorOkHit && !isbnOkHit) {
+        // No hit author and no ISBN confirm → short title is ambiguous.
+        continue;
+      }
+    }
     // DOI match is not enough alone: a wrong DOI on the item (or Unpaywall
     // returning another Golub paper) must still pass the title gate.
     if (doiMatch) {
@@ -1183,7 +1238,8 @@ export function filterTrustedHits(
       const ovExtra = Number(
         (hit.extra as Record<string, unknown> | undefined)?.title_overlap,
       );
-      if (Number.isFinite(ovExtra) && ovExtra < 0.5) {
+      // Prefetch floor 0.7 — soft 0.5 matches fail content_validate later.
+      if (Number.isFinite(ovExtra) && ovExtra < 0.7 && !authorOkHit) {
         continue;
       }
       // Fabricated perfect overlap: adapter claims ≥0.99 but titles share
@@ -1214,27 +1270,24 @@ export function filterTrustedHits(
           .trim()
           .toLowerCase() === itemTitle.trim().toLowerCase()
       ) {
-        if (!(ovExtra >= 0.5)) {
+        if (!(ovExtra >= 0.7) && !authorOkHit) {
           continue;
         }
       }
       // Books: when the item has authors, require author agreement unless
-      // title Jaccard is near-exact (LibGen bag-of-words + ISBN false friends).
-      const kindBook = ["book", "monograph"].includes(
-        String(ctx.kind || "")
-          .trim()
-          .toLowerCase()
-          .replace(/_/g, ""),
-      );
-      if (kindBook && (ctx.authors || "").trim()) {
+      // title Jaccard is near-exact *and* the title is long enough to be
+      // identity (short Devlet/Gece still need author).
+      if (kindBookish && (ctx.authors || "").trim()) {
         const jacBook = titleOverlap(itemTitle, hitTitle);
-        const authorOkBook = authorYearStronglyMatch(
-          ctx.authors || "",
-          String(hit.authors || ""),
-          ctx.year || "",
-          String(hit.year || ""),
-        );
-        if (jacBook < 0.85 && !authorOkBook) {
+        if (shortGeneric) {
+          if (!authorOkHit && !isbnOkHit) continue;
+        } else if (jacBook < 0.85 && !authorOkHit) {
+          continue;
+        } else if (
+          jacBook >= 0.85 &&
+          String(hit.authors || "").trim() &&
+          !authorOkHit
+        ) {
           continue;
         }
       }
@@ -1243,6 +1296,19 @@ export function filterTrustedHits(
       itemTitle &&
       titleTrustOk(itemTitle, String(hit.title || ""), trustOpts)
     ) {
+      // Soft non-LibGen hits without author still need a higher bar to fetch.
+      if (
+        kindBookish &&
+        shortGeneric &&
+        (ctx.authors || "").trim() &&
+        !authorOkHit &&
+        !isbnOkHit
+      ) {
+        continue;
+      }
+      if (!authorOkHit && !isbnOkHit && ov < 0.7 && kindBookish) {
+        continue;
+      }
       scored.push({ hit, rank: ov });
       continue;
     }

@@ -1,4 +1,4 @@
-// @ajan: cursor · @etiket: katman-2, python-pdf-sources, title-trust, book-review
+// @ajan: cursor · @etiket: katman-2, python-pdf-sources, title-trust, book-review, thrash-guard
 /**
  * Online PDF sources backed by Kutuphane `oa_pdf_search` (8756 bridge).
  * Old in-plugin scrape/mirror logic was removed — discovery is Python-only.
@@ -127,6 +127,7 @@ export class OaPdfPythonSource implements PDFSource {
     const trusted = filterTrustedHits(hits, {
       title: String(item.getField("title") || ""),
       doi: req.doi || "",
+      isbn: req.isbn || "",
       sourceId: this.id,
       year: req.year || "",
       authors: req.authors || "",
@@ -139,10 +140,22 @@ export class OaPdfPythonSource implements PDFSource {
     let mismatchRejects = 0;
     let attempted = 0;
     let paywallHint = "";
+    /** After content mismatch, skip sibling MD5s with the same catalog title. */
+    const rejectedTitles = new Set<string>();
     const { humanizeOaFetchError } = await import("./oaSearchActions");
     for (const hit of trusted) {
       const url = String(hit.pdfUrl || "").trim();
       if (!url) continue;
+      const titleKey = String(hit.title || "")
+        .trim()
+        .toLowerCase();
+      if (titleKey && rejectedTitles.has(titleKey)) {
+        ztoolkit.log(
+          `oa_pdf ${this.id}: skip same-title sibling after mismatch`,
+          titleKey.slice(0, 60),
+        );
+        continue;
+      }
       attempted++;
       try {
         // Same path as YÖK: always POST /pdf-fetch (UA + %PDF + session).
@@ -169,6 +182,7 @@ export class OaPdfPythonSource implements PDFSource {
         rethrowAttachControlFlow(e);
         if (isContentMismatchError(e)) {
           mismatchRejects++;
+          if (titleKey) rejectedTitles.add(titleKey);
           ztoolkit.log(`oa_pdf ${this.id} rejected by metadata check`, e);
           continue;
         }
