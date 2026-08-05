@@ -1,4 +1,4 @@
-// @ajan: cursor · @etiket: katman-2, oa-pdf-bridge, title-trust, tr-fold, glued-token
+// @ajan: cursor · @etiket: katman-2, oa-pdf-bridge, title-trust, tr-fold, glued-token, libgen-overlap
 /**
  * Katman-2 → Kutuphane köprü (8756) `oa_pdf_search` client.
  * Online PDF discovery runs in Python; this module only POSTs queries.
@@ -1168,18 +1168,24 @@ export function filterTrustedHits(
     }
     // LibGen historically set hit.title = query (always matches item title).
     // Require Python title_overlap (row vs query) when titles look identical.
-    if (
-      (ctx.sourceId === "libgen" || hit.source === "libgen") &&
-      itemTitle &&
-      String(hit.title || "")
-        .trim()
-        .toLowerCase() === itemTitle.trim().toLowerCase()
-    ) {
+    // Also reject when adapter reports a low overlap even if titles differ
+    // enough to limp past Jaccard (json.php used to hardcode 1.0).
+    if (ctx.sourceId === "libgen" || hit.source === "libgen") {
       const ovExtra = Number(
         (hit.extra as Record<string, unknown> | undefined)?.title_overlap,
       );
-      if (!(ovExtra >= 0.5)) {
+      if (Number.isFinite(ovExtra) && ovExtra < 0.5) {
         continue;
+      }
+      if (
+        itemTitle &&
+        String(hit.title || "")
+          .trim()
+          .toLowerCase() === itemTitle.trim().toLowerCase()
+      ) {
+        if (!(ovExtra >= 0.5)) {
+          continue;
+        }
       }
     }
     if (

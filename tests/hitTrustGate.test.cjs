@@ -363,3 +363,32 @@ test("filterTrustedHits keeps DergiPark glued-space titles", () => {
     );
   }
 });
+
+test("filterTrustedHits drops LibGen hits with low title_overlap extra", () => {
+  const { filterTrustedHits } = loadBridge();
+  const trusted = filterTrustedHits(
+    [
+      {
+        source: "libgen",
+        title: "The Post-Truth Era",
+        pdfUrl: "https://example.com/wrong.pdf",
+        extra: { title_overlap: 0.2, query: "9780312306229" },
+      },
+      {
+        source: "libgen",
+        title: "The Post-Truth Era",
+        pdfUrl: "https://example.com/right.pdf",
+        authors: "Ralph Keyes",
+        extra: { title_overlap: 0.92 },
+      },
+    ],
+    {
+      title: "The Post-Truth Era",
+      authors: "Ralph Keyes",
+      sourceId: "libgen",
+      kind: "book",
+    },
+  );
+  assert.equal(trusted.length, 1);
+  assert.equal(trusted[0].pdfUrl, "https://example.com/right.pdf");
+});

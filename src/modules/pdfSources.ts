@@ -1,4 +1,4 @@
-// @ajan: cursor · @etiket: katman-2, pdf-sources, pdf-mismatch-detach, local-validate, post-truth
+// @ajan: cursor · @etiket: katman-2, pdf-sources, pdf-mismatch-detach, local-validate, post-truth, short-title-gate
 import { getString } from "../utils/locale";
 import { getPref } from "../utils/prefs";
 import {
@@ -91,7 +91,13 @@ export interface PDFSource {
 }
 
 export type LocalMatchResult =
-  | { status: "matched"; file: IndexedFile; score: number }
+  | {
+      status: "matched";
+      file: IndexedFile;
+      score: number;
+      /** How the index row was chosen — unverifiable keep only for id matches. */
+      via?: "doi" | "isbn" | "title";
+    }
   | { status: "review"; file?: IndexedFile; score?: number; reason: string }
   | { status: "ambiguous"; score?: number }
   | { status: "none" };
@@ -1119,15 +1125,19 @@ export class LocalFolderSource implements PDFSource {
     if (!index.length) return null;
     const result = this.matchItem(item, index);
     if (result.status !== "matched") return null;
-    return this.attachFile(item, result.file);
+    return this.attachFile(item, result.file, result.via || "title");
   }
 
-  async attachFile(item: Zotero.Item, match: IndexedFile) {
+  async attachFile(
+    item: Zotero.Item,
+    match: IndexedFile,
+    via: "doi" | "isbn" | "title" = "title",
+  ) {
     // Same disk file must never get a second attachment on this parent
     // (and never be import-copied into Zotero storage from the watch root).
     const existing = await findParentLinkedPdfByPath(item, match.path);
     if (existing) {
-      return this.finalizeLocalAttachment(item, existing, match.path);
+      return this.finalizeLocalAttachment(item, existing, match.path, via);
     }
     try {
       const attachment = await (Zotero.Attachments as any).linkFromFile({
@@ -1138,7 +1148,7 @@ export class LocalFolderSource implements PDFSource {
         contentType: "application/pdf",
       });
       if (!attachment) return null;
-      return this.finalizeLocalAttachment(item, attachment, match.path);
+      return this.finalizeLocalAttachment(item, attachment, match.path, via);
     } catch (e) {
       rethrowAttachControlFlow(e);
       if (isContentMismatchError(e)) throw e;
@@ -1151,11 +1161,14 @@ export class LocalFolderSource implements PDFSource {
    * Filename match is not proof of content — a misnamed watch-root PDF
    * (Keyes book name wrapping an Arendt/Ponce article) must not stick.
    * Mismatch: detach the link only; disk file stays. Cascade may continue.
+   * Title-only matches that are unverifiable (scanned / PDFWorker fail) are
+   * also rejected so Download & attach does not stop on a wrong silent PDF.
    */
   private async finalizeLocalAttachment(
     item: Zotero.Item,
     attachment: Zotero.Item,
     diskPath: string,
+    via: "doi" | "isbn" | "title" = "title",
   ): Promise<Zotero.Item | null> {
     if (getPref("pdf.validateContent") === false) return attachment;
     const detailed = await validateAttachmentContentDetailed(
@@ -1169,8 +1182,25 @@ export class LocalFolderSource implements PDFSource {
       return attachment;
     }
     if (detailed.verdict === "unverifiable") {
-      await tagItem(item, "#pdf-review");
-      return attachment;
+      // DOI/ISBN index hits: keep + review tag (scanned book still likely right).
+      // Filename/title containment alone: reject — cascade must try OA next.
+      if (via === "doi" || via === "isbn") {
+        await tagItem(item, "#pdf-review");
+        return attachment;
+      }
+      const cleanedUnverifiable = await cleanupRejectedAttachment({
+        attachment,
+        persistedPath: diskPath,
+        finalCreatedByThisRun: false,
+      });
+      if (cleanedUnverifiable !== "cleaned") {
+        await tagItem(item, "#pdf-mismatch");
+        await tagItem(item, "#pdf-review");
+        throw new AttachStoppedError("erase-failed", attachment);
+      }
+      throw new ContentMismatchError(
+        "Yerel PDF doğrulanamadı (başlık eşleşmesi; içerik okunamadı)",
+      );
     }
     const cleaned = await cleanupRejectedAttachment({
       attachment,
@@ -1209,7 +1239,7 @@ export class LocalFolderSource implements PDFSource {
         );
       });
       if (byDOI.length === 1) {
-        return { status: "matched", file: byDOI[0], score: 1 };
+        return { status: "matched", file: byDOI[0], score: 1, via: "doi" };
       }
       if (byDOI.length > 1) {
         return { status: "ambiguous", score: 1 };
@@ -1226,7 +1256,7 @@ export class LocalFolderSource implements PDFSource {
         return field === isbn || f.alnum.includes(isbn.toLowerCase());
       });
       if (byISBN.length === 1) {
-        return { status: "matched", file: byISBN[0], score: 1 };
+        return { status: "matched", file: byISBN[0], score: 1, via: "isbn" };
       }
       if (byISBN.length > 1) {
         return { status: "ambiguous", score: 1 };
@@ -1314,13 +1344,29 @@ export class LocalFolderSource implements PDFSource {
     }
 
     const best = scored[0];
+    // Short titles ("Gece", "Sürgün"): containment alone matches many files —
+    // require author token in the filename before auto-attach.
+    const shortTitle = titleTokens.filter((t) => t.length >= 3).length <= 2;
+    if (shortTitle && !best.authorMatch) {
+      return {
+        status: "review",
+        file: best.f,
+        score: best.score,
+        reason: "short title without author match",
+      };
+    }
     let decision = classifyMatchConfidence(best.score, autoAttach, review);
     // Auto-attach only when every distinctive title token is present.
     if (decision === "attach" && (best.distRatio ?? 1) < 1) {
       decision = "review";
     }
     if (decision === "attach") {
-      return { status: "matched", file: best.f, score: best.score };
+      return {
+        status: "matched",
+        file: best.f,
+        score: best.score,
+        via: "title",
+      };
     }
     if (decision === "review") {
       return {

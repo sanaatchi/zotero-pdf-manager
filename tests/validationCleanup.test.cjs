@@ -26,10 +26,17 @@ test("validation verdicts: match clears tags; mismatch detaches; unverifiable ke
     /if \(await IOUtils\.exists\(persistedPath\)\) \{[\s\S]*?await IOUtils\.remove\(persistedPath\)/,
   );
   assert.match(source, /findParentLinkedPdfByPath/);
+  // OA download: unverifiable scanned books may keep (#pdf-review).
   assert.match(
     source,
     /unverifiable[\s\S]*?keeping attachment \(#pdf-review\)/,
   );
+  // Local title-only + unverifiable must NOT stick (cascade continues).
+  assert.match(
+    source,
+    /Yerel PDF doğrulanamadı \(başlık eşleşmesi; içerik okunamadı\)/,
+  );
+  assert.match(source, /short title without author match/);
   // Auto-download never throws review-stop; mismatch throws ContentMismatchError.
   assert.doesNotMatch(source, /throw new AttachStoppedError\("review"/);
   assert.match(source, /finalizeLocalAttachment/);
