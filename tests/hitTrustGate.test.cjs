@@ -511,3 +511,81 @@ test("filterTrustedHits drops short Devlet with wrong author (thrash gate)", () 
   assert.equal(trusted.length, 1);
   assert.equal(trusted[0].pdfUrl, "https://example.com/platon.pdf");
 });
+
+test("filterTrustedHits keeps Adorno LibGen title with ISBN/edition chrome", () => {
+  const { filterTrustedHits, cleanLibgenTitle, sameWorkTitle } = loadBridge();
+  const polluted =
+    "Kültür Endüstrisi Kültür Yönetimi 6th Edition 9789750505256; 9750505255 b l 2977293";
+  const cleaned = cleanLibgenTitle(polluted);
+  assert.equal(cleaned, "Kültür Endüstrisi Kültür Yönetimi");
+  assert.equal(
+    sameWorkTitle("Kültür endüstrisi kültür yönetimi", cleaned),
+    true,
+  );
+  const trusted = filterTrustedHits(
+    [
+      {
+        source: "libgen",
+        title: polluted,
+        authors: "",
+        year: "2007",
+        pdfUrl: "https://example.com/adorno.pdf",
+        extra: { title_overlap: 1.0 },
+      },
+    ],
+    {
+      title: "Kültür endüstrisi kültür yönetimi",
+      authors: "Adorno Theodor",
+      year: "2007",
+      kind: "book",
+      sourceId: "libgen",
+      isbn: "9789750505256",
+    },
+  );
+  assert.equal(trusted.length, 1);
+
+  // No ISBN on item: cleaned same-work title alone is enough (long title).
+  const trustedNoIsbn = filterTrustedHits(
+    [
+      {
+        source: "libgen",
+        title: polluted,
+        authors: "",
+        year: "2007",
+        pdfUrl: "https://example.com/adorno.pdf",
+        extra: { title_overlap: 1.0 },
+      },
+    ],
+    {
+      title: "Kültür endüstrisi kültür yönetimi",
+      authors: "Adorno Theodor",
+      year: "2007",
+      kind: "book",
+      sourceId: "libgen",
+    },
+  );
+  assert.equal(trustedNoIsbn.length, 1);
+
+  const wrong = filterTrustedHits(
+    [
+      {
+        source: "libgen",
+        title:
+          "Tamamen Farklı Kitap 6th Edition 9789750505256; 9750505255 b l 2977293",
+        authors: "",
+        year: "2007",
+        pdfUrl: "https://example.com/wrong.pdf",
+        extra: { title_overlap: 0.3 },
+      },
+    ],
+    {
+      title: "Kültür endüstrisi kültür yönetimi",
+      authors: "Adorno Theodor",
+      year: "2007",
+      kind: "book",
+      sourceId: "libgen",
+      isbn: "9789750505256",
+    },
+  );
+  assert.equal(wrong.length, 0);
+});

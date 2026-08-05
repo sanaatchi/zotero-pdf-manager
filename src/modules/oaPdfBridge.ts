@@ -1,4 +1,4 @@
-// @ajan: cursor · @etiket: katman-2, oa-pdf-bridge, weighted-score, paren-subtitle, sarkiyatcilik, isbn-bypass
+// @ajan: cursor · @etiket: katman-2, oa-pdf-bridge, libgen-title-clean, adorno-trust, isbn-bypass
 /**
  * Katman-2 → Kutuphane köprü (8756) `oa_pdf_search` client.
  * Online PDF discovery runs in Python; this module only POSTs queries.
@@ -6,6 +6,7 @@
  * Bridge base URL is loopback-only (same SSRF policy as K1/K3).
  * Manual OA Search sends allowWebSearch=true (DergiPark DDG last-resort).
  * Download & attach embeds kind criteria from the Zotero item automatically.
+ * LibGen titles: strip ISBN/edition/``b l id`` chrome before trust gates.
  */
 import { getPref, setPref } from "../utils/prefs";
 import { normalizeDOI } from "../utils/metadataNormalize";
@@ -815,6 +816,25 @@ function titleCorePhrase(value: string): string {
   return s.split(/\s*[:;–—|/]\s+|\s+-\s+/)[0]!.trim();
 }
 
+/** Mirror Python ``clean_libgen_title`` — ISBN/edition/``b l id`` chrome. */
+export function cleanLibgenTitle(value: string): string {
+  let text = String(value || "")
+    .replace(/<[^>]+>/g, " ")
+    .replace(/\s+BY\s+.+$/i, "")
+    .replace(/\b\d{1,2}(?:st|nd|rd|th)?\s+[Ee]ditions?\b/gi, " ")
+    .replace(/\s+\d{1,2}(?=\s+(?:97[89]\d{10}|\d{9}[\dXx])\b)/g, " ")
+    .replace(/\s+b\s+l\s+\d{4,}\b/gi, " ")
+    .replace(/\b(?:978|979)\d{10}\b/g, " ")
+    .replace(/\b\d{9}[\dXx]\b/g, " ")
+    .replace(/\s*[;|]\s*/g, " ")
+    .replace(/\s+/g, " ")
+    .trim()
+    .replace(/[\s;,:|/.\-–—]+$/g, "")
+    .trim();
+  if (text.length > 240) text = text.slice(0, 240);
+  return text;
+}
+
 export function sameWorkTitle(query: string, title: string): boolean {
   const q = foldedPhrase(query);
   const t = foldedPhrase(title);
@@ -1118,7 +1138,15 @@ export function filterTrustedHits(
   for (const hit of hits || []) {
     const url = String(hit.pdfUrl || "").trim();
     if (!url) continue;
-    const hitTitle = String(hit.title || "");
+    const rawHitTitle = String(hit.title || "");
+    const isLibgen =
+      ctx.sourceId === "libgen" ||
+      String(hit.source || "")
+        .trim()
+        .toLowerCase() === "libgen";
+    // Already-fetched LibGen rows may still carry ISBN/edition chrome —
+    // trust against the cleaned title so attach matches Python adapter.
+    const hitTitle = isLibgen ? cleanLibgenTitle(rawHitTitle) : rawHitTitle;
     const extra = (hit.extra || {}) as Record<string, unknown>;
     if (
       isBookReviewHit(hitTitle, extra) &&
@@ -1189,6 +1217,7 @@ export function filterTrustedHits(
     );
     const isbnDigits = String(ctx.isbn || "").replace(/[^0-9Xx]/g, "");
     const hitIsbnBlob = [
+      rawHitTitle,
       hitTitle,
       String(hit.authors || ""),
       String(extra.isbn || ""),
@@ -1244,7 +1273,7 @@ export function filterTrustedHits(
     // and json.php used to hardcode title_overlap=1.0 for any ISBN hit
     // (Chinese false-friend sets, Spanish twins with 0 Jaccard).
     // Require honest Python title_overlap AND client-side title trust.
-    if (ctx.sourceId === "libgen" || hit.source === "libgen") {
+    if (isLibgen) {
       const ovExtra = Number(
         (hit.extra as Record<string, unknown> | undefined)?.title_overlap,
       );
@@ -1284,22 +1313,21 @@ export function filterTrustedHits(
       }
       if (
         itemTitle &&
-        String(hit.title || "")
-          .trim()
-          .toLowerCase() === itemTitle.trim().toLowerCase()
+        hitTitle.trim().toLowerCase() === itemTitle.trim().toLowerCase()
       ) {
-        if (!(ovExtra >= 0.7) && !authorOkHit) {
+        if (!(ovExtra >= 0.7) && !authorOkHit && !isbnOkHit) {
           continue;
         }
       }
       // Books: when the item has authors, require author agreement unless
       // title Jaccard is near-exact *and* the title is long enough to be
-      // identity (short Devlet/Gece still need author).
+      // identity (short Devlet/Gece still need author). ISBN in the LibGen
+      // title blob (even before clean) may confirm when authors are blank.
       if (kindBookish && (ctx.authors || "").trim()) {
         const jacBook = titleOverlap(itemTitle, hitTitle);
         if (shortGeneric) {
           if (!authorOkHit && !isbnOkHit) continue;
-        } else if (jacBook < 0.85 && !authorOkHit) {
+        } else if (jacBook < 0.85 && !authorOkHit && !isbnOkHit) {
           continue;
         } else if (
           jacBook >= 0.85 &&
@@ -1310,10 +1338,7 @@ export function filterTrustedHits(
         }
       }
     }
-    if (
-      itemTitle &&
-      titleTrustOk(itemTitle, String(hit.title || ""), trustOpts)
-    ) {
+    if (itemTitle && titleTrustOk(itemTitle, hitTitle, trustOpts)) {
       // Soft non-LibGen hits without author still need a higher bar to fetch.
       if (
         kindBookish &&

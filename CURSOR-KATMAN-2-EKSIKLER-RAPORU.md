@@ -1,8 +1,8 @@
-<!-- @ajan: cursor · @etiket: katman-2, eksik-raporu, weighted-score, sarkiyatcilik -->
+<!-- @ajan: cursor · @etiket: katman-2, eksik-raporu, libgen-title-clean, adorno-trust -->
 
 # Cursor — Katman 2 Eksikler Raporu
 
-**Tarih:** 2026-08-06 · **Sürüm:** PDF Manager **v1.0.101**  
+**Tarih:** 2026-08-06 · **Sürüm:** PDF Manager **v1.0.102**  
 **Analiz:** ürün ↔ `referanslar/katman-2/` ↔ GitHub (Attanger, Zotadata, Zoplicate,
 ZotAssets, File Utility, Attachment Scanner, ozefe/yoktez).
 
@@ -14,11 +14,12 @@ ZotAssets, File Utility, Attachment Scanner, ozefe/yoktez).
 | Gerçek açık iş?           | Checklist Bölüm B (kullanıcı) + isteğe bağlı P3 |
 | Yeni zorunlu XPI portu?   | **Yok** — GitHub taraması yeni P1 üretmedi      |
 
-### Son eklenen (v1.0.101)
+### Son eklenen (v1.0.102)
 
 | Madde                                         | Not                                                                                                        |
 | --------------------------------------------- | ---------------------------------------------------------------------------------------------------------- |
-| 100’lük alan skoru + Şarkiyatçılık            | Federated Σ(puan/100×kalite); paren sameWork; LibGen ov&lt;0.7 ISBN/same-work; OA attach ISBN              |
+| LibGen başlık ISBN/edition/``b l`` temizliği  | Adorno «Kültür endüstrisi…» attach; `cleanLibgenTitle` + ISBN bypass; köprü restart + XPI                  |
+| 100’lük alan skoru + Şarkiyatçılık (v1.0.101) | Federated Σ(puan/100×kalite); paren sameWork; LibGen ov&lt;0.7 ISBN/same-work; OA attach ISBN              |
 | Uyumsuz PDF otomatik silme iptal (v1.0.100)   | mismatch → ek kalır + `#pdf-mismatch`; auto-detach yok; manuel audit onaylı detach                         |
 | Doğru PDF false-positive / yeniden indir (99) | Güçlü başlıkta yazarsız match; LLM ezemez; rejectedUrls                                                    |
 | Prefetch bar / thrash kapısı (v1.0.98)        | Kısa başlık yazar zorunlu; LibGen ov≥0.7; sibling MD5 skip; köprü restart + XPI                            |
