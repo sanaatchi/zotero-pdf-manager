@@ -1,4 +1,4 @@
-// @ajan: cursor · @etiket: katman-2, oa-pdf-bridge, fetch-502-header
+// @ajan: cursor · @etiket: katman-2, oa-pdf-bridge, arxiv-hidden
 /**
  * Katman-2 → Kutuphane köprü (8756) `oa_pdf_search` client.
  * Online PDF discovery runs in Python; this module only POSTs queries.
@@ -325,7 +325,6 @@ export const FEDERATED_SOURCE_PREF: Record<string, string> = {
   doi: "pdf.doiEnabled",
   dergipark: "pdf.dergiparkEnabled",
   pmc: "pdf.pmcEnabled",
-  arxiv: "pdf.arxivEnabled",
   s2: "pdf.s2Enabled",
   yoktez: "pdf.yoktezEnabled",
   scihub: "pdf.scihubEnabled",
@@ -341,7 +340,6 @@ export const FEDERATED_SOURCE_LABEL: Record<string, string> = {
   doi: "DOI",
   dergipark: "DergiPark",
   pmc: "PMC",
-  arxiv: "arXiv",
   s2: "S2",
   yoktez: "YÖK Tez",
   scihub: "Sci-Hub",

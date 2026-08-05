@@ -1,8 +1,8 @@
-<!-- @ajan: cursor · @etiket: katman-2, eksik-raporu, oa-search, fetch-502, no-clipboard -->
+<!-- @ajan: cursor · @etiket: katman-2, eksik-raporu, oa-search, arxiv-hidden -->
 
 # Cursor — Katman 2 Eksikler Raporu
 
-**Tarih:** 2026-08-05 · **Sürüm:** PDF Manager **v1.0.88**  
+**Tarih:** 2026-08-05 · **Sürüm:** PDF Manager **v1.0.89**  
 **Analiz:** ürün ↔ `referanslar/katman-2/` ↔ GitHub (Attanger, Zotadata, Zoplicate,
 ZotAssets, File Utility, Attachment Scanner, ozefe/yoktez).
 
@@ -14,11 +14,12 @@ ZotAssets, File Utility, Attachment Scanner, ozefe/yoktez).
 | Gerçek açık iş?           | Checklist Bölüm B (kullanıcı) + isteğe bağlı P3 |
 | Yeni zorunlu XPI portu?   | **Yok** — GitHub taraması yeni P1 üretmedi      |
 
-### Son eklenen (v1.0.88)
+### Son eklenen (v1.0.89)
 
 | Madde                                  | Not                                                                         |
 | -------------------------------------- | --------------------------------------------------------------------------- |
-| OA attach 502 fallback                 | `X-OA-Fetch-Error`; doi 502 → diğer hit (DergiPark); çıplak HTTP 502 yok    |
+| OA Search’ten arXiv çıkarıldı          | Kaynak chip / prefs checkbox / federated `full` yok; adapter CLI’da kalır   |
+| OA attach 502 fallback (v1.0.88)       | `X-OA-Fetch-Error`; doi 502 → diğer hit (DergiPark); çıplak HTTP 502 yok    |
 | İndirme raporu panoya kopyalanmaz      | Sekme / toast kalır; clipboard fallback kaldırıldı (v1.0.87)                |
 | İndirme raporu → OA JSONL (v1.0.86)    | `POST /pdf-search-log`; TR makale / tez kaçırma `cache/logs/oa_pdf_search/` |
 | OA Arama popup + menü çubuğu (v1.0.58) | `PDF Manager → OA Arama…`; Attanger federated aynı pencere                  |

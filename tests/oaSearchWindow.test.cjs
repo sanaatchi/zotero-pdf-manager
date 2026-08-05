@@ -1,4 +1,4 @@
-// @ajan: cursor · @etiket: katman-2, tests, oa-search
+// @ajan: cursor · @etiket: katman-2, tests, oa-search, arxiv-hidden
 const assert = require("node:assert/strict");
 const fs = require("node:fs");
 const path = require("node:path");
@@ -229,6 +229,8 @@ test("OA search surface: xhtml + menubar + locales + menu wiring", () => {
   assert.match(bridge, /loadOaSearchSourceSelection/);
   assert.match(bridge, /saveOaSearchSourceSelection/);
   assert.match(bridge, /allFederatedSourceIds/);
+  assert.doesNotMatch(bridge, /arxiv:\s*"pdf\.arxivEnabled"/);
+  assert.doesNotMatch(bridge, /arxiv:\s*"arXiv"/);
 
   const keys = [
     "pdf-manager-menu",

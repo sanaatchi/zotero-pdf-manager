@@ -1,4 +1,4 @@
-// @ajan: cursor · @etiket: katman-2, prefs, disi-watch-root
+// @ajan: cursor · @etiket: katman-2, prefs, arxiv-hidden
 /* eslint-disable no-undef */
 pref("extensions.zotero.__addonRef__.enable", true);
 pref("extensions.zotero.__addonRef__.attachType", "linking");
@@ -97,7 +97,8 @@ pref(
 );
 pref("extensions.zotero.__addonRef__.pdf.useLinkedAttachmentBase", true);
 pref("extensions.zotero.__addonRef__.pdf.localAsLink", true);
-// doi = Unpaywall CAPTCHA-free OA download. Metadata-only: arxiv / s2 / proquest
+// doi = Unpaywall CAPTCHA-free OA download. arXiv is not a selectable OA source
+// (pref kept false for migrate). Metadata-only leftovers: s2 / proquest
 pref("extensions.zotero.__addonRef__.pdf.doiEnabled", true);
 pref("extensions.zotero.__addonRef__.pdf.arxivEnabled", false);
 pref("extensions.zotero.__addonRef__.pdf.pmcEnabled", true);
