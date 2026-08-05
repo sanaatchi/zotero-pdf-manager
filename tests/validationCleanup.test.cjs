@@ -1,4 +1,4 @@
-// @ajan: cursor · @etiket: katman-2, tests, validate-tag-only
+// @ajan: cursor · @etiket: katman-2, tests, validate-tag-only, local-validate
 const assert = require("node:assert/strict");
 const fs = require("node:fs");
 const path = require("node:path");
@@ -29,7 +29,15 @@ test("validation verdicts: match clears tags; mismatch/unverifiable keep + tag",
   );
   // Auto-download never throws AttachStoppedError / eraseTx on mismatch.
   assert.doesNotMatch(source, /throw new AttachStoppedError\("review"/);
-  assert.doesNotMatch(source, /throw new AttachStoppedError\("erase-failed"/);
+  const downloadFn = source.slice(
+    source.indexOf("export async function downloadAndAttach"),
+  );
+  assert.doesNotMatch(
+    downloadFn,
+    /throw new AttachStoppedError\("erase-failed"/,
+  );
+  assert.match(source, /finalizeLocalAttachment/);
+  assert.match(source, /Yerel PDF künye ile uyuşmuyor/);
   // Manual audit may still erase via cleanupRejectedAttachment.
   assert.match(source, /await opts\.attachment\.eraseTx\(\)/);
   assert.doesNotMatch(

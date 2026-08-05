@@ -1,4 +1,4 @@
-// @ajan: cursor · @etiket: katman-2, tests, cascade-abort, validate-tag-only
+// @ajan: cursor · @etiket: katman-2, tests, cascade-abort, local-validate
 const assert = require("node:assert/strict");
 const fs = require("node:fs");
 const path = require("node:path");
@@ -61,7 +61,16 @@ test("validation + cascade: AttachStoppedError stops further sources", () => {
   assert.match(source, /keeping attachment \(#pdf-mismatch\)/);
   assert.match(source, /keeping attachment \(#pdf-review\)/);
   assert.doesNotMatch(source, /throw new AttachStoppedError\("review"/);
-  assert.doesNotMatch(source, /throw new AttachStoppedError\("erase-failed"/);
+  const downloadFn = source.slice(
+    source.indexOf("export async function downloadAndAttach"),
+  );
+  assert.doesNotMatch(
+    downloadFn,
+    /throw new AttachStoppedError\("erase-failed"/,
+  );
+  // Local misnamed PDF: detach link and continue cascade.
+  assert.match(source, /finalizeLocalAttachment/);
+  assert.match(source, /Yerel PDF künye ile uyuşmuyor/);
   assert.match(source, /ContentMismatchError/);
   assert.match(source, /rethrowAttachControlFlow/);
 
