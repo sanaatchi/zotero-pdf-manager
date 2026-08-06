@@ -1,4 +1,4 @@
-// @ajan: cursor · @etiket: katman-2, oa-pdf-bridge, subtitle-enrich, seargeant-trust
+// @ajan: cursor · @etiket: katman-2, oa-pdf-bridge, subtitle-enrich, address-gate
 /**
  * Katman-2 → Kutuphane köprü (8756) `oa_pdf_search` client.
  * Online PDF discovery runs in Python; this module only POSTs queries.
@@ -9,6 +9,7 @@
  * LibGen titles: strip ISBN/edition/``b l id`` chrome before trust gates.
  * Same-work subtitle cores (Seargeant) pass without hit authors when distinctive.
  * Subtitle-only gaps: enrich item title from PDF/hit, then match.
+ * Reject publisher street/postal HQ lines as fake subtitles (TÜBA address).
  */
 import { getPref, setPref } from "../utils/prefs";
 import { normalizeDOI } from "../utils/metadataNormalize";
@@ -898,9 +899,31 @@ function subtitleTail(title: string): { sep: string; sub: string } {
   return { sep: "", sub: "" };
 }
 
+const STREET_WORD_RE =
+  /\b(?:sokak|sok\.?|cadde|cad\.?|mahalle|mah\.?|bulvar|bulv\.?|caddesi|sokağ[ıi]|sokagi|street|st\.|road|rd\.|avenue|ave\.|lane|ln\.|drive|dr\.|boulevard|blvd\.?)\b/i;
+const STREET_NO_RE = /\bno\.?\s*:?\s*\d+\b/i;
+const POSTAL_CODE_RE = /\b0\d{4}\b|\b\d{5}(?:-\d{4})?\b/;
+const ORG_HQ_RE =
+  /\b(?:akademi(?:si)?|university|universit[eé]|press|yay[ıi]n(?:evi|ları|lari)?|verlag|edition|institute|enstit[uü]|foundation|vakf[ıi]|association|derne[gğ]i|academy|bilimler)\b/i;
+
+/** Mirror Python ``looks_like_address_or_publisher_hq``. */
+export function looksLikeAddressOrPublisherHq(subtitle: string): boolean {
+  const s = String(subtitle || "").trim();
+  if (!s) return false;
+  const hasStreet = STREET_WORD_RE.test(s);
+  const hasNo = STREET_NO_RE.test(s);
+  const hasPostal = POSTAL_CODE_RE.test(s);
+  if (hasStreet && (hasNo || hasPostal || ORG_HQ_RE.test(s))) return true;
+  if (hasPostal && (hasStreet || hasNo)) return true;
+  if (ORG_HQ_RE.test(s) && hasStreet) return true;
+  if (hasNo && hasPostal) return true;
+  return false;
+}
+
 /**
  * When item lacks a subtitle that a longer same-work PDF/hit title has,
- * return the enriched künye title. Else null (wrong core / weak / already full).
+ * return the enriched künye title. Else null (wrong core / weak / already
+ * full / publisher street-postal HQ line).
  */
 export function proposeSubtitleEnrichment(
   itemTitle: string,
@@ -916,6 +939,7 @@ export function proposeSubtitleEnrichment(
   }
   const { sep, sub } = subtitleTail(evidence);
   if (!sep || !sub) return null;
+  if (looksLikeAddressOrPublisherHq(sub)) return null;
   const itemTail = subtitleTail(item);
   if (itemTail.sub) return null; // already has subtitle — no overwrite
   const enriched = sep === " (" ? `${item} (${sub})` : `${item}${sep}${sub}`;

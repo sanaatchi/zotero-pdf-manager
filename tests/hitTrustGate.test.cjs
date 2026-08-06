@@ -1,4 +1,4 @@
-// @ajan: cursor · @etiket: katman-2, tests, hit-trust, subtitle-enrich
+// @ajan: cursor · @etiket: katman-2, tests, hit-trust, subtitle-enrich, address-gate
 const assert = require("node:assert/strict");
 const { test } = require("node:test");
 const path = require("node:path");
@@ -698,4 +698,34 @@ test("subtitle enrichment: missing subtitle → enrich; wrong core → null; alr
     authorOk: true,
   });
   assert.equal(resolved, evidence);
+});
+
+test("subtitle enrichment: reject TÜBA publisher street/postal address", () => {
+  const {
+    proposeSubtitleEnrichment,
+    resolveSubtitleEnrichment,
+    looksLikeAddressOrPublisherHq,
+  } = loadBridge();
+
+  const item = "Tarihi ve Etimolojik Türkiye Türkçesi Lügatı";
+  const addr = "Türkiye Bilimler Akademisi Piyade Sokak No 27, 06690";
+  assert.equal(looksLikeAddressOrPublisherHq(addr), true);
+  assert.equal(
+    proposeSubtitleEnrichment(item, `${item}: ${addr}`),
+    null,
+  );
+
+  const pdf = `${item}\n${addr}\n${"Bu lügat Türkçenin etimolojik sözlüğüdür. ".repeat(12)}`;
+  assert.equal(
+    resolveSubtitleEnrichment(item, { pdfText: pdf, authorOk: true }),
+    null,
+  );
+
+  // Seargeant topical subtitle still enriches (parity with Python).
+  const seargeant =
+    "The Art of Political Storytelling: why stories win votes in post-truth politics";
+  assert.equal(
+    proposeSubtitleEnrichment("The Art of Political Storytelling", seargeant),
+    seargeant,
+  );
 });
