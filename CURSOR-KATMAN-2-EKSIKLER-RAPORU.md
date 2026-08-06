@@ -1,4 +1,4 @@
-<!-- @ajan: cursor · @etiket: katman-2, eksik-raporu, match-rename-move -->
+<!-- @ajan: cursor · @etiket: katman-2, eksik-raporu, mismatch-rematch -->
 
 # Cursor — Katman 2 Eksikler Raporu
 
@@ -18,6 +18,7 @@ ZotAssets, File Utility, Attachment Scanner, ozefe/yoktez).
 
 | Madde                                           | Not                                                                                                        |
 | ----------------------------------------------- | ---------------------------------------------------------------------------------------------------------- |
+| `#pdf-mismatch` → Match/reconcile rematch       | Skip gates ignore tagged parents; Match also scans downloads/; old wrong PDF kept (109)                    |
 | Match/local link → rename+move                  | Content match sonrası künye adı + destDir; mismatch keep; autoMove/destDir prefs (109)                     |
 | Ghost/dimmed Match attachment stub              | fileExists gate + purge siblings; relocate link-before-erase; no inaccessible stub after success (108)     |
 | Match attachment → `#pdf-mismatch` temizle      | Local finalize + menü Match Attachment; match veya skipped+DOI/ISBN; mismatch etiketi kalır (v1.0.107)     |
