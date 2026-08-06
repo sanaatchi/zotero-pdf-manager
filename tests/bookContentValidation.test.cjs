@@ -1,4 +1,4 @@
-// @ajan: cursor · @etiket: katman-2, tests, content-validate, tr-i-fold, sentence-tr-override, no-validate-subtitle-enrich, title-length-aware
+// @ajan: cursor · @etiket: katman-2, tests, content-validate, tr-i-fold, sentence-tr-override, no-validate-subtitle-enrich, title-length-aware, tr-pdf-encoding, medium-cov-soft
 const assert = require("node:assert/strict");
 const fs = require("node:fs");
 const { test } = require("node:test");
@@ -23,7 +23,7 @@ function loadModule() {
   return module.exports;
 }
 
-test("book validation: ISBN match keeps; ISBN conflict is mismatch", () => {
+test("book validation: ISBN match keeps; hard conflict mismatches; soft title+author overrides id noise", () => {
   const { decideContentValidation } = loadModule();
   assert.equal(
     decideContentValidation({
@@ -38,18 +38,33 @@ test("book validation: ISBN match keeps; ISBN conflict is mismatch", () => {
     }),
     "match",
   );
+  // Hard conflict with weak title → still mismatch
   assert.equal(
     decideContentValidation({
       kind: "book",
       textChars: 200,
-      titleHit: 0.8,
-      score: 0.9,
+      titleHit: 0.3,
+      score: 0.3,
       hasIdConflict: true,
       hasIdMatch: false,
       authorExpected: true,
       authorFound: true,
     }),
     "mismatch",
+  );
+  // Soft: high titleHit + author + score → id noise does not force mismatch
+  assert.equal(
+    decideContentValidation({
+      kind: "book",
+      textChars: 200,
+      titleHit: 0.95,
+      score: 0.9,
+      hasIdConflict: true,
+      hasIdMatch: false,
+      authorExpected: true,
+      authorFound: true,
+    }),
+    "match",
   );
 });
 
@@ -606,7 +621,7 @@ test("21-word long title softens distinctiveCoverage < 1", () => {
     }),
     "match",
   );
-  // Medium band still demands coverage === 1.
+  // Medium without year still demands coverage === 1.
   assert.equal(
     decideContentValidation({
       kind: "other",
@@ -619,7 +634,67 @@ test("21-word long title softens distinctiveCoverage < 1", () => {
       authorFound: true,
       distinctiveCoverage: 0.88,
       titleLengthBand: "medium",
+      yearFound: false,
     }),
     "mismatch",
   );
+  // Medium + author+year soft coverage (OCR/encoding false positives).
+  assert.equal(
+    articleDistinctiveCoverageOk({
+      titleLengthBand: "medium",
+      distinctiveCoverage: 0.5,
+      authorFound: true,
+      titleHit: 0.7,
+      yearFound: true,
+    }),
+    true,
+  );
+  assert.equal(
+    decideContentValidation({
+      kind: "other",
+      textChars: 800,
+      titleHit: 0.71,
+      score: 1.5,
+      hasIdConflict: false,
+      hasIdMatch: false,
+      authorExpected: true,
+      authorFound: true,
+      distinctiveCoverage: 0.5,
+      titleLengthBand: "medium",
+      yearFound: true,
+    }),
+    "match",
+  );
+  // Bilingual medium: low cov + modest titleHit + author+year.
+  assert.equal(
+    articleDistinctiveCoverageOk({
+      titleLengthBand: "medium",
+      distinctiveCoverage: 0.25,
+      authorFound: true,
+      titleHit: 0.38,
+      yearFound: true,
+    }),
+    true,
+  );
+});
+
+test("TR PDF encoding repair: Đ/Ġ/ý/ð/þ + hyphen glue", () => {
+  const {
+    normalizeSearchText,
+    repairTurkishPdfEncoding,
+    distinctiveTitleCoverage,
+  } = loadModule();
+  assert.equal(repairTurkishPdfEncoding("CUMHURĐYET"), "CUMHURİYET");
+  assert.equal(
+    repairTurkishPdfEncoding("Osmanlý Ýmparatorluðu þehir"),
+    "Osmanlı İmparatorluğu şehir",
+  );
+  assert.match(normalizeSearchText("Resim-İş"), /resimis/);
+  // Altuner-style Đ title vs künye.
+  const title =
+    "Cumhuriyet devri ortaöğretimindeki sanat tarihi müfredatının değerlendirilmesi";
+  const pdf =
+    "CUMHURĐYET DEVRĐ ORTAÖĞRETĐMĐNDEKĐ SANAT TARĐHĐ MÜFREDATININ DEĞERLENDĐRĐLMESĐ " +
+    "Yrd. Doç. Dr. Huriye ALTUNER 2010 ".repeat(5);
+  assert.equal(distinctiveTitleCoverage(title, pdf), 1);
 });

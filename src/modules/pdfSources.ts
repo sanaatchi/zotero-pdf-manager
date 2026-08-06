@@ -1,4 +1,4 @@
-// @ajan: cursor · @etiket: katman-2, pdf-sources, bridge-guard, ocr-haystack, content-validate, nosource-sync, pdf-candidate-split, mismatch-reason, encoding-gate, re-ocr-validate, tr-i-fold, sentence-tr-override, author-line-gate, no-validate-subtitle-enrich, title-length-aware
+// @ajan: cursor · @etiket: katman-2, pdf-sources, bridge-guard, ocr-haystack, content-validate, nosource-sync, pdf-candidate-split, mismatch-reason, encoding-gate, re-ocr-validate, tr-i-fold, sentence-tr-override, author-line-gate, no-validate-subtitle-enrich, title-length-aware, isbn-conflict-soft, tr-pdf-encoding, medium-cov-soft
 import { getString } from "../utils/locale";
 import { getPref } from "../utils/prefs";
 import {
@@ -277,16 +277,39 @@ export async function fetchPdfBytes(
 // Metadata helpers (used for matching and content validation)
 // --------------------------------------------------------------------------
 
+/**
+ * Repair common Turkish PDF encoding corruption before fold.
+ * - Font-sub: Đ/Ġ for İ; ġ for ş
+ * - CP1254 bytes misread as CP1252: Ý/ý/ð/Ð/þ/Þ → İ/ı/ğ/Ğ/ş/Ş
+ * - C0 controls that punch holes in titles (N→\x0f in some DergiPark PDFs)
+ */
+export function repairTurkishPdfEncoding(s: string): string {
+  return String(s || "")
+    .replace(/[\u0000-\u0008\u000B\u000C\u000E-\u001F]/g, "")
+    .replace(/\u0110/g, "İ") // Đ
+    .replace(/\u0111/g, "i") // đ
+    .replace(/\u0120/g, "İ") // Ġ
+    .replace(/\u0121/g, "ş") // ġ
+    .replace(/\u00dd/g, "İ") // Ý
+    .replace(/\u00fd/g, "ı") // ý
+    .replace(/\u00f0/g, "ğ") // ð
+    .replace(/\u00d0/g, "Ğ") // Ð
+    .replace(/\u00fe/g, "ş") // þ
+    .replace(/\u00de/g, "Ş"); // Þ
+}
+
 export function normalizeSearchText(s: string): string {
   // NFKD+strip turns İ→I. Turkish locale then maps I→ı (dotless). Remap
   // ı/İ→i *after* locale lower so «İşlenen» and «işlenen» fold identically
   // (Python match_util._fold uses casefold I→i; same end state).
-  return (s || "")
+  // Hyphens glue (Resim-İş → resimis) so title tokens match PDF compounds.
+  return repairTurkishPdfEncoding(s || "")
     .normalize("NFKD")
     .replace(/\p{Mark}/gu, "")
     .toLocaleLowerCase("tr")
     .replace(/\u0131/g, "i")
     .replace(/\u0130/g, "i")
+    .replace(/[\u2010-\u2015\u2212-]/g, "")
     .replace(/[^\p{L}\p{N}\s]/gu, " ");
 }
 
@@ -375,6 +398,12 @@ export const TITLE_LENGTH = {
   LONG_COVERAGE_SOFT: 0.85,
   /** Long titles: titleHit floor for soft coverage without author. */
   LONG_TITLE_HIT_SOFT: 0.85,
+  /** Medium articles: soft floor when author+year corroborate (OCR/encoding). */
+  MEDIUM_COVERAGE_SOFT: 0.5,
+  /** Medium bilingual: lower cov + titleHit when author+year present. */
+  MEDIUM_BILINGUAL_COVERAGE_SOFT: 0.2,
+  /** Medium bilingual: titleHit floor paired with bilingual coverage soft. */
+  MEDIUM_BILINGUAL_TITLE_HIT_SOFT: 0.35,
 } as const;
 
 export type TitleLengthBand = "short" | "medium" | "long";
@@ -400,7 +429,7 @@ export function classifyTitleLength(title: string): TitleLengthBand {
 
 /**
  * Article distinctive-coverage gate — length-aware.
- * Medium: coverage must be 1.0.
+ * Medium: coverage 1.0, or soft when author+year (OCR/encoding / bilingual).
  * Long: coverage ≥ LONG_COVERAGE_SOFT + (authorFound | titleHit ≥ soft).
  * Short: coverage still 1.0 when distinctive tokens exist (corroboration
  * is a separate gate).
@@ -410,14 +439,27 @@ export function articleDistinctiveCoverageOk(input: {
   distinctiveCoverage: number;
   authorFound: boolean;
   titleHit: number;
+  yearFound?: boolean;
 }): boolean {
   const cov = input.distinctiveCoverage;
   if (cov >= 1) return true;
-  if (input.titleLengthBand !== "long") return false;
-  if (cov < TITLE_LENGTH.LONG_COVERAGE_SOFT) return false;
-  return (
-    input.authorFound || input.titleHit >= TITLE_LENGTH.LONG_TITLE_HIT_SOFT
-  );
+  if (input.titleLengthBand === "long") {
+    if (cov < TITLE_LENGTH.LONG_COVERAGE_SOFT) return false;
+    return (
+      input.authorFound || input.titleHit >= TITLE_LENGTH.LONG_TITLE_HIT_SOFT
+    );
+  }
+  if (input.titleLengthBand === "medium") {
+    // Author+year corroborate partial distinctive miss (Đ/Ġ encoding,
+    // hyphen glue, künye typo, bilingual EN body / TR künye).
+    if (!input.authorFound || !input.yearFound) return false;
+    if (cov >= TITLE_LENGTH.MEDIUM_COVERAGE_SOFT) return true;
+    return (
+      cov >= TITLE_LENGTH.MEDIUM_BILINGUAL_COVERAGE_SOFT &&
+      input.titleHit >= TITLE_LENGTH.MEDIUM_BILINGUAL_TITLE_HIT_SOFT
+    );
+  }
+  return false;
 }
 
 /**
@@ -679,7 +721,7 @@ export function decideContentValidation(input: {
   authorFound: boolean;
   /**
    * 0–1 share of distinctive title tokens (≥7, not stop) found in PDF.
-   * Articles: medium requires 1.0; long softens to ≥0.85 with corroboration;
+   * Articles: medium softens with author+year; long softens to ≥0.85;
    * short still needs 1.0 when tokens exist + author/year/id.
    */
   distinctiveCoverage?: number;
@@ -689,7 +731,14 @@ export function decideContentValidation(input: {
   yearFound?: boolean;
 }): ContentValidation {
   if (input.textChars < 50) return "unverifiable";
-  if (input.hasIdConflict) return "mismatch";
+  // Hard ISBN/DOI conflict → mismatch, unless title+author already strongly
+  // corroborate (set-ISBN / phone-as-ISBN noise with matching künye elsewhere
+  // is cleared in metadataCheck; this soft gate is the safety net).
+  if (input.hasIdConflict) {
+    const softIdNoise =
+      input.titleHit >= 0.85 && input.authorFound && input.score >= 0.45;
+    if (!softIdNoise) return "mismatch";
+  }
   if (input.hasIdMatch) return "match";
   // Books: missing author alone used to force mismatch and erase *correct*
   // scans (surname OCR miss / translator listed first). Only kill when title
@@ -711,6 +760,7 @@ export function decideContentValidation(input: {
       distinctiveCoverage: cov,
       authorFound: input.authorFound,
       titleHit: input.titleHit,
+      yearFound,
     });
   // Short band (1–3 words): books and articles need author/year/id.
   const shortOk = shortTitleCorroborationOk({
@@ -802,6 +852,16 @@ export function formatContentValidationReason(input: {
         input.distinctiveCoverage ?? 0
       ).toFixed(2)}) | ${stats}`;
     }
+    if (
+      band === "medium" &&
+      (input.distinctiveCoverage ?? 1) < 1 &&
+      input.authorFound &&
+      input.yearFound
+    ) {
+      return `match: medium-title soft distinctive coverage (${(
+        input.distinctiveCoverage ?? 0
+      ).toFixed(2)}; author+year) | ${stats}`;
+    }
     return `match: ${stats}`;
   }
   // mismatch
@@ -840,6 +900,7 @@ export function formatContentValidationReason(input: {
         distinctiveCoverage: cov,
         authorFound: input.authorFound,
         titleHit: input.titleHit,
+        yearFound: !!input.yearFound,
       })
     ) {
       return `article: incomplete distinctive title tokens (${cov.toFixed(

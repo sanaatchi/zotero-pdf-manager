@@ -1,4 +1,4 @@
-// @ajan: claude · @etiket: katman-2, format-metadata, metadataCheck, isbn-checksum-fix
+// @ajan: cursor · @etiket: katman-2, format-metadata, metadataCheck, isbn-prefer-any, phone-isbn-reject
 import { PDFDocument } from "pdf-lib";
 import { config } from "../../package.json";
 import {
@@ -28,6 +28,74 @@ export type MetadataCheckResult = {
   score: number;
   details: string[];
 };
+
+/** Loose ISBN-shaped digit runs (phones / set ISBN / volume ISBN). */
+const ISBN_CANDIDATE_RE = /(?:97[89][\d -]{10,16}|\d[\d xX-]{8,16})/g;
+
+/**
+ * TR publisher Tel/Fax blocks (Istanbul 212/216, Ankara 312, mobile 5xx, …)
+ * look like ISBN-10 digit runs. Reject before checksum / conflict logic.
+ */
+export function looksLikePhoneNotIsbn(raw: string): boolean {
+  const d = normalizeISBNDigits(raw);
+  if (!d) return false;
+  const phone = d.replace(/^0+/, "");
+  if (phone.length !== 10 || !/^\d{10}$/.test(phone)) return false;
+  if (/^5\d{9}$/.test(phone)) return true;
+  // Common TR landline area codes + 7-digit local.
+  return /^(212|216|224|232|242|252|256|258|264|266|272|274|276|282|284|286|288|312|318|322|324|326|328|332|338|342|344|346|348|352|354|356|358|362|364|368|370|372|374|378|380|384|386|388|412|414|416|422|424|426|428|432|434|436|438|442|446|452|454|456|458|462|464|466|472|474|476|478|482|484|486|488)\d{7}$/.test(
+    phone,
+  );
+}
+
+/**
+ * Collect checksum-valid ISBN-10/13 candidates from text.
+ * Drops phone-like runs and non-978/979 13-digit garbage.
+ */
+export function extractIsbnCandidates(
+  value: string,
+  opts: { requireChecksum?: boolean } = {},
+): string[] {
+  const requireChecksum = opts.requireChecksum !== false;
+  const candidates = String(value || "").match(ISBN_CANDIDATE_RE) || [];
+  const out: string[] = [];
+  const seen = new Set<string>();
+  for (const candidate of candidates) {
+    const normalized = normalizeISBNDigits(candidate);
+    if (normalized.length !== 10 && normalized.length !== 13) continue;
+    if (looksLikePhoneNotIsbn(normalized)) continue;
+    if (normalized.length === 13 && !/^97[89]/.test(normalized)) continue;
+    if (requireChecksum) {
+      const ok =
+        (normalized.length === 10 && isValidIsbn10(normalized)) ||
+        (normalized.length === 13 && isValidIsbn13(normalized));
+      if (!ok) continue;
+    }
+    if (seen.has(normalized)) continue;
+    seen.add(normalized);
+    out.push(normalized);
+  }
+  return out;
+}
+
+/**
+ * Prefer any PDF ISBN equivalent to the künye ISBN (set + volume both OK).
+ * Otherwise return the first valid candidate for conflict messaging.
+ */
+export function pickPdfIsbn(
+  pdfBlob: string,
+  zoteroIsbn = "",
+): { isbn: string; matched: boolean } {
+  const candidates = extractIsbnCandidates(pdfBlob);
+  if (!candidates.length) return { isbn: "", matched: false };
+  const z = normalizeISBNDigits(zoteroIsbn);
+  if (z) {
+    for (const c of candidates) {
+      if (isbnsEquivalent(z, c)) return { isbn: c, matched: true };
+    }
+  }
+  return { isbn: candidates[0], matched: false };
+}
 
 function normalize(value: string) {
   return (value || "")
@@ -69,13 +137,19 @@ function cleanDOI(value: string) {
 }
 
 function cleanISBN(value: string) {
-  // Prefer a checksum-valid candidate when several digit runs appear.
-  const candidates =
-    value.match(/(?:97[89][\d -]{10,16}|\d[\d xX-]{8,16})/g) || [];
+  // Single-field / display: first checksum-valid, non-phone candidate.
+  return extractIsbnCandidates(value)[0] || "";
+}
+
+/** Künye field may hold checksum-corrupt OCR ISBNs — keep digits for skip path. */
+function rawIsbnDigits(value: string): string {
+  const candidates = String(value || "").match(ISBN_CANDIDATE_RE) || [];
   for (const candidate of candidates) {
     const normalized = normalizeISBNDigits(candidate);
     if (normalized.length === 10 || normalized.length === 13) return normalized;
   }
+  const fallback = normalizeISBNDigits(value);
+  if (fallback.length === 10 || fallback.length === 13) return fallback;
   return "";
 }
 
@@ -88,6 +162,8 @@ export function compareMetadata(
   let possible = 0;
   let criticalMismatch = false;
   let warning = false;
+  let isbnHardConflict = false;
+  let isbnConflictPdf = "";
 
   const contentEvidence = pdf.evidence || "";
   const zoteroDOI = cleanDOI(zotero.doi || "");
@@ -103,8 +179,10 @@ export function compareMetadata(
     }
   }
 
-  const zoteroISBN = cleanISBN(zotero.isbn || "");
-  const pdfISBN = cleanISBN(`${pdf.isbn || ""}\n${contentEvidence}`);
+  const zoteroISBN = rawIsbnDigits(zotero.isbn || "");
+  const pdfBlob = `${pdf.isbn || ""}\n${contentEvidence}`;
+  const picked = pickPdfIsbn(pdfBlob, zoteroISBN);
+  const pdfISBN = picked.isbn;
   // A stored ISBN that fails its own check digit is provably corrupted data
   // (common OCR sans-serif 0/8/3 digit confusion during cataloging) — not
   // reliable evidence of an actual conflict with a different book. Comparing
@@ -124,17 +202,21 @@ export function compareMetadata(
     );
   } else if (zoteroISBN && pdfISBN) {
     possible += 4;
-    if (isbnsEquivalent(zoteroISBN, pdfISBN)) {
+    if (picked.matched || isbnsEquivalent(zoteroISBN, pdfISBN)) {
       points += 4;
       details.push(
         zoteroISBN === pdfISBN ? "ISBN eşleşiyor" : "ISBN eşleşiyor (10↔13)",
       );
     } else {
+      // Tentative — may soft-clear after title+author (set ISBN / imprint noise).
       criticalMismatch = true;
+      isbnHardConflict = true;
+      isbnConflictPdf = pdfISBN;
       details.push(`ISBN uyuşmuyor: Zotero=${zoteroISBN}, PDF=${pdfISBN}`);
     }
   }
 
+  let titleScore = 0;
   const zoteroTitle = stripTitleTrailingDot(zotero.title || "");
   if (zoteroTitle && (pdf.title || contentEvidence)) {
     possible += 3;
@@ -144,7 +226,7 @@ export function compareMetadata(
     const contentTitleScore = contentEvidence
       ? containment(zoteroTitle, contentEvidence)
       : 0;
-    const titleScore = Math.max(metadataTitleScore, contentTitleScore);
+    titleScore = Math.max(metadataTitleScore, contentTitleScore);
     points += 3 * titleScore;
     if (titleScore >= 0.55) {
       details.push(
@@ -163,6 +245,7 @@ export function compareMetadata(
     details.push("PDF başlık metadata alanı eksik");
   }
 
+  let authorMatched = false;
   const creatorEvidence = normalize(
     `${(pdf.creators || []).join(" ")} ${contentEvidence}`,
   );
@@ -173,6 +256,7 @@ export function compareMetadata(
     possible += 2;
     if (zoteroCreators.some((name) => creatorEvidence.includes(name))) {
       points += 2;
+      authorMatched = true;
       details.push("Yazar/editör eşleşiyor");
     } else {
       warning = true;
@@ -181,6 +265,18 @@ export function compareMetadata(
   } else {
     warning = true;
     details.push("PDF yazar metadata alanı eksik");
+  }
+
+  // Soft: titleHit-high + author + only non-matching extra PDF ISBNs → not
+  // a forced mismatch (multi-volume set ISBN, imprint siblings, etc.).
+  if (isbnHardConflict && titleScore >= 0.55 && authorMatched) {
+    criticalMismatch = false;
+    warning = true;
+    const idx = details.findIndex((d) => d.includes("ISBN uyuşmuyor"));
+    if (idx >= 0) {
+      details[idx] =
+        `ISBN PDF'de ek/farklı (${isbnConflictPdf}) — başlık+yazar güçlü, çakışma yok sayıldı`;
+    }
   }
 
   const evidenceYear =

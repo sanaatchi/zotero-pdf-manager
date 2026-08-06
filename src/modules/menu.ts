@@ -1,4 +1,4 @@
-/* @ajan: claude · @etiket: katman-2, menu, match-rename-move, mismatch-rematch, clear-automation-tags-menu, nosource-sync, trash-notifier */
+/* @ajan: cursor · @etiket: katman-2, menu, match-rename-move, mismatch-rematch, isbn-phone-filter */
 /*eslint no-constant-condition: ["error", { "checkLoops": false }]*/
 import { getString } from "../utils/locale";
 import { config } from "../../package.json";
@@ -24,10 +24,14 @@ import {
   maybeEmbedMetadata,
 } from "./pdfMetadata";
 import { cleanMetadataForSelectedItems } from "./metadataClean";
-import { checkMetadataForSelectedItems } from "./metadataCheck";
+import {
+  checkMetadataForSelectedItems,
+  looksLikePhoneNotIsbn,
+} from "./metadataCheck";
 import { fillMetadataFromSelectedPDFFilenames } from "./filenameMetadata";
 import { mergeDuplicatePDFAttachments } from "./duplicateAttachmentMerger";
 import { researchMetadataForSelectedPDFs } from "./pdfContentMetadata";
+import { isValidIsbn10, isValidIsbn13 } from "../utils/metadataNormalize";
 import {
   deleteAttachmentsAndItemsForSelection,
   deleteAttachmentsForSelectedItems,
@@ -1711,7 +1715,9 @@ function scoreAttachmentMetadata(
     ...rawEvidence.matchAll(/(?:97[89][\d\s-]{10,16}|\d[\dXx\s-]{8,16})/g),
   ]
     .map((match) => extractMatchISBN(match[0]))
-    .filter((isbn) => isbn.length === 10 || isbn.length === 13);
+    .filter((isbn) => isbn.length === 10 || isbn.length === 13)
+    // Drop TR phone/fax digit runs and checksum-invalid noise (Berger Metis).
+    .filter((isbn) => !looksLikePhoneMatchIsbn(isbn) && isChecksumIsbn(isbn));
   const identifierMatched =
     Boolean(itemDOI && evidenceDOIs.includes(itemDOI)) ||
     Boolean(itemISBN && evidenceISBNs.includes(itemISBN));
@@ -1765,6 +1771,17 @@ function extractMatchISBN(value: string) {
   return (value.match(/(?:97[89][\d\s-]{10,16}|\d[\dXx\s-]{8,16})/)?.[0] || "")
     .replace(/[^\dX]/gi, "")
     .toUpperCase();
+}
+
+function looksLikePhoneMatchIsbn(isbn: string): boolean {
+  return looksLikePhoneNotIsbn(isbn);
+}
+
+function isChecksumIsbn(isbn: string): boolean {
+  return (
+    (isbn.length === 10 && isValidIsbn10(isbn)) ||
+    (isbn.length === 13 && isValidIsbn13(isbn))
+  );
 }
 
 async function reuseOrRepairMatchedAttachment(

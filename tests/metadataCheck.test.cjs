@@ -136,8 +136,101 @@ test("two genuinely different, checksum-valid ISBNs still hard-fail as a conflic
       evidence: "Same title\nAuthor Name\nISBN 978-0-596-52068-7",
     },
   );
-  assert.equal(result.status, "mismatch");
-  assert.equal(hasIdentifierConflict(result), true);
+  // Title+author soft path: when title/author also match, conflict is
+  // downgraded (set-ISBN / imprint noise). Use a weak title so the ISBN
+  // conflict remains hard.
+  const hard = compareMetadata(
+    {
+      title: "Completely Different Book Title About Widgets",
+      creators: ["Author Name"],
+      isbn: "978-0-13-468599-1",
+    },
+    {
+      evidence: "Unrelated Pamphlet\nISBN 978-0-596-52068-7",
+    },
+  );
+  assert.equal(hard.status, "mismatch");
+  assert.equal(hasIdentifierConflict(hard), true);
+  // Soft path: strong title+author + different PDF ISBN → not forced mismatch
+  assert.notEqual(result.status, "mismatch");
+  assert.equal(hasIdentifierConflict(result), false);
+});
+
+test("Tietze multi-volume: set ISBN listed before volume ISBN still matches künye", () => {
+  const { compareMetadata, hasIdentifierConflict, hasIdentifierMatch } =
+    loadModule();
+  // Real case: tk. (set) 978-9944-252-78-2 appears before 2. cilt volume ISBN.
+  const result = compareMetadata(
+    {
+      title: "Tarihi ve Etimolojik Türkiye Türkçesi Lügatı- II",
+      creators: ["Andreas Tietze"],
+      year: "2016",
+      isbn: "978-9944-252-80-5",
+    },
+    {
+      evidence:
+        "Tarihi ve Etimolojik Türkiye Türkçesi Lugati\nANDREAS TIETZE\n" +
+        "ISBN: 978-9944-252-78-2 (tk.)\n" +
+        "ISBN: 978-9944-252-80-5 (2. cilt)\n",
+    },
+  );
+  assert.notEqual(result.status, "mismatch");
+  assert.equal(hasIdentifierConflict(result), false);
+  assert.equal(hasIdentifierMatch(result), true);
+  assert.equal(
+    result.details.some((d) => d.startsWith("ISBN eşleşiyor")),
+    true,
+  );
+});
+
+test("Berger Metis: phone/fax digit runs are not ISBN conflicts when künye ISBN is in PDF", () => {
+  const {
+    compareMetadata,
+    hasIdentifierConflict,
+    hasIdentifierMatch,
+    looksLikePhoneNotIsbn,
+    extractIsbnCandidates,
+  } = loadModule();
+  assert.equal(looksLikePhoneNotIsbn("2122454696"), true);
+  assert.equal(looksLikePhoneNotIsbn("2125678003"), true);
+  assert.equal(looksLikePhoneNotIsbn("9789753426909"), false);
+
+  const evidence =
+    "John Berger\nA'DAN X'E\n" +
+    "John Berger Tarafından Kurtarılmış Mektuplar\n" +
+    "Metis Yayınlan\n" +
+    "Tel: 212 2454696 Fak s: 212 2454519\n" +
+    "Topkapı, İstanbul Tel: 212 5678003\n" +
+    "ISBN-13: 978-975-342-690-9\n";
+  const cands = extractIsbnCandidates(evidence);
+  assert.equal(cands.includes("9789753426909"), true);
+  assert.equal(
+    cands.some((c) => c.startsWith("212")),
+    false,
+  );
+
+  const result = compareMetadata(
+    {
+      title: "A'dan X'e: john berger tarafından kurtarılmış mektuplar",
+      creators: ["John Berger", "Aslı Biçen"],
+      year: "2009",
+      isbn: "978-975-342-690-9",
+    },
+    { evidence },
+  );
+  assert.notEqual(result.status, "mismatch");
+  assert.equal(hasIdentifierConflict(result), false);
+  assert.equal(hasIdentifierMatch(result), true);
+});
+
+test("pickPdfIsbn prefers matching künye over first candidate", () => {
+  const { pickPdfIsbn } = loadModule();
+  const picked = pickPdfIsbn(
+    "ISBN: 978-9944-252-78-2 (tk.)\nISBN: 978-9944-252-80-5 (2. cilt)",
+    "9789944252805",
+  );
+  assert.equal(picked.matched, true);
+  assert.equal(picked.isbn, "9789944252805");
 });
 
 test("isEncryptedPdfError recognizes pdf-lib's encrypted-document message", () => {
