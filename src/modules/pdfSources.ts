@@ -1,4 +1,4 @@
-// @ajan: cursor · @etiket: katman-2, pdf-sources, bridge-guard, ocr-haystack, content-validate, nosource-sync, pdf-candidate-split, mismatch-reason, encoding-gate, re-ocr-validate, tr-i-fold, sentence-tr-override, author-line-gate, no-validate-subtitle-enrich
+// @ajan: cursor · @etiket: katman-2, pdf-sources, bridge-guard, ocr-haystack, content-validate, nosource-sync, pdf-candidate-split, mismatch-reason, encoding-gate, re-ocr-validate, tr-i-fold, sentence-tr-override, author-line-gate, no-validate-subtitle-enrich, title-length-aware
 import { getString } from "../utils/locale";
 import { getPref } from "../utils/prefs";
 import {
@@ -360,6 +360,90 @@ export function distinctiveTitleTokens(title: string): string[] {
   );
 }
 
+/**
+ * Word-count bands for title matching policy (titles are never rewritten).
+ * Short extreme: 1 word («Gece», «Renk»). Long extreme: ≥21 words
+ * (library also has a 41-word bilingual outlier — still long band).
+ * Medium (4–20): legacy absolute distinctiveCoverage === 1.
+ */
+export const TITLE_LENGTH = {
+  /** Inclusive upper bound for short band (1–3 words). */
+  SHORT_MAX_WORDS: 3,
+  /** Inclusive lower bound for long band (≥21 words). */
+  LONG_MIN_WORDS: 21,
+  /** Long titles: soft floor when authorFound or high titleHit. */
+  LONG_COVERAGE_SOFT: 0.85,
+  /** Long titles: titleHit floor for soft coverage without author. */
+  LONG_TITLE_HIT_SOFT: 0.85,
+} as const;
+
+export type TitleLengthBand = "short" | "medium" | "long";
+
+/**
+ * Whitespace-separated word count — anchors short=1 and long≥21.
+ * Punctuation-only tokens are ignored; letters/digits keep the word.
+ */
+export function titleWordCount(title: string): number {
+  return String(title || "")
+    .trim()
+    .split(/\s+/)
+    .filter((w) => /[\p{L}\p{N}]/u.test(w)).length;
+}
+
+/** Classify title into short (1–3) / medium (4–20) / long (≥21) word bands. */
+export function classifyTitleLength(title: string): TitleLengthBand {
+  const words = titleWordCount(title);
+  if (words >= TITLE_LENGTH.LONG_MIN_WORDS) return "long";
+  if (words >= 1 && words <= TITLE_LENGTH.SHORT_MAX_WORDS) return "short";
+  return "medium";
+}
+
+/**
+ * Article distinctive-coverage gate — length-aware.
+ * Medium: coverage must be 1.0.
+ * Long: coverage ≥ LONG_COVERAGE_SOFT + (authorFound | titleHit ≥ soft).
+ * Short: coverage still 1.0 when distinctive tokens exist (corroboration
+ * is a separate gate).
+ */
+export function articleDistinctiveCoverageOk(input: {
+  titleLengthBand: TitleLengthBand;
+  distinctiveCoverage: number;
+  authorFound: boolean;
+  titleHit: number;
+}): boolean {
+  const cov = input.distinctiveCoverage;
+  if (cov >= 1) return true;
+  if (input.titleLengthBand !== "long") return false;
+  if (cov < TITLE_LENGTH.LONG_COVERAGE_SOFT) return false;
+  return (
+    input.authorFound || input.titleHit >= TITLE_LENGTH.LONG_TITLE_HIT_SOFT
+  );
+}
+
+/**
+ * Short titles (1–3 words, e.g. «Gece»): title-alone is not enough —
+ * need author, year, or ISBN/DOI in the PDF (books and articles).
+ */
+export function shortTitleCorroborationOk(input: {
+  titleLengthBand: TitleLengthBand;
+  authorFound: boolean;
+  yearFound: boolean;
+  hasIdMatch: boolean;
+}): boolean {
+  if (input.titleLengthBand !== "short") return true;
+  return input.authorFound || input.yearFound || input.hasIdMatch;
+}
+
+/** @deprecated Prefer shortTitleCorroborationOk (applies to books too). */
+export function articleShortCorroborationOk(input: {
+  titleLengthBand: TitleLengthBand;
+  authorFound: boolean;
+  yearFound: boolean;
+  hasIdMatch: boolean;
+}): boolean {
+  return shortTitleCorroborationOk(input);
+}
+
 /** Title core before colon/dash — subtitle tokens need not appear in PDF body. */
 function titleCoreForDistinctive(title: string): string {
   const raw = String(title || "").trim();
@@ -595,9 +679,14 @@ export function decideContentValidation(input: {
   authorFound: boolean;
   /**
    * 0–1 share of distinctive title tokens (≥7, not stop) found in PDF.
-   * Articles require 1.0 so a different Golub paper cannot match on name alone.
+   * Articles: medium requires 1.0; long softens to ≥0.85 with corroboration;
+   * short still needs 1.0 when tokens exist + author/year/id.
    */
   distinctiveCoverage?: number;
+  /** short | medium | long — defaults to medium (legacy absolute coverage). */
+  titleLengthBand?: TitleLengthBand;
+  /** Year digit string found in PDF (short-title corroboration). */
+  yearFound?: boolean;
 }): ContentValidation {
   if (input.textChars < 50) return "unverifiable";
   if (input.hasIdConflict) return "mismatch";
@@ -611,21 +700,41 @@ export function decideContentValidation(input: {
       return "mismatch";
     }
   }
+
+  const band = input.titleLengthBand ?? "medium";
+  const cov = input.distinctiveCoverage ?? 1;
+  const yearFound = !!input.yearFound;
+  const articleDistinctiveOk =
+    input.kind === "book" ||
+    articleDistinctiveCoverageOk({
+      titleLengthBand: band,
+      distinctiveCoverage: cov,
+      authorFound: input.authorFound,
+      titleHit: input.titleHit,
+    });
+  // Short band (1–3 words): books and articles need author/year/id.
+  const shortOk = shortTitleCorroborationOk({
+    titleLengthBand: band,
+    authorFound: input.authorFound,
+    yearFound,
+    hasIdMatch: input.hasIdMatch,
+  });
+
   if (input.score >= 0.6) {
-    if (input.kind !== "book" && (input.distinctiveCoverage ?? 1) < 1) {
-      return "mismatch";
-    }
+    if (!articleDistinctiveOk || !shortOk) return "mismatch";
     return "match";
   }
 
   if (input.kind === "book") {
-    // Solid title evidence → keep; otherwise erase wrong catalogs/books.
-    if (input.titleHit >= 0.5 && input.score >= 0.45) return "match";
+    // Solid title evidence → keep; short titles still need corroboration.
+    if (input.titleHit >= 0.5 && input.score >= 0.45 && shortOk) {
+      return "match";
+    }
     return "mismatch";
   }
 
-  // Articles / other: require full distinctive-token coverage + title evidence.
-  if ((input.distinctiveCoverage ?? 1) < 1) return "mismatch";
+  // Articles / other: length-aware distinctive coverage + short corroboration.
+  if (!articleDistinctiveOk || !shortOk) return "mismatch";
   if (input.score >= 0.45 && input.titleHit >= 0.5) return "match";
   return "mismatch";
 }
@@ -645,6 +754,8 @@ export function formatContentValidationReason(input: {
   authorExpected: boolean;
   authorFound: boolean;
   distinctiveCoverage?: number;
+  titleLengthBand?: TitleLengthBand;
+  yearFound?: boolean;
   bridgeVia?: string;
   bridgeReason?: string;
   bridgeForcedMismatch?: boolean;
@@ -652,9 +763,10 @@ export function formatContentValidationReason(input: {
   /** Sentence/fold override: İ-ı-only title miss, not a wrong PDF. */
   turkishCharNormalization?: boolean;
 }): string {
+  const band = input.titleLengthBand ?? "medium";
   const stats = `titleHit=${input.titleHit.toFixed(2)} score=${input.score.toFixed(2)} author=${
     input.authorFound ? "yes" : "no"
-  }`;
+  } band=${band}`;
   if (input.verdict === "unverifiable") {
     if (input.textChars < 50) {
       return `unverifiable: too little PDF text (${input.textChars} chars)`;
@@ -681,6 +793,15 @@ export function formatContentValidationReason(input: {
       return `match: Türkçe karakter / İ-ı normalizasyon farkı | ${stats}`;
     }
     if (input.hasIdMatch) return `match: ISBN/DOI found in PDF | ${stats}`;
+    if (
+      band === "long" &&
+      (input.distinctiveCoverage ?? 1) < 1 &&
+      (input.distinctiveCoverage ?? 0) >= TITLE_LENGTH.LONG_COVERAGE_SOFT
+    ) {
+      return `match: long-title soft distinctive coverage (${(
+        input.distinctiveCoverage ?? 0
+      ).toFixed(2)}) | ${stats}`;
+    }
     return `match: ${stats}`;
   }
   // mismatch
@@ -701,10 +822,30 @@ export function formatContentValidationReason(input: {
       return `book: author missing and title evidence weak | ${stats}`;
     }
   }
-  if (input.kind !== "book" && (input.distinctiveCoverage ?? 1) < 1) {
-    return `article: incomplete distinctive title tokens (${(
-      input.distinctiveCoverage ?? 0
-    ).toFixed(2)}) | ${stats}`;
+  if (
+    !shortTitleCorroborationOk({
+      titleLengthBand: band,
+      authorFound: input.authorFound,
+      yearFound: !!input.yearFound,
+      hasIdMatch: input.hasIdMatch,
+    })
+  ) {
+    return `short title needs author/year/id corroboration | ${stats}`;
+  }
+  if (input.kind !== "book") {
+    const cov = input.distinctiveCoverage ?? 1;
+    if (
+      !articleDistinctiveCoverageOk({
+        titleLengthBand: band,
+        distinctiveCoverage: cov,
+        authorFound: input.authorFound,
+        titleHit: input.titleHit,
+      })
+    ) {
+      return `article: incomplete distinctive title tokens (${cov.toFixed(
+        2,
+      )}) | ${stats}`;
+    }
   }
   if (input.kind === "book") {
     return `book: title/score below match threshold | ${stats}`;
@@ -920,10 +1061,13 @@ export async function validateAttachmentContentDetailed(
     const score = scoreText(item, text);
     const hasIdMatch = hasIdentifierMatch(structured);
     const hasIdConflict = hasIdentifierConflict(structured);
-    const distinctiveDetail = distinctiveTitleCoverageDetail(
-      String(item.getField("title") || ""),
-      text,
+    const itemTitle = String(item.getField("title") || "");
+    const titleLengthBand = classifyTitleLength(itemTitle);
+    const year = itemYear(item);
+    const yearFound = !!(
+      year && normalizeOcrHaystack(text).includes(year)
     );
+    const distinctiveDetail = distinctiveTitleCoverageDetail(itemTitle, text);
     const distinctiveCoverage = distinctiveDetail.coverage;
     const turkishCharNormalization =
       !!distinctiveDetail.turkishCharNormalization;
@@ -940,6 +1084,8 @@ export async function validateAttachmentContentDetailed(
       authorExpected,
       authorFound,
       distinctiveCoverage,
+      titleLengthBand,
+      yearFound,
     });
 
     const strongHeuristicMatch = isStrongHeuristicContentMatch({
@@ -1174,6 +1320,8 @@ export async function validateAttachmentContentDetailed(
       authorExpected,
       authorFound,
       distinctiveCoverage,
+      titleLengthBand,
+      yearFound,
       bridgeVia,
       bridgeReason,
       bridgeForcedMismatch,
@@ -2110,8 +2258,8 @@ export class LocalFolderSource implements PDFSource {
     const best = scored[0];
     // Short titles ("Gece", "Sürgün"): containment alone matches many files —
     // require author token in the filename before auto-attach.
-    const shortTitle = titleTokens.filter((t) => t.length >= 3).length <= 2;
-    if (shortTitle && !best.authorMatch) {
+    const titleBand = classifyTitleLength(rawTitle);
+    if (titleBand === "short" && !best.authorMatch) {
       return {
         status: "review",
         file: best.f,
@@ -2120,8 +2268,15 @@ export class LocalFolderSource implements PDFSource {
       };
     }
     let decision = classifyMatchConfidence(best.score, autoAttach, review);
-    // Auto-attach only when every distinctive title token is present.
-    if (decision === "attach" && (best.distRatio ?? 1) < 1) {
+    // Auto-attach: medium/short need full distinctive coverage; long titles
+    // allow soft floor (≥0.85) so one OCR/variant miss does not block attach.
+    const distRatio = best.distRatio ?? 1;
+    const distOk =
+      distRatio >= 1 ||
+      (titleBand === "long" &&
+        distRatio >= TITLE_LENGTH.LONG_COVERAGE_SOFT &&
+        (best.authorMatch || best.hit >= TITLE_LENGTH.LONG_TITLE_HIT_SOFT));
+    if (decision === "attach" && !distOk) {
       decision = "review";
     }
     if (decision === "attach") {

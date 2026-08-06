@@ -1,8 +1,8 @@
-<!-- @ajan: cursor · @etiket: katman-2, eksik-raporu, periodical, console-group-polyfill, author-line-gate, no-validate-subtitle-enrich -->
+<!-- @ajan: cursor · @etiket: katman-2, eksik-raporu, periodical, console-group-polyfill, author-line-gate, no-validate-subtitle-enrich, title-length-aware -->
 
 # Cursor — Katman 2 Eksikler Raporu
 
-**Tarih:** 2026-08-06 · **Sürüm:** PDF Manager **v1.0.137**  
+**Tarih:** 2026-08-06 · **Sürüm:** PDF Manager **v1.0.138** (yayınlanmadı)  
 **Analiz:** ürün ↔ `referanslar/katman-2/` ↔ GitHub (Attanger, Zotadata, Zoplicate,
 ZotAssets, File Utility, Attachment Scanner, ozefe/yoktez).
 
@@ -13,6 +13,12 @@ ZotAssets, File Utility, Attachment Scanner, ozefe/yoktez).
 | Açık **P1** ürün boşluğu? | **Yok** — P2-1…P2-6 + B1–B5 + G0/G1 kapalı      |
 | Gerçek açık iş?           | Checklist Bölüm B (kullanıcı) + isteğe bağlı P3 |
 | Yeni zorunlu XPI portu?   | **Yok** — GitHub taraması yeni P1 üretmedi      |
+
+### Son eklenen (v1.0.138)
+
+| Madde                                           | Not                                                                                                                 |
+| ----------------------------------------------- | ------------------------------------------------------------------------------------------------------------------- |
+| Başlık sözcük bantları (1–3 / 4–20 / ≥21)       | Kısa: yazar/yıl/id zorunlu; uzun: distinctiveCoverage ≥0.85 + author\|titleHit; başlık kesilmez                      |
 
 ### Son eklenen (v1.0.137)
 

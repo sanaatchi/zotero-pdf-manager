@@ -1,4 +1,4 @@
-// @ajan: cursor · @etiket: katman-2, tests, content-validate, tr-i-fold, sentence-tr-override, no-validate-subtitle-enrich
+// @ajan: cursor · @etiket: katman-2, tests, content-validate, tr-i-fold, sentence-tr-override, no-validate-subtitle-enrich, title-length-aware
 const assert = require("node:assert/strict");
 const fs = require("node:fs");
 const { test } = require("node:test");
@@ -446,4 +446,180 @@ test("validateAttachmentContentDetailed: no subtitle enrich / title write", () =
   assert.doesNotMatch(body, /enrichedTitle\s*:/);
   assert.match(body, /never mutate/);
   assert.match(body, /Ignore enriched_title from bridge/);
+});
+
+test("title length bands: 1-word short, 21-word long, medium between", () => {
+  const { titleWordCount, classifyTitleLength, TITLE_LENGTH } = loadModule();
+  assert.equal(TITLE_LENGTH.SHORT_MAX_WORDS, 3);
+  assert.equal(TITLE_LENGTH.LONG_MIN_WORDS, 21);
+  assert.equal(titleWordCount("Gece"), 1);
+  assert.equal(titleWordCount("Renk"), 1);
+  assert.equal(classifyTitleLength("Gece"), "short");
+  assert.equal(classifyTitleLength("Bir dünya sözcüklerden"), "short");
+  assert.equal(
+    classifyTitleLength("The art of political storytelling"),
+    "medium",
+  );
+  const twentyOne =
+    "One two three four five six seven eight nine ten " +
+    "eleven twelve thirteen fourteen fifteen sixteen " +
+    "seventeen eighteen nineteen twenty twentyone";
+  assert.equal(titleWordCount(twentyOne), 21);
+  assert.equal(classifyTitleLength(twentyOne), "long");
+  const twenty =
+    "One two three four five six seven eight nine ten " +
+    "eleven twelve thirteen fourteen fifteen sixteen " +
+    "seventeen eighteen nineteen twenty";
+  assert.equal(titleWordCount(twenty), 20);
+  assert.equal(classifyTitleLength(twenty), "medium");
+});
+
+test("1-word short title needs author/year/id corroboration", () => {
+  const { decideContentValidation, classifyTitleLength } = loadModule();
+  assert.equal(classifyTitleLength("Gece"), "short");
+  // Title-alone high score → mismatch (common false friend).
+  assert.equal(
+    decideContentValidation({
+      kind: "book",
+      textChars: 400,
+      titleHit: 1,
+      score: 0.9,
+      hasIdConflict: false,
+      hasIdMatch: false,
+      authorExpected: true,
+      authorFound: false,
+      titleLengthBand: "short",
+      yearFound: false,
+    }),
+    "mismatch",
+  );
+  assert.equal(
+    decideContentValidation({
+      kind: "other",
+      textChars: 400,
+      titleHit: 1,
+      score: 0.9,
+      hasIdConflict: false,
+      hasIdMatch: false,
+      authorExpected: true,
+      authorFound: false,
+      distinctiveCoverage: 1,
+      titleLengthBand: "short",
+      yearFound: false,
+    }),
+    "mismatch",
+  );
+  // Author found → match.
+  assert.equal(
+    decideContentValidation({
+      kind: "book",
+      textChars: 400,
+      titleHit: 1,
+      score: 0.9,
+      hasIdConflict: false,
+      hasIdMatch: false,
+      authorExpected: true,
+      authorFound: true,
+      titleLengthBand: "short",
+      yearFound: false,
+    }),
+    "match",
+  );
+  // Year found without author → match.
+  assert.equal(
+    decideContentValidation({
+      kind: "other",
+      textChars: 400,
+      titleHit: 1,
+      score: 0.9,
+      hasIdConflict: false,
+      hasIdMatch: false,
+      authorExpected: false,
+      authorFound: false,
+      distinctiveCoverage: 1,
+      titleLengthBand: "short",
+      yearFound: true,
+    }),
+    "match",
+  );
+});
+
+test("21-word long title softens distinctiveCoverage < 1", () => {
+  const {
+    decideContentValidation,
+    classifyTitleLength,
+    articleDistinctiveCoverageOk,
+    TITLE_LENGTH,
+  } = loadModule();
+  const twentyOne =
+    "One two three four five six seven eight nine ten " +
+    "eleven twelve thirteen fourteen fifteen sixteen " +
+    "seventeen eighteen nineteen twenty twentyone";
+  assert.equal(classifyTitleLength(twentyOne), "long");
+  assert.equal(
+    articleDistinctiveCoverageOk({
+      titleLengthBand: "long",
+      distinctiveCoverage: 0.88,
+      authorFound: true,
+      titleHit: 0.7,
+    }),
+    true,
+  );
+  assert.equal(
+    articleDistinctiveCoverageOk({
+      titleLengthBand: "long",
+      distinctiveCoverage: 0.7,
+      authorFound: true,
+      titleHit: 0.9,
+    }),
+    false,
+  );
+  // Soft match: coverage 0.88 + author (would have been mismatch at ==1).
+  assert.equal(
+    decideContentValidation({
+      kind: "other",
+      textChars: 800,
+      titleHit: 0.7,
+      score: 0.8,
+      hasIdConflict: false,
+      hasIdMatch: false,
+      authorExpected: true,
+      authorFound: true,
+      distinctiveCoverage: 0.88,
+      titleLengthBand: "long",
+    }),
+    "match",
+  );
+  // Soft match via high titleHit without author.
+  assert.equal(
+    decideContentValidation({
+      kind: "other",
+      textChars: 800,
+      titleHit: TITLE_LENGTH.LONG_TITLE_HIT_SOFT,
+      score: 0.8,
+      hasIdConflict: false,
+      hasIdMatch: false,
+      authorExpected: false,
+      authorFound: false,
+      distinctiveCoverage: 0.88,
+      titleLengthBand: "long",
+    }),
+    "match",
+  );
+  // Medium band still demands coverage === 1.
+  assert.equal(
+    decideContentValidation({
+      kind: "other",
+      textChars: 800,
+      titleHit: 0.9,
+      score: 0.8,
+      hasIdConflict: false,
+      hasIdMatch: false,
+      authorExpected: true,
+      authorFound: true,
+      distinctiveCoverage: 0.88,
+      titleLengthBand: "medium",
+    }),
+    "mismatch",
+  );
 });
