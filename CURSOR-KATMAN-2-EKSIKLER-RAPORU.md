@@ -1,8 +1,8 @@
-<!-- @ajan: cursor · @etiket: katman-2, eksik-raporu, address-subtitle-gate -->
+<!-- @ajan: cursor · @etiket: katman-2, eksik-raporu, periodical -->
 
 # Cursor — Katman 2 Eksikler Raporu
 
-**Tarih:** 2026-08-06 · **Sürüm:** PDF Manager **v1.0.111**  
+**Tarih:** 2026-08-06 · **Sürüm:** PDF Manager **v1.0.112**  
 **Analiz:** ürün ↔ `referanslar/katman-2/` ↔ GitHub (Attanger, Zotadata, Zoplicate,
 ZotAssets, File Utility, Attachment Scanner, ozefe/yoktez).
 
@@ -14,10 +14,11 @@ ZotAssets, File Utility, Attachment Scanner, ozefe/yoktez).
 | Gerçek açık iş?           | Checklist Bölüm B (kullanıcı) + isteğe bağlı P3 |
 | Yeni zorunlu XPI portu?   | **Yok** — GitHub taraması yeni P1 üretmedi      |
 
-### Son eklenen (v1.0.111)
+### Son eklenen (v1.0.112)
 
 | Madde                                           | Not                                                                                                                 |
 | ----------------------------------------------- | ------------------------------------------------------------------------------------------------------------------- |
+| OA Search «Dergi» (tam dergi)                   | kind=`periodical` → Zotero `book` + Extra `type: periodical`; ≠ journalArticle; LibGen/Archive, Sci-Hub yok (112)   |
 | Alt başlık ≠ yayınevi adresi                    | Sokak/Cadde/No/posta kodu HQ satırı enrich yok; Seargeant topical OK; Python+K2 parity (111)                        |
 | Validate match → mismatch etiket temizle        | Content-audit `match` → `clearSuccessfulMatchTags` (#pdf-mismatch/#pdf-review/#pdf-quarantine); mismatch keep (110) |
 | `#pdf-mismatch` → Match/reconcile rematch       | Skip gates ignore tagged parents; Match also scans downloads/; old wrong PDF kept (109)                             |

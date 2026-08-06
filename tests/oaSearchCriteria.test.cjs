@@ -28,6 +28,7 @@ test("kind fields match product criteria matrix", () => {
   assert.deepEqual(OA_SEARCH_KINDS, [
     "book",
     "journalArticle",
+    "periodical",
     "bookSection",
     "thesis",
     "document",
@@ -62,6 +63,14 @@ test("kind fields match product criteria matrix", () => {
     "publication",
     "editors",
     "translator",
+    "language",
+  ]);
+  assert.deepEqual(KIND_FIELDS.periodical, [
+    "title",
+    "year",
+    "publisher",
+    "publication",
+    "editors",
     "language",
   ]);
   assert.deepEqual(KIND_FIELDS.bookSection, [
@@ -115,6 +124,20 @@ test("kind fields match product criteria matrix", () => {
     "publication",
     "language",
   ]);
+});
+
+test("periodical maps to Zotero book + Extra type", () => {
+  const {
+    zoteroItemTypeFromOaKind,
+    kindFromZoteroItemType,
+  } = loadCriteria();
+  assert.equal(zoteroItemTypeFromOaKind("periodical"), "book");
+  assert.equal(zoteroItemTypeFromOaKind("journalArticle"), "journalArticle");
+  assert.equal(
+    kindFromZoteroItemType("book", "type: periodical\nKP: 1"),
+    "periodical",
+  );
+  assert.equal(kindFromZoteroItemType("book", ""), "book");
 });
 
 test("criteriaHasQuery respects visible kind fields", () => {
@@ -185,6 +208,7 @@ test("xhtml has kind selector and structured fields", () => {
   assert.match(xhtml, /data-field="translator"/);
   assert.match(xhtml, /data-field="publication"/);
   assert.match(xhtml, /value="document"/);
+  assert.match(xhtml, /value="periodical"/);
   assert.match(xhtml, /value="magazineArticle"/);
   assert.match(xhtml, /value="report"/);
   assert.match(xhtml, /value="newspaperArticle"/);

@@ -1,4 +1,4 @@
-// @ajan: cursor · @etiket: katman-2, oa-search, window, multi-source
+// @ajan: cursor · @etiket: katman-2, oa-search, window, periodical
 /**
  * Independent OA Search popup (openDialog) — federated results + attach actions.
  * UX: kind-specific criteria forms, per-field active toggles, optional
@@ -69,6 +69,7 @@ const LABEL_FALLBACK: Record<string, string> = {
   "oa-search-kind": "Tür",
   "oa-search-kind-book": "Kitap",
   "oa-search-kind-journalArticle": "Dergi makalesi",
+  "oa-search-kind-periodical": "Dergi",
   "oa-search-kind-bookSection": "Kitap bölümü",
   "oa-search-kind-thesis": "Tez",
   "oa-search-kind-document": "Belge",
@@ -908,7 +909,10 @@ function readQuery(doc: Document): OaSearchCriteria {
 function prefillFromItem(doc: Document, item: Zotero.Item | null): void {
   if (!item) return;
   try {
-    const kind = kindFromZoteroItemType(String(item.itemType || ""));
+    const kind = kindFromZoteroItemType(
+      String(item.itemType || ""),
+      String(item.getField("extra") || ""),
+    );
     const state = getState();
     state.searchKind = kind;
     applyKindFieldVisibility(doc, kind);

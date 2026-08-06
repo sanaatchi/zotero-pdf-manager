@@ -105,6 +105,16 @@ test("createItemFieldsFromHit maps DOI article and ISBN book", () => {
     "thesis",
   );
 
+  const fullJournal = createItemFieldsFromHit(
+    {
+      source: "libgen",
+      title: "Toplum ve Bilim",
+      year: "1995",
+    },
+    { preferredItemType: "periodical" },
+  );
+  assert.equal(fullJournal.itemType, "book");
+
   assert.deepEqual(parseAuthorsField("Ada Lovelace"), [
     { firstName: "Ada", lastName: "Lovelace", creatorType: "author" },
   ]);

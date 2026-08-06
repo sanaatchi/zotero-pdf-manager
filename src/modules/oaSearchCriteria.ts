@@ -1,13 +1,18 @@
-// @ajan: cursor · @etiket: katman-2, oa-search, kinds-8, field-by-field
+// @ajan: cursor · @etiket: katman-2, oa-search, kinds-9, periodical
 /**
- * OA Search kind → field schema (Zotero itemType-aligned).
+ * OA Search kind → field schema (Zotero itemType-aligned + CSL periodical).
  * UI shows/hides inputs; per-field active checkboxes; optional field-by-field
  * fan-out. Bridge receives structured criteria for ranking / discovery.
+ *
+ * ``periodical`` = full journal/issue (product «Dergi»). Not a stock Zotero
+ * itemType — create as ``book`` + Extra ``type: periodical``. Distinct from
+ * ``journalArticle`` (makale) and ``magazineArticle`` (magazin yazısı).
  */
 
 export type OaSearchKind =
   | "book"
   | "journalArticle"
+  | "periodical"
   | "bookSection"
   | "thesis"
   | "document"
@@ -60,6 +65,7 @@ export type OaSearchCriteria = {
 export const OA_SEARCH_KINDS: OaSearchKind[] = [
   "book",
   "journalArticle",
+  "periodical",
   "bookSection",
   "thesis",
   "document",
@@ -95,6 +101,15 @@ export const KIND_FIELDS: Record<OaSearchKind, OaCriteriaFieldId[]> = {
     "publication",
     "editors",
     "translator",
+    "language",
+  ],
+  // Full journal — title = dergi/sayı adı; no article authors / DOI focus.
+  periodical: [
+    "title",
+    "year",
+    "publisher",
+    "publication",
+    "editors",
     "language",
   ],
   bookSection: [
@@ -191,8 +206,23 @@ export function isOaCriteriaFieldId(value: string): value is OaCriteriaFieldId {
   return value in FIELD_INPUT_ID;
 }
 
-/** Map Zotero itemType → OA Search kind. */
-export function kindFromZoteroItemType(itemType: string): OaSearchKind {
+/**
+ * Map OA Search kind → stock Zotero itemType for create/attach.
+ * ``periodical`` is CSL-only; Zotero stores it as ``book``.
+ */
+export function zoteroItemTypeFromOaKind(kind: string): string {
+  const k = String(kind || "").trim();
+  if (k === "periodical") return "book";
+  return k || "journalArticle";
+}
+
+/** Map Zotero itemType (+ optional Extra) → OA Search kind. */
+export function kindFromZoteroItemType(
+  itemType: string,
+  extra?: string,
+): OaSearchKind {
+  const extraText = String(extra || "");
+  if (/^type:\s*periodical\b/im.test(extraText)) return "periodical";
   const t = String(itemType || "")
     .trim()
     .toLowerCase();

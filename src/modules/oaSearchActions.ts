@@ -1,4 +1,4 @@
-// @ajan: cursor · @etiket: katman-2, oa-search, actions, title-trust, book-review
+// @ajan: cursor · @etiket: katman-2, oa-search, actions, periodical
 /**
  * OA Search popup actions: attach hit PDF, create item from hit, Related Items.
  * Pure field mapping is unit-tested; Zotero I/O stays async.
@@ -7,6 +7,7 @@
  */
 import type { OaPdfHit } from "./oaPdfBridge";
 import { fetchOaPdfViaBridge, filterTrustedHits } from "./oaPdfBridge";
+import { zoteroItemTypeFromOaKind } from "./oaSearchCriteria";
 
 export type CreatorField = {
   firstName: string;
@@ -99,8 +100,11 @@ export function createItemFieldsFromHit(
   const date = String(hit.year || "").trim();
   const url = String(hit.landingUrl || hit.pdfUrl || "").trim();
   const preferred = String(opts.preferredItemType || "").trim();
+  // OA kind ``periodical`` → stock Zotero ``book`` (no native periodical type).
   return {
-    itemType: preferred || guessItemTypeFromHit(hit),
+    itemType: preferred
+      ? zoteroItemTypeFromOaKind(preferred)
+      : guessItemTypeFromHit(hit),
     title,
     DOI,
     ISBN,
@@ -332,6 +336,18 @@ export async function createItemFromHit(
   safeSetField(item, "university", String(opts.university || "").trim());
   safeSetField(item, "language", String(opts.language || "").trim());
   safeSetField(item, "thesisType", String(opts.thesisType || "").trim());
+  // CSL override: stock Zotero has no periodical type.
+  if (String(opts.preferredItemType || "").trim() === "periodical") {
+    try {
+      const prev = String(item.getField("extra") || "");
+      if (!/^type:\s*periodical\b/im.test(prev)) {
+        const line = "type: periodical";
+        item.setField("extra", prev ? `${prev.replace(/\s+$/, "")}\n${line}` : line);
+      }
+    } catch {
+      /* Extra may be unavailable */
+    }
+  }
   const creators = [...fields.creators];
   if (opts.editors?.trim()) {
     for (const c of parseAuthorsField(opts.editors)) {
