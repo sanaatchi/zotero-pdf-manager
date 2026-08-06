@@ -1,3 +1,4 @@
+// @ajan: claude · @etiket: katman-2, tests, pdfReconciler, abortcontroller-fix
 const assert = require("node:assert/strict");
 const { test } = require("node:test");
 const path = require("node:path");
@@ -229,6 +230,54 @@ test("automatic online fallback contains only approved OA sources", () => {
   ]) {
     assert.equal(AUTOMATIC_ONLINE_SOURCE_IDS.includes(unsafe), false);
   }
+});
+
+test("module import guards against missing AbortController (Zotero bootstrap scope has no Web-platform globals)", () => {
+  const savedAC = global.AbortController;
+  const savedComponents = global.Components;
+  const savedZotero = global.Zotero;
+  delete global.AbortController;
+  let importedList = null;
+  global.Components = {
+    utils: {
+      importGlobalProperties: (list) => {
+        importedList = list;
+        global.AbortController = function FakeAbortController() {
+          this.signal = {};
+          this.abort = () => {};
+        };
+      },
+    },
+  };
+  global.Zotero = { debug: () => {} };
+  try {
+    // Must not throw at module load — this is exactly how the real bug
+    // manifested: `new AbortController()` unhandled inside an async
+    // function, silently killing the whole background reconciler forever.
+    loadModule("src/modules/pdfReconciler.ts");
+    assert.deepEqual(importedList, ["AbortController"]);
+    assert.equal(typeof global.AbortController, "function");
+  } finally {
+    if (savedAC === undefined) delete global.AbortController;
+    else global.AbortController = savedAC;
+    if (savedComponents === undefined) delete global.Components;
+    else global.Components = savedComponents;
+    if (savedZotero === undefined) delete global.Zotero;
+    else global.Zotero = savedZotero;
+  }
+});
+
+test("run() catches its own rejection instead of leaving an unhandled promise", () => {
+  const fs = require("node:fs");
+  const source = fs.readFileSync(
+    path.join(process.cwd(), "src/modules/pdfReconciler.ts"),
+    "utf8",
+  );
+  // start()'s timers call `void this.run(...)` with nothing else awaiting
+  // it — run() itself must swallow failures or a crash (like the
+  // AbortController one) silently disables the reconciler forever again.
+  assert.match(source, /this\.activeRun = this\.performRun\(reason\)\s*\n\s*\.catch/);
+  assert.match(source, /reconcile-crash/);
 });
 
 test("enabled LibGen runs even when omitted from legacy sourceOrder", () => {

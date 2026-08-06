@@ -229,4 +229,63 @@ hâlâ mismatch).
 **Dosyalar:** `src/modules/metadataCheck.ts`, `tests/metadataCheck.test.cjs`,
 `package.json` (→ **v1.0.120**)
 
-**Yayın:** Kullanıcı "yayınla" demeden commit/push/gh-release yok.
+**Yayın:** v1.0.120 kullanıcı "yayınla" onayıyla yayınlandı.
+
+---
+
+## Claude — ASIL kök neden: `AbortController is not defined`, reconciler hiç çalışmıyordu (2026-08-06, v1.0.121)
+
+**Bağlam:** v1.0.120 yayınlandıktan sonra kullanıcı "mismatch-tag sorunu
+devam ediyor neden" dedi ve canlı Zotero hata ayıklama çıkışını paylaştı.
+
+**Canlı log kanıtı:**
+```
+appName => Zotero, version => 9.0.6 ... Zotero PDF Manager (1.0.120, extension)
+[JavaScript Error: "ReferenceError: AbortController is not defined"
+  {file: ".../zpdfmanager.js" line: 33860}]
+```
+
+1.0.120'nin gerçekten yüklü olduğu doğrulandı — sorun sürüm değil, **arka
+plan reconciler'ın hiç çalışmamasıydı**. `pdfReconciler.ts` üç yerde
+(`performRun`, `flushAddedItems`, `processOrphansNow`) `new
+AbortController()` çağırıyor. Zotero'nun eklenti bootstrap/arka plan süreç
+kapsamı — bir tarayıcı penceresinin aksine — Web-platform constructor'larını
+otomatik sağlamıyor; `Components.utils.importGlobalProperties(["AbortController"])`
+ile açıkça import edilmesi gerekiyordu, **hiç yapılmamıştı**.
+
+**Zincir:** `performRun`'un ilk satırında `ReferenceError` → async
+fonksiyon promise'i reject eder → `run()` bunu hiç `.catch` etmiyordu →
+`start()`'taki `void this.run("startup")` / `void this.run("periodic")`
+unhandled rejection olarak sessizce yutuluyordu. **Sonuç: startup/periyodik/
+add-notifier reconcile — üçü de — kurulumdan beri hiç iş yapmıyordu.**
+
+**Bu, önceki oturumdaki "Sinisgalli" gizemini açıklıyor:** DOI+ISBN ikisi de
+zaten doğru eşleşiyordu ama etiket hiç temizlenmedi çünkü reconciler zaten
+mismatch-tag'li item'ları asla ziyaret etmiyordu — kodun mantığı doğruydu,
+çalışma zamanı hiç çalışmıyordu.
+
+**Neden test suite'te yakalanmadı:** Node.js'te `AbortController` zaten
+global — yalnız gerçek Zotero bootstrap ortamında (`Components`/pencere
+globalleri farklı) ortaya çıkıyor. Canlı debug log olmadan bulunamazdı.
+
+**Fix:**
+- Modül yüklenirken `typeof AbortController === "undefined"` ise
+  `Components.utils.importGlobalProperties(["AbortController"])` çağrılır.
+- `run()` artık kendi reddini `.catch` edip `reconcile-crash` audit event'i
+  yazıyor + boş stats'a düşüyor — aynı sınıf bir hata bir daha sessizce
+  sistemi öldürmesin diye (savunma derinliği).
+
+**Etki:** Reconciler artık gerçekten çalıştığı için, 1.0.118-1.0.120'de
+yazılan TÜM guard/tag-clear mantığı (concurrency fix, stale-tag-on-no-file,
+ISBN checksum) artık pratikte devreye girecek — önceden kod doğruydu ama
+hiç tetiklenmiyordu.
+
+**Doğrulama:** `npx tsc --noEmit` temiz · `npm test` 305/305 (2 yeni test:
+AbortController olmadan modül yükleniyor + import ediyor; `run()` kendi
+reddini yakalıyor — static + davranışsal).
+
+**Dosyalar:** `src/modules/pdfReconciler.ts`, `tests/pdfReconciler.test.cjs`,
+`package.json` (→ **v1.0.121**)
+
+**Yayın:** Az önce yayınlanmış 1.0.120'nin kritik hotfix'i — otomatik yayın
+politikası (`AGENTS.md`) uyarınca commit/push/gh-release bekletilmeden yapıldı.

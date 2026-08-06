@@ -1,4 +1,4 @@
-// @ajan: cursor · @etiket: katman-2, p2, reconciler, mismatch-rematch, mismatch-tag-guard
+// @ajan: claude · @etiket: katman-2, p2, reconciler, mismatch-rematch, mismatch-tag-guard, abortcontroller-fix
 import { getPref } from "../utils/prefs";
 import { wasPdfAutomationTagsUserClearedRecently } from "./pdfAutomationTagGuard";
 import {
@@ -20,6 +20,29 @@ import {
   iterateLibraryItemBatches,
   normalizeLibraryBatchSize,
 } from "../utils/libraryIterate";
+
+declare const Components: any;
+
+/**
+ * Zotero's plugin bootstrap/background process scope does not expose
+ * Web-platform constructors the way a browser window does — `new
+ * AbortController()` throws ReferenceError here unless explicitly imported.
+ * Left unfixed, every reconcile run (startup/periodic/add-notifier) rejects
+ * immediately at its first line, silently, since nothing awaits/catches
+ * `run()`'s returned promise — the whole background reconciler never does
+ * any work, so already-tagged items are never revalidated automatically.
+ */
+if (typeof AbortController === "undefined") {
+  try {
+    Components.utils.importGlobalProperties(["AbortController"]);
+  } catch (e) {
+    try {
+      Zotero.debug(`pdfReconciler: AbortController import failed: ${e}`);
+    } catch {
+      /* ignore */
+    }
+  }
+}
 
 export interface ReconcileStats {
   scanned: number;
@@ -178,9 +201,33 @@ export class PDFReconciler {
 
   run(reason: "startup" | "periodic" | "manual" = "manual") {
     if (this.activeRun) return this.activeRun;
-    this.activeRun = this.performRun(reason).finally(() => {
-      this.activeRun = null;
-    });
+    this.activeRun = this.performRun(reason)
+      .catch((e) => {
+        // Nothing else awaits/catches run() from start()'s "startup"/
+        // "periodic" timers — an uncaught rejection here would silently
+        // disable the entire background reconciler forever (this is exactly
+        // how the AbortController ReferenceError went unnoticed). Log and
+        // degrade to empty stats instead of rejecting.
+        ztoolkit.log(`PDF reconcile run (${reason}) failed`, e);
+        void appendAuditEvent({
+          run: `${reason}-${Date.now()}`,
+          action: "reconcile-crash",
+          outcome: "failed",
+          detail: (e as Error)?.message || String(e),
+        });
+        return {
+          scanned: 0,
+          attached: 0,
+          review: 0,
+          skipped: 0,
+          errors: 0,
+          created: 0,
+          planned: 0,
+        } satisfies ReconcileStats;
+      })
+      .finally(() => {
+        this.activeRun = null;
+      });
     return this.activeRun;
   }
 
