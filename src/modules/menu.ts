@@ -1,4 +1,4 @@
-/* @ajan: cursor · @etiket: katman-2, menu, content-audit, oa-search */
+/* @ajan: cursor · @etiket: katman-2, menu, content-audit, match-tag-clear */
 /*eslint no-constant-condition: ["error", { "checkLoops": false }]*/
 import { getString } from "../utils/locale";
 import { config } from "../../package.json";
@@ -36,6 +36,7 @@ import {
   scanSelectedAttachments,
 } from "./attachmentScanner";
 import { auditSelectedPdfContent } from "./pdfContentAudit";
+import { clearSuccessfulMatchTags } from "./pdfSources";
 import { openOaSearchWindow } from "./oaSearchWindow";
 import {
   registerPdfManagerMenubar,
@@ -1347,6 +1348,7 @@ async function matchAttachment() {
           selectedAttachmentIDs,
         );
         if (existingAttachment) {
+          await clearSuccessfulMatchTags(item);
           await maybeEmbedMetadata(item, existingAttachment);
           showAttachmentItem(existingAttachment);
           await ZoteroPane.selectItem(existingAttachment.id);
@@ -1379,6 +1381,7 @@ async function matchAttachment() {
           );
         }
 
+        await clearSuccessfulMatchTags(item);
         await maybeEmbedMetadata(item, attItem);
         showAttachmentItem(attItem);
         await ZoteroPane.selectItem(attItem.id);

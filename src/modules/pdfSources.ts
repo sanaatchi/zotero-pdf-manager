@@ -1,4 +1,4 @@
-// @ajan: cursor · @etiket: katman-2, pdf-sources, keep-mismatch, subtitle-enrich
+// @ajan: cursor · @etiket: katman-2, pdf-sources, keep-mismatch, match-tag-clear
 import { getString } from "../utils/locale";
 import { getPref } from "../utils/prefs";
 import {
@@ -723,6 +723,29 @@ async function removeAutomationTag(
 }
 
 /**
+ * After a successful attach: clear mismatch/review when content matched, or
+ * when validation was skipped but the local hit was DOI/ISBN-exact.
+ * Title-only + skipped keeps existing tags (content not proven).
+ */
+export function shouldClearMatchTags(
+  verdict: ContentValidation,
+  via: "doi" | "isbn" | "title" = "title",
+): boolean {
+  if (verdict === "match") return true;
+  if (verdict === "skipped" && (via === "doi" || via === "isbn")) return true;
+  return false;
+}
+
+/** Remove `#pdf-mismatch` / `#pdf-review` / `#pdf-quarantine` after a good attach. */
+export async function clearSuccessfulMatchTags(
+  item: Zotero.Item,
+): Promise<void> {
+  await removeAutomationTag(item, "#pdf-review");
+  await removeAutomationTag(item, "#pdf-quarantine");
+  await removeAutomationTag(item, "#pdf-mismatch");
+}
+
+/**
  * Detach rejected PDF from the Zotero item (erase attachment / link only).
  * Keep the on-disk PDF and rename it so orphan import can recreate a source
  * from labelled filename metadata (title=/author=/year=).
@@ -1005,9 +1028,7 @@ export async function downloadAndAttach(
       attachment.id,
     );
     if (verdict === "match" || verdict === "skipped") {
-      await removeAutomationTag(item, "#pdf-review");
-      await removeAutomationTag(item, "#pdf-quarantine");
-      await removeAutomationTag(item, "#pdf-mismatch");
+      await clearSuccessfulMatchTags(item);
       return attachment;
     }
     // Scanned / image-only / PDFWorker failure: keep the downloaded PDF.
@@ -1249,6 +1270,7 @@ export class LocalFolderSource implements PDFSource {
   /**
    * Filename match is not proof of content. Mismatch / unverifiable title:
    * keep the link and tag for review — auto-detach cancelled.
+   * Match (or skipped + DOI/ISBN exact) clears `#pdf-mismatch` / `#pdf-review`.
    */
   private async finalizeLocalAttachment(
     item: Zotero.Item,
@@ -1256,15 +1278,17 @@ export class LocalFolderSource implements PDFSource {
     diskPath: string,
     via: "doi" | "isbn" | "title" = "title",
   ): Promise<Zotero.Item | null> {
-    if (getPref("pdf.validateContent") === false) return attachment;
+    // Pref off → validate returns "skipped"; still clear tags for DOI/ISBN.
     const detailed = await validateAttachmentContentDetailed(
       item,
       attachment.id,
     );
-    if (detailed.verdict === "match" || detailed.verdict === "skipped") {
-      await removeAutomationTag(item, "#pdf-review");
-      await removeAutomationTag(item, "#pdf-quarantine");
-      await removeAutomationTag(item, "#pdf-mismatch");
+    if (shouldClearMatchTags(detailed.verdict, via)) {
+      await clearSuccessfulMatchTags(item);
+      return attachment;
+    }
+    if (detailed.verdict === "skipped") {
+      // Title-only attach with validation disabled — leave existing tags.
       return attachment;
     }
     if (detailed.verdict === "unverifiable") {

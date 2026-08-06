@@ -1,4 +1,4 @@
-// @ajan: cursor · @etiket: katman-2, p2, reconciler, add-abort, cascade-stop
+// @ajan: cursor · @etiket: katman-2, p2, reconciler, match-via, match-tag-clear
 import { getPref } from "../utils/prefs";
 import {
   buildIndex,
@@ -706,7 +706,11 @@ export class PDFReconciler {
             });
             continue;
           }
-          const attachment = await source.attachFile(item, match.file);
+          const attachment = await source.attachFile(
+            item,
+            match.file,
+            match.via || "title",
+          );
           if (attachment) {
             await addAutomationTag(item, "#auto-attached");
             stats.attached++;

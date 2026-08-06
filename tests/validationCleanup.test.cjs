@@ -1,4 +1,4 @@
-// @ajan: cursor · @etiket: katman-2, tests, keep-mismatch, no-auto-detach
+// @ajan: cursor · @etiket: katman-2, tests, keep-mismatch, match-tag-clear
 const assert = require("node:assert/strict");
 const fs = require("node:fs");
 const path = require("node:path");
@@ -10,6 +10,8 @@ test("validation verdicts: match clears tags; mismatch+unverifiable keep", () =>
     "utf8",
   );
   assert.match(source, /cleanupRejectedAttachment/);
+  assert.match(source, /clearSuccessfulMatchTags/);
+  assert.match(source, /shouldClearMatchTags/);
   assert.match(source, /removeAutomationTag\(item,\s*"#pdf-review"\)/);
   assert.match(source, /removeAutomationTag\(item,\s*"#pdf-mismatch"\)/);
   assert.match(source, /ContentMismatchError/);
