@@ -1,4 +1,4 @@
-// @ajan: cursor · @etiket: katman-2, pdf-sources, keep-mismatch, no-auto-detach
+// @ajan: cursor · @etiket: katman-2, pdf-sources, keep-mismatch, subtitle-enrich
 import { getString } from "../utils/locale";
 import { getPref } from "../utils/prefs";
 import {
@@ -45,6 +45,7 @@ import {
   hasIdentifierMatch,
   normalizeItemIdentifiers,
 } from "./metadataCheck";
+import { resolveSubtitleEnrichment } from "./oaPdfBridge";
 
 /** Stops further URL/source cascade after quarantine or erase-failed keep. */
 export class AttachStoppedError extends Error {
@@ -522,8 +523,12 @@ export async function validateAttachmentContent(
 export async function validateAttachmentContentDetailed(
   item: Zotero.Item,
   attachmentID: number,
-  opts: { force?: boolean } = {},
-): Promise<{ verdict: ContentValidation; pdfText: string }> {
+  opts: { force?: boolean; hitTitle?: string } = {},
+): Promise<{
+  verdict: ContentValidation;
+  pdfText: string;
+  enrichedTitle?: string;
+}> {
   // Manual content-audit menus pass force=true so prefs off still scan.
   if (!opts.force && !getPref("pdf.validateContent")) {
     return { verdict: "skipped", pdfText: "" };
@@ -537,6 +542,48 @@ export async function validateAttachmentContentDetailed(
     );
     const text: string = res?.text || "";
     const textChars = text.replace(/\s/g, "").length;
+
+    // Subtitle-only gap → enrich künye title, treat as match, clear mismatch tag.
+    const itemTitle = String(item.getField("title") || "");
+    let fallbackTitle = String(opts.hitTitle || "").trim();
+    if (!fallbackTitle) {
+      try {
+        const att = await Zotero.Items.getAsync(attachmentID);
+        const path = String(
+          (att as any)?.getFilePath?.() ||
+            (att as any)?.attachmentFilename ||
+            "",
+        );
+        const base = path.split(/[/\\]/).pop() || "";
+        fallbackTitle = base
+          .replace(/\.pdf$/i, "")
+          .replace(/[_]+/g, " ")
+          .replace(/\s+/g, " ")
+          .trim();
+      } catch {
+        /* ignore */
+      }
+    }
+    const authorOk = firstAuthorSurname(item).length > 2;
+    const enriched = resolveSubtitleEnrichment(itemTitle, {
+      pdfText: text,
+      fallbackTitle,
+      authorOk,
+    });
+    if (enriched) {
+      try {
+        item.setField("title", enriched);
+        await item.saveTx();
+      } catch (e) {
+        ztoolkit.log("subtitle enrichment save failed", e);
+      }
+      await removeAutomationTag(item, "#pdf-mismatch");
+      await removeAutomationTag(item, "#pdf-review");
+      ztoolkit.log(
+        `Subtitle enrichment for ${item.id}: "${itemTitle}" → "${enriched}"`,
+      );
+      return { verdict: "match", pdfText: text, enrichedTitle: enriched };
+    }
 
     const structured = compareItemAgainstText(item, text);
     const surname = firstAuthorSurname(item);
@@ -582,6 +629,25 @@ export async function validateAttachmentContentDetailed(
           itemType: itemType(item),
           pdfText: text.slice(0, 8000),
         });
+        // Bridge may also propose subtitle enrichment (Python parity).
+        const bridgeEnriched = String(
+          (llm as any)?.enriched_title || (llm as any)?.enrichedTitle || "",
+        ).trim();
+        if (bridgeEnriched && llm?.verdict === "match") {
+          try {
+            item.setField("title", bridgeEnriched);
+            await item.saveTx();
+          } catch (e) {
+            ztoolkit.log("bridge subtitle enrichment save failed", e);
+          }
+          await removeAutomationTag(item, "#pdf-mismatch");
+          await removeAutomationTag(item, "#pdf-review");
+          return {
+            verdict: "match",
+            pdfText: text,
+            enrichedTitle: bridgeEnriched,
+          };
+        }
         // Fail-closed for upgrading mismatch→match. Do NOT let LLM erase a
         // strong heuristic match (false "mismatch" → delete → re-download loop).
         const strongHeuristicMatch =
@@ -612,6 +678,9 @@ export async function validateAttachmentContentDetailed(
       }
     }
 
+    if (heuristic === "match") {
+      await removeAutomationTag(item, "#pdf-mismatch");
+    }
     return { verdict: heuristic, pdfText: text };
   } catch (e) {
     ztoolkit.log("content validation error", e);

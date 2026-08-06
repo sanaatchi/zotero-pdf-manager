@@ -1,3 +1,4 @@
+// @ajan: cursor · @etiket: katman-2, tests, hit-trust, subtitle-enrich
 const assert = require("node:assert/strict");
 const { test } = require("node:test");
 const path = require("node:path");
@@ -664,4 +665,40 @@ test("filterTrustedHits keeps Seargeant LibGen short core with blank authors", (
     },
   );
   assert.equal(wrong.length, 0);
+});
+
+test("subtitle enrichment: missing subtitle → enrich; wrong core → null; already-full → null", () => {
+  const {
+    proposeSubtitleEnrichment,
+    resolveSubtitleEnrichment,
+  } = loadBridge();
+
+  const item = "The Art of Political Storytelling";
+  const evidence =
+    "The Art of Political Storytelling: why stories win votes in post-truth politics";
+  assert.equal(proposeSubtitleEnrichment(item, evidence), evidence);
+
+  assert.equal(
+    proposeSubtitleEnrichment(
+      "Rengin etkileşimi",
+      "İlkel topluluktan uygar topluma: Toplumun evrimi",
+    ),
+    null,
+  );
+
+  assert.equal(proposeSubtitleEnrichment(evidence, evidence), null);
+  assert.equal(
+    proposeSubtitleEnrichment(
+      "The Art of Political Storytelling: why stories win",
+      evidence,
+    ),
+    null,
+  );
+
+  const pdf = `${evidence}\nPhilip Seargeant\n${"Narrative politics. ".repeat(20)}`;
+  const resolved = resolveSubtitleEnrichment(item, {
+    pdfText: pdf,
+    authorOk: true,
+  });
+  assert.equal(resolved, evidence);
 });

@@ -1,4 +1,4 @@
-// @ajan: cursor · @etiket: katman-2, oa-pdf-bridge, subtitle-core, seargeant-trust
+// @ajan: cursor · @etiket: katman-2, oa-pdf-bridge, subtitle-enrich, seargeant-trust
 /**
  * Katman-2 → Kutuphane köprü (8756) `oa_pdf_search` client.
  * Online PDF discovery runs in Python; this module only POSTs queries.
@@ -8,6 +8,7 @@
  * Download & attach embeds kind criteria from the Zotero item automatically.
  * LibGen titles: strip ISBN/edition/``b l id`` chrome before trust gates.
  * Same-work subtitle cores (Seargeant) pass without hit authors when distinctive.
+ * Subtitle-only gaps: enrich item title from PDF/hit, then match.
  */
 import { getPref, setPref } from "../utils/prefs";
 import { normalizeDOI } from "../utils/metadataNormalize";
@@ -877,6 +878,114 @@ export function sameWorkTitle(query: string, title: string): boolean {
   );
 }
 
+/** ``(separator, subtitle)`` from evidence — empty when no subtitle. */
+function subtitleTail(title: string): { sep: string; sub: string } {
+  const raw = String(title || "").trim();
+  if (!raw) return { sep: "", sub: "" };
+  const parts = raw.split(/\s*[:;–—|/]\s+|\s+-\s+/);
+  if (parts.length >= 2 && parts[1]?.trim()) {
+    const head = parts[0];
+    const rest = raw.slice(head.length);
+    let sep = ": ";
+    if (/^\s*—/.test(rest) || /^\s*–/.test(rest)) sep = " — ";
+    else if (/^\s*\//.test(rest)) sep = " / ";
+    else if (/^\s*-/.test(rest)) sep = " - ";
+    else if (/^\s*:/.test(rest)) sep = ": ";
+    return { sep, sub: parts.slice(1).join(": ").trim() };
+  }
+  const pm = raw.match(/\s*[（(]([^）)]+)[）)]\s*$/u);
+  if (pm?.[1]?.trim()) return { sep: " (", sub: pm[1].trim() };
+  return { sep: "", sub: "" };
+}
+
+/**
+ * When item lacks a subtitle that a longer same-work PDF/hit title has,
+ * return the enriched künye title. Else null (wrong core / weak / already full).
+ */
+export function proposeSubtitleEnrichment(
+  itemTitle: string,
+  evidenceTitle: string,
+  opts: { authorOk?: boolean } = {},
+): string | null {
+  const item = String(itemTitle || "").trim();
+  const evidence = String(evidenceTitle || "").trim();
+  if (!item || !evidence) return null;
+  if (foldedPhrase(item) === foldedPhrase(evidence)) return null;
+  if (sameWorkCoreTrustOk(item, evidence, !!opts.authorOk) !== true) {
+    return null;
+  }
+  const { sep, sub } = subtitleTail(evidence);
+  if (!sep || !sub) return null;
+  const itemTail = subtitleTail(item);
+  if (itemTail.sub) return null; // already has subtitle — no overwrite
+  const enriched =
+    sep === " (" ? `${item} (${sub})` : `${item}${sep}${sub}`;
+  if (foldedPhrase(enriched) === foldedPhrase(item)) return null;
+  if (!sameWorkTitle(item, enriched)) return null;
+  return enriched;
+}
+
+/** First usable PDF title lines for enrichment (colon line preferred). */
+export function guessPdfTitleEvidence(
+  pdfText: string,
+  itemTitle = "",
+): string[] {
+  const lines = String(pdfText || "")
+    .split(/\r?\n/)
+    .map((ln) => ln.trim())
+    .filter((ln) => ln.length >= 8 && !/^[\d\sivxlc./-]+$/i.test(ln))
+    .slice(0, 5);
+  const out: string[] = [];
+  for (const ln of lines) {
+    if (/\s*[:;–—|/]\s+|\s+-\s+|[（(].+[）)]\s*$/u.test(ln)) {
+      out.push(ln.slice(0, 300));
+    }
+  }
+  if (lines.length >= 2) {
+    out.push(`${lines[0]}: ${lines[1]}`.slice(0, 300));
+    const core = String(itemTitle || "").split(/[:;–—|/]/)[0]?.trim() || "";
+    if (core && lines[0].toLowerCase().startsWith(core.slice(0, 20).toLowerCase())) {
+      out.push(`${core}: ${lines[1]}`.slice(0, 300));
+    }
+  }
+  if (lines.length) out.push(lines.slice(0, 3).join(" ").slice(0, 300));
+  for (const ln of lines) out.push(ln.slice(0, 300));
+  const seen = new Set<string>();
+  const uniq: string[] = [];
+  for (const c of out) {
+    const key = c.toLocaleLowerCase("tr");
+    if (seen.has(key)) continue;
+    seen.add(key);
+    uniq.push(c);
+  }
+  return uniq;
+}
+
+/**
+ * Pick enrichment from PDF text (preferred) or fallback hit/filename title.
+ */
+export function resolveSubtitleEnrichment(
+  itemTitle: string,
+  opts: {
+    pdfText?: string;
+    fallbackTitle?: string;
+    authorOk?: boolean;
+  } = {},
+): string | null {
+  const authorOk = !!opts.authorOk;
+  for (const evidence of guessPdfTitleEvidence(opts.pdfText || "", itemTitle)) {
+    const enriched = proposeSubtitleEnrichment(itemTitle, evidence, {
+      authorOk,
+    });
+    if (enriched) return enriched;
+  }
+  const fallback = String(opts.fallbackTitle || "").trim();
+  if (fallback) {
+    return proposeSubtitleEnrichment(itemTitle, fallback, { authorOk });
+  }
+  return null;
+}
+
 function contentTokenCount(text: string): number {
   return normTokens(text).filter((t) => !TITLE_STOP_TRUST.has(t)).length;
 }
@@ -1639,6 +1748,9 @@ export type ContentValidateResult = {
   reason?: string;
   error?: string;
   via?: string;
+  /** Künye title after subtitle enrichment (Python ``enriched_title``). */
+  enriched_title?: string;
+  enrichedTitle?: string;
 };
 
 /** Local Ollama content check via Kutuphane bridge POST /pdf-validate-content. */
