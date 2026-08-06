@@ -1,4 +1,4 @@
-/* @ajan: cursor · @etiket: katman-2, menu, content-audit, match-tag-clear */
+/* @ajan: cursor · @etiket: katman-2, menu, ghost-attach-fix, match-tag-clear */
 /*eslint no-constant-condition: ["error", { "checkLoops": false }]*/
 import { getString } from "../utils/locale";
 import { config } from "../../package.json";
@@ -36,7 +36,11 @@ import {
   scanSelectedAttachments,
 } from "./attachmentScanner";
 import { auditSelectedPdfContent } from "./pdfContentAudit";
-import { clearSuccessfulMatchTags } from "./pdfSources";
+import {
+  attachmentFileAccessible,
+  clearSuccessfulMatchTags,
+  purgeMissingSiblingPdfAttachments,
+} from "./pdfSources";
 import { openOaSearchWindow } from "./oaSearchWindow";
 import {
   registerPdfManagerMenubar,
@@ -1348,7 +1352,13 @@ async function matchAttachment() {
           selectedAttachmentIDs,
         );
         if (existingAttachment) {
+          if (!(await attachmentFileAccessible(existingAttachment))) {
+            throw new Error(
+              `Repaired attachment ${existingAttachment.id} is still inaccessible`,
+            );
+          }
           await clearSuccessfulMatchTags(item);
+          await purgeMissingSiblingPdfAttachments(item, existingAttachment.id);
           await maybeEmbedMetadata(item, existingAttachment);
           showAttachmentItem(existingAttachment);
           await ZoteroPane.selectItem(existingAttachment.id);
@@ -1380,11 +1390,27 @@ async function matchAttachment() {
             `Attachment ${attItem.id} could not be linked to item ${item.id}`,
           );
         }
+        if (!(await attachmentFileAccessible(attItem))) {
+          try {
+            await attItem.eraseTx();
+          } catch (e) {
+            ztoolkit.log(
+              "Match Attachment: erase inaccessible import stub failed",
+              e,
+            );
+          }
+          throw new Error(
+            `Imported attachment ${attItem.id} is inaccessible after import`,
+          );
+        }
 
         await clearSuccessfulMatchTags(item);
+        await purgeMissingSiblingPdfAttachments(item, attItem.id);
         await maybeEmbedMetadata(item, attItem);
         showAttachmentItem(attItem);
         await ZoteroPane.selectItem(attItem.id);
+        // Only delete the inbox source after the imported copy is confirmed
+        // accessible — otherwise Match leaves a dimmed stub and no bytes.
         removeFile(matchedFile.path);
         files = files.filter((file) => file !== matchedFile);
       } catch (error) {
@@ -2286,12 +2312,35 @@ async function _moveFile(
       const alreadyLinked = parentItem
         ? await getLinkedAttachmentAtPath(parentItem, destPath, attItem.id)
         : undefined;
-      if (alreadyLinked) {
+      if (alreadyLinked && (await attachmentFileAccessible(alreadyLinked))) {
         ztoolkit.log(
-          "moveFile skipped: linked attachment already exists for parent",
+          "moveFile: reusing accessible linked attachment; erase imported duplicate",
           destPath,
         );
+        // Do not leave an imported twin beside the working link — and never
+        // return a dimmed/missing-file sibling as the "success" attachment.
+        if (alreadyLinked.id !== attItem.id) {
+          try {
+            await attItem.eraseTx();
+          } catch (e) {
+            ztoolkit.log(
+              "moveFile: erase imported after reusing linked failed",
+              e,
+            );
+          }
+        }
         return alreadyLinked;
+      }
+      if (alreadyLinked && alreadyLinked.id !== attItem.id) {
+        ztoolkit.log(
+          "moveFile: dropping inaccessible linked ghost before re-link",
+          destPath,
+        );
+        try {
+          await alreadyLinked.eraseTx();
+        } catch (e) {
+          ztoolkit.log("moveFile: erase inaccessible linked ghost failed", e);
+        }
       }
       if (shouldCancel()) return;
       ztoolkit.log(
@@ -2357,6 +2406,13 @@ async function replaceWithLinkedAttachment(
   let newAttItem: Zotero.Item | undefined;
   attachmentMutationInFlight.add(attItem.id);
   try {
+    if (!(await pathExists(destPath, "file"))) {
+      ztoolkit.log(
+        "replaceWithLinkedAttachment aborted: dest missing",
+        destPath,
+      );
+      return;
+    }
     const json = attItem.toJSON() as any;
     json.linkMode = "linked_file";
     json.path = destPath;
@@ -2366,6 +2422,22 @@ async function replaceWithLinkedAttachment(
     newAttItem.fromJSON(json);
     await newAttItem.saveTx();
     attachmentMutationInFlight.add(newAttItem.id);
+    if (!(await attachmentFileAccessible(newAttItem))) {
+      ztoolkit.log(
+        "replaceWithLinkedAttachment: new linked item inaccessible; keep imported",
+        destPath,
+      );
+      try {
+        await newAttItem.eraseTx();
+      } catch (e) {
+        ztoolkit.log(
+          "replaceWithLinkedAttachment: erase inaccessible stub failed",
+          e,
+        );
+      }
+      newAttItem = undefined;
+      return attItem;
+    }
     await transferItem(attItem, newAttItem);
     if (removeSourceFile && !getPref("moveWithoutDeleting")) {
       try {

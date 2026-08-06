@@ -664,6 +664,42 @@ test("an exact existing linked destination is reused without creating another it
   assert.equal(result, linked);
   assert.equal(harness.calls.copy.length, 0);
   assert.equal(harness.calls.newItems.length, 0);
+  assert.equal(
+    source.calls.erase,
+    1,
+    "imported duplicate must be erased when an accessible linked attach already points at dest",
+  );
+});
+
+test("an inaccessible linked destination is dropped so a fresh link can be created", async () => {
+  harness = createHarness({
+    directories: ["/source", "/dest"],
+    files: ["/source/paper.pdf", "/dest/paper.pdf"],
+    md5: () => "same-content",
+    prefs: { destDir: "/dest", subfolderFormat: "" },
+  });
+  const parent = createRegularItem(harness, { id: 93 });
+  const source = createAttachment(harness, {
+    id: 94,
+    mode: "imported",
+    parent,
+    path: "/source/paper.pdf",
+  });
+  const ghost = createAttachment(harness, {
+    id: 95,
+    mode: "linked",
+    parent,
+    path: "/dest/paper.pdf",
+    exists: false,
+  });
+
+  const result = await harness.module.moveFile(source);
+
+  assert.ok(result);
+  assert.notEqual(result.id, ghost.id);
+  assert.equal(ghost.calls.erase, 1);
+  assert.equal(source.calls.erase, 1);
+  assert.equal(harness.calls.newItems.length, 1);
 });
 
 test("Match Attanger Attachment creates links instead of imported copies", async () => {

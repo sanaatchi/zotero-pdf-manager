@@ -1,4 +1,4 @@
-// @ajan: cursor · @etiket: katman-2, pdf-sources, keep-mismatch, match-tag-clear
+// @ajan: cursor · @etiket: katman-2, pdf-sources, ghost-attach-fix, keep-mismatch
 import { getString } from "../utils/locale";
 import { getPref } from "../utils/prefs";
 import {
@@ -826,10 +826,56 @@ export async function cleanupRejectedAttachment(opts: {
   return "cleaned";
 }
 
+/** True when Zotero can resolve the attachment to an on-disk file. */
+export async function attachmentFileAccessible(
+  attachment: Zotero.Item,
+): Promise<boolean> {
+  try {
+    return !!(await (attachment as any).fileExists?.());
+  } catch {
+    return false;
+  }
+}
+
 /**
- * Find an existing PDF attachment on `item` that already links to `filePath`.
- * Used so retries overwrite bytes in place instead of erase+recreate, and so
- * Local/orphan flows never attach the same disk file twice on one parent.
+ * Remove sibling PDF attachments whose files are missing (dimmed/ghost icons).
+ * Keeps `keepAttachmentID` and any missing-file attachment that still has
+ * annotations/notes (user data). Content-mismatch PDFs with real files are
+ * never touched — only non-functional stubs.
+ */
+export async function purgeMissingSiblingPdfAttachments(
+  item: Zotero.Item,
+  keepAttachmentID?: number | null,
+): Promise<number> {
+  let purged = 0;
+  for (const attachmentID of item.getAttachments()) {
+    if (keepAttachmentID && attachmentID === keepAttachmentID) continue;
+    const att = Zotero.Items.get(attachmentID) as Zotero.Item | undefined;
+    if (!att) continue;
+    try {
+      const isPdf =
+        (att as any).isPDFAttachment?.() ||
+        att.attachmentContentType === "application/pdf";
+      if (!isPdf) continue;
+      if (await attachmentFileAccessible(att)) continue;
+      const hasUserData =
+        ((att as any).getAnnotations?.(false) || []).length > 0 ||
+        ((att as any).getNotes?.(false) || []).length > 0;
+      if (hasUserData) continue;
+      await att.eraseTx();
+      purged++;
+    } catch (e) {
+      ztoolkit.log("purge missing sibling PDF failed", attachmentID, e);
+    }
+  }
+  return purged;
+}
+
+/**
+ * Find an existing PDF attachment on `item` that already links to `filePath`
+ * and whose file is actually accessible. Ghost/dimmed links (path stored but
+ * file missing) are skipped so callers create a fresh working link instead of
+ * "succeeding" with a non-functional stub.
  */
 export async function findParentLinkedPdfByPath(
   item: Zotero.Item,
@@ -853,7 +899,11 @@ export async function findParentLinkedPdfByPath(
       const got = PathUtils.normalize(String(p))
         .replace(/\\/g, "/")
         .toLowerCase();
-      if (got === wantKey) return att;
+      if (got !== wantKey) continue;
+      // Path match alone is not enough — OneDrive placeholders / broken
+      // linked_file rows still report a path while fileExists() is false.
+      if (!(await attachmentFileAccessible(att))) continue;
+      return att;
     } catch {
       /* ignore */
     }
@@ -989,9 +1039,31 @@ export async function downloadAndAttach(
           title: getString("pdf-attachment-title"),
           contentType: "application/pdf",
         });
+        if (
+          attachment &&
+          !(await attachmentFileAccessible(attachment as Zotero.Item))
+        ) {
+          ztoolkit.log(
+            "downloadAndAttach: linked attachment inaccessible; removing stub",
+            persistedPath,
+          );
+          try {
+            await (attachment as Zotero.Item).eraseTx();
+          } catch (e) {
+            ztoolkit.log(
+              "downloadAndAttach: erase inaccessible stub failed",
+              e,
+            );
+          }
+          attachment = null;
+        }
       }
       if (attachment) {
         await registerDownloadedFile(persistedPath);
+        await purgeMissingSiblingPdfAttachments(
+          item,
+          (attachment as Zotero.Item).id,
+        );
       }
     } else {
       const tmpDir = (Zotero as any).getTempDirectory().path as string;
@@ -1115,40 +1187,60 @@ export async function relocateImportedPdfToDownloads(
   }
   releaseDownloadPathReservation(dest);
 
+  // Always link (or reuse) BEFORE erasing the imported storage copy.
+  // Erase-then-link left parents with a missing-file / dimmed stub when
+  // linkFromFile failed after the storage blob was already gone.
+  if (!(await IOUtils.exists(dest))) {
+    ztoolkit.log("relocate: dest missing after copy; keep imported", dest);
+    return attachment;
+  }
+
   const already = await findParentLinkedPdfByPath(item, dest);
   if (already) {
     try {
-      await attachment.eraseTx();
+      if (already.id !== attachment.id) await attachment.eraseTx();
     } catch (e) {
       ztoolkit.log("relocate: erase imported (already linked) failed", e);
     }
     await registerDownloadedFile(dest);
+    await purgeMissingSiblingPdfAttachments(item, already.id);
     return already;
   }
 
+  let linked: Zotero.Item | null = null;
   try {
-    await attachment.eraseTx();
-  } catch (e) {
-    ztoolkit.log("relocate: erase imported attachment failed", e);
-    return attachment;
-  }
-
-  try {
-    const linked = await (Zotero.Attachments as any).linkFromFile({
+    linked = (await (Zotero.Attachments as any).linkFromFile({
       file: dest,
       libraryID: item.libraryID,
       parentItemID: item.id,
       title: getString("pdf-attachment-title"),
       contentType: "application/pdf",
-    });
-    if (linked) {
-      await registerDownloadedFile(dest);
-      return linked as Zotero.Item;
-    }
+    })) as Zotero.Item | null;
   } catch (e) {
-    ztoolkit.log("relocate: re-attach failed", e);
+    ztoolkit.log("relocate: re-attach failed; keeping imported", e);
+    return attachment;
   }
-  return null;
+
+  if (!linked || !(await attachmentFileAccessible(linked))) {
+    if (linked) {
+      try {
+        await linked.eraseTx();
+      } catch (e) {
+        ztoolkit.log("relocate: erase inaccessible linked stub failed", e);
+      }
+    }
+    ztoolkit.log("relocate: linked attachment not accessible; keep imported");
+    return attachment;
+  }
+
+  try {
+    await attachment.eraseTx();
+  } catch (e) {
+    ztoolkit.log("relocate: erase imported after successful link failed", e);
+  }
+  await registerDownloadedFile(dest);
+  await purgeMissingSiblingPdfAttachments(item, linked.id);
+  return linked;
 }
 
 export function getDOI(item: Zotero.Item): string {
@@ -1245,11 +1337,17 @@ export class LocalFolderSource implements PDFSource {
   ) {
     // Same disk file must never get a second attachment on this parent
     // (and never be import-copied into Zotero storage from the watch root).
+    // findParentLinkedPdfByPath only returns accessible files — ghosts skipped.
     const existing = await findParentLinkedPdfByPath(item, match.path);
     if (existing) {
       return this.finalizeLocalAttachment(item, existing, match.path, via);
     }
     try {
+      // Refuse to create a dimmed link to a missing / online-only stub.
+      if (!(await IOUtils.exists(match.path))) {
+        ztoolkit.log("Local attach skipped: path missing", match.path);
+        return null;
+      }
       const attachment = await (Zotero.Attachments as any).linkFromFile({
         file: match.path,
         libraryID: item.libraryID,
@@ -1258,6 +1356,18 @@ export class LocalFolderSource implements PDFSource {
         contentType: "application/pdf",
       });
       if (!attachment) return null;
+      if (!(await attachmentFileAccessible(attachment))) {
+        ztoolkit.log(
+          "Local attach created inaccessible link; removing stub",
+          match.path,
+        );
+        try {
+          await attachment.eraseTx();
+        } catch (e) {
+          ztoolkit.log("Local attach: erase inaccessible stub failed", e);
+        }
+        return null;
+      }
       return this.finalizeLocalAttachment(item, attachment, match.path, via);
     } catch (e) {
       rethrowAttachControlFlow(e);
@@ -1285,10 +1395,12 @@ export class LocalFolderSource implements PDFSource {
     );
     if (shouldClearMatchTags(detailed.verdict, via)) {
       await clearSuccessfulMatchTags(item);
+      await purgeMissingSiblingPdfAttachments(item, attachment.id);
       return attachment;
     }
     if (detailed.verdict === "skipped") {
       // Title-only attach with validation disabled — leave existing tags.
+      await purgeMissingSiblingPdfAttachments(item, attachment.id);
       return attachment;
     }
     if (detailed.verdict === "unverifiable") {
@@ -1297,6 +1409,7 @@ export class LocalFolderSource implements PDFSource {
         diskPath,
       );
       await tagItem(item, "#pdf-review");
+      await purgeMissingSiblingPdfAttachments(item, attachment.id);
       return attachment;
     }
     ztoolkit.log(
@@ -1305,6 +1418,8 @@ export class LocalFolderSource implements PDFSource {
     );
     await tagItem(item, "#pdf-mismatch");
     await tagItem(item, "#pdf-review");
+    // Keep the real (mismatch) file; only drop other missing-file ghosts.
+    await purgeMissingSiblingPdfAttachments(item, attachment.id);
     return attachment;
   }
 

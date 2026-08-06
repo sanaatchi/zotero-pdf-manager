@@ -230,6 +230,12 @@ function createHarness(options = {}) {
       return this.currentPath;
     }
 
+    async fileExists() {
+      const p = this.currentPath;
+      if (!p) return false;
+      return files.has(path.posix.normalize(p));
+    }
+
     getField(name) {
       return this.fields[name] || "";
     }
@@ -604,10 +610,24 @@ function createAttachment(harness, options = {}) {
       calls.erase++;
       if (options.onErase) await options.onErase(this);
       harness.items.delete(this.id);
+      if (parent) {
+        parent.attachmentIDs = parent.attachmentIDs.filter(
+          (id) => id !== this.id,
+        );
+      }
     },
     async fileExists() {
       if (options.fileExists) return options.fileExists(this);
       return options.exists !== false;
+    },
+    getAnnotations() {
+      return options.annotations || [];
+    },
+    getNotes() {
+      return options.notes || [];
+    },
+    isPDFAttachment() {
+      return (options.contentType || "application/pdf") === "application/pdf";
     },
     async getFilePathAsync() {
       calls.pathReads++;
