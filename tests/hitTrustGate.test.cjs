@@ -668,10 +668,7 @@ test("filterTrustedHits keeps Seargeant LibGen short core with blank authors", (
 });
 
 test("subtitle enrichment: missing subtitle → enrich; wrong core → null; already-full → null", () => {
-  const {
-    proposeSubtitleEnrichment,
-    resolveSubtitleEnrichment,
-  } = loadBridge();
+  const { proposeSubtitleEnrichment, resolveSubtitleEnrichment } = loadBridge();
 
   const item = "The Art of Political Storytelling";
   const evidence =

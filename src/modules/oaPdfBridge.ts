@@ -918,8 +918,7 @@ export function proposeSubtitleEnrichment(
   if (!sep || !sub) return null;
   const itemTail = subtitleTail(item);
   if (itemTail.sub) return null; // already has subtitle — no overwrite
-  const enriched =
-    sep === " (" ? `${item} (${sub})` : `${item}${sep}${sub}`;
+  const enriched = sep === " (" ? `${item} (${sub})` : `${item}${sep}${sub}`;
   if (foldedPhrase(enriched) === foldedPhrase(item)) return null;
   if (!sameWorkTitle(item, enriched)) return null;
   return enriched;
@@ -943,8 +942,14 @@ export function guessPdfTitleEvidence(
   }
   if (lines.length >= 2) {
     out.push(`${lines[0]}: ${lines[1]}`.slice(0, 300));
-    const core = String(itemTitle || "").split(/[:;–—|/]/)[0]?.trim() || "";
-    if (core && lines[0].toLowerCase().startsWith(core.slice(0, 20).toLowerCase())) {
+    const core =
+      String(itemTitle || "")
+        .split(/[:;–—|/]/)[0]
+        ?.trim() || "";
+    if (
+      core &&
+      lines[0].toLowerCase().startsWith(core.slice(0, 20).toLowerCase())
+    ) {
       out.push(`${core}: ${lines[1]}`.slice(0, 300));
     }
   }
