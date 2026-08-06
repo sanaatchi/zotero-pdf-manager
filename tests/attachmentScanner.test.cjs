@@ -186,6 +186,94 @@ test("scanAttachmentState leaves #pdf-mismatch alone when the item still has a f
   }
 });
 
+test("setTag does not add a duplicate '#broken' when the item already stores it without the '#' prefix", async () => {
+  // Regression: `scannerPref("tagBroken", "#broken")` reads the tag string
+  // from a user-editable pref with no validation that it starts with "#".
+  // The old setTag() did a raw item.hasTag(tag) — if the pref value and the
+  // item's stored tag disagreed on the leading "#", it would silently add a
+  // second, differently-spelled tag for the same status. This mock's hasTag
+  // is intentionally STRICT (exact string only, no normalization) so the
+  // test actually exercises resolveAutomationTagOnItem's `#`-aware lookup
+  // instead of masking the bug the way the lenient mocks above do.
+  global.Zotero = {
+    Prefs: {
+      get: (key) => (key.endsWith("tagBroken") ? "broken" : undefined),
+      set: () => {},
+    },
+    ItemTypes: { getID: () => 1 },
+  };
+  try {
+    const { scanAttachmentState } = loadModule();
+    const tags = new Set(["#broken"]);
+    const attachment = {
+      isEmbeddedImageAttachment: () => false,
+      isSnapshotAttachment: () => false,
+      isFileAttachment: () => true,
+      fileExists: async () => false, // still broken
+      attachmentContentType: "application/pdf",
+      attachmentFilename: "broken.pdf",
+    };
+    global.Zotero.Items = { getAsync: async () => attachment };
+    const item = {
+      isRegularItem: () => true,
+      loadAllData: async () => {},
+      getAttachments: () => [1],
+      getTags: () => [...tags].map((tag) => ({ tag })),
+      hasTag: (t) => tags.has(t), // strict — no '#' normalization
+      addTag: (t) => tags.add(t),
+      removeTag: (t) => tags.delete(t),
+      saveTx: async () => {},
+    };
+
+    await scanAttachmentState(item, false);
+
+    assert.deepEqual([...tags], ["#broken"]);
+  } finally {
+    delete global.Zotero;
+  }
+});
+
+test("setTag removes the item's actual stored tag variant, not just the pref's spelling", async () => {
+  // Same scenario in reverse: item stores the un-prefixed "broken" (from an
+  // older scan run under a different pref value); the file now exists again,
+  // so the tag must clear. removeTag must target the stored "broken", not a
+  // "#broken" the item never had.
+  global.Zotero = {
+    Prefs: { get: () => undefined, set: () => {} }, // defaults: tagBroken="#broken"
+    ItemTypes: { getID: () => 1 },
+  };
+  try {
+    const { scanAttachmentState } = loadModule();
+    const tags = new Set(["broken"]);
+    const attachment = {
+      isEmbeddedImageAttachment: () => false,
+      isSnapshotAttachment: () => false,
+      isFileAttachment: () => true,
+      fileExists: async () => true, // fixed — no longer broken
+      isPDFAttachment: () => true,
+      attachmentContentType: "application/pdf",
+      attachmentFilename: "fixed.pdf",
+    };
+    global.Zotero.Items = { getAsync: async () => attachment };
+    const item = {
+      isRegularItem: () => true,
+      loadAllData: async () => {},
+      getAttachments: () => [1],
+      getTags: () => [...tags].map((tag) => ({ tag })),
+      hasTag: (t) => tags.has(t), // strict — no '#' normalization
+      addTag: (t) => tags.add(t),
+      removeTag: (t) => tags.delete(t),
+      saveTx: async () => {},
+    };
+
+    await scanAttachmentState(item, false);
+
+    assert.deepEqual([...tags], []);
+  } finally {
+    delete global.Zotero;
+  }
+});
+
 test("nested empty directories are all reported, siblings with content are not", async () => {
   const { classifyOrphanTree } = loadModule();
   const tree = {

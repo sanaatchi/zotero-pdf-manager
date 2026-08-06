@@ -1,4 +1,5 @@
 const assert = require("node:assert/strict");
+const fs = require("node:fs");
 const { test } = require("node:test");
 const path = require("node:path");
 const esbuild = require("esbuild");
@@ -120,6 +121,24 @@ test("parseYear returns null when no year is present", () => {
   const { parseYear } = loadModule();
   assert.equal(parseYear(""), null);
   assert.equal(parseYear("n.d."), null);
+});
+
+test("maybeEmbedMetadata tags the item (#metadata-embedded/#metadata-failed) after an automatic embed, not just the manual command", () => {
+  // Regression: the automatic post-download embed path called
+  // embedMetadataIntoAttachment directly and never called setEmbedStatusTag —
+  // only the manual "Embed metadata" menu command did. So PDFs embedded
+  // automatically during download never got #metadata-embedded, making the
+  // tag undercount actually-embedded items for anyone filtering by it.
+  const source = fs.readFileSync(
+    path.join(process.cwd(), "src/modules/pdfMetadata.ts"),
+    "utf8",
+  );
+  const start = source.indexOf("export async function maybeEmbedMetadata");
+  assert.ok(start >= 0, "maybeEmbedMetadata not found");
+  const end = source.indexOf("\n}\n", start);
+  const body = source.slice(start, end);
+  assert.match(body, /setEmbedStatusTag\(item,\s*succeeded\)/);
+  assert.match(body, /setEmbedStatusTag\(item,\s*false\)/);
 });
 
 test("aggregateItemOutcomes: a single successful attachment marks the item succeeded", () => {

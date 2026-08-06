@@ -1,4 +1,4 @@
-/* @ajan: cursor · @etiket: katman-2, menu, match-rename-move, mismatch-rematch, clear-automation-tags-menu */
+/* @ajan: claude · @etiket: katman-2, menu, match-rename-move, mismatch-rematch, clear-automation-tags-menu, nosource-sync, trash-notifier */
 /*eslint no-constant-condition: ["error", { "checkLoops": false }]*/
 import { getString } from "../utils/locale";
 import { config } from "../../package.json";
@@ -38,6 +38,7 @@ import {
   monitorChangedAttachmentItems,
   removeDuplicateFileLinks,
   scanAllAttachments,
+  scanAttachmentState,
   scanOrphanFiles,
   scanSelectedAttachments,
 } from "./attachmentScanner";
@@ -85,6 +86,21 @@ let selectedCollection: Zotero.Collection | undefined;
 const movingPaths = new Set<string>();
 /** Attanger 正在修改的附件，避免自身 saveTx 再次触发自动重命名 */
 const attachmentMutationInFlight = new Set<number>();
+
+/**
+ * #nosource re-sync after a real attach success — never allowed to break the
+ * actual attach/rename/move flow it's called alongside. A tag-bookkeeping
+ * failure here (e.g. a transient Zotero.Items lookup issue) must degrade to
+ * "unsynced until the next scan," not abort the caller's real work.
+ */
+async function safeSyncSourceStatus(item: Zotero.Item): Promise<void> {
+  try {
+    await scanAttachmentState(item, false);
+  } catch (e) {
+    ztoolkit.log("safeSyncSourceStatus failed", item?.id, e);
+  }
+}
+
 export default class Menu {
   private notifierID?: string;
   private pendingAddedItemIDs = new Set<number>();
@@ -108,7 +124,26 @@ export default class Menu {
         ids: string[] | number[],
       ) => {
         if (type == "item" && (event == "trash" || event == "delete")) {
-          this.cancelAutomaticProcessing(ids, event);
+          // Independent try/catch per call: a throw in the pre-existing
+          // cancelAutomaticProcessing (unguarded internally) must not
+          // prevent the new #nosource sync below from running, and vice
+          // versa — neither call's failure should be able to silently
+          // disable the other for this event.
+          try {
+            this.cancelAutomaticProcessing(ids, event);
+          } catch (e) {
+            ztoolkit.log("cancelAutomaticProcessing failed", e);
+          }
+          // Pref-gated kill switch: if this sync ever misbehaves in the
+          // wild, it can be turned off without a new release — same escape
+          // hatch pattern as pdf.autoOnAdd / pdf.autoOnStartup below.
+          if (getPref("pdf.nosourceSyncOnRemoval") !== false) {
+            try {
+              this.syncSourceStatusOnRemoval(ids);
+            } catch (e) {
+              ztoolkit.log("syncSourceStatusOnRemoval failed", e);
+            }
+          }
           return;
         }
         if (type == "item" && event == "add") {
@@ -206,6 +241,71 @@ export default class Menu {
     ) {
       window.clearTimeout(this.autoProcessTimer);
       this.autoProcessTimer = undefined;
+    }
+  }
+
+  /**
+   * Right-now #nosource / stale-mismatch sync for a PDF attachment the
+   * plugin can prove just disappeared — not a periodic pass, so it only
+   * fires for whatever this single trash/delete event can actually resolve.
+   *
+   * Deliberately narrow: `Zotero.Items.get(id)` (same sync lookup
+   * `cancelAutomaticProcessing` above already relies on for this event) only
+   * reliably resolves for "trash" (soft delete — the row and its
+   * parent link are still in Zotero's cache) or a "delete" that hasn't yet
+   * evicted the item. A permanent delete (e.g. emptying the trash) that has
+   * already evicted the item from cache is not chased through Zotero's
+   * `extraData` payload — that's an under-documented, version-sensitive
+   * corner of the notifier API not worth the risk here. Those cases still
+   * self-heal via the periodic reconciler pass or a manual "Scan library"
+   * run, same as before this method existed.
+   *
+   * Skips any ID the plugin's own relocate/replace code has flagged
+   * in-flight (`attachmentMutationInFlight`) — a rename/move/replace cycle's
+   * transient delete-then-recreate must never read as a real removal.
+   */
+  private syncSourceStatusOnRemoval(ids: string[] | number[]) {
+    const parents = new Map<number, Zotero.Item>();
+    for (const rawID of ids) {
+      // Per-ID try/catch: one malformed/unresolvable ID in a batch delete
+      // must not abort processing of the rest of the batch. `isAttachment()`
+      // / `isRegularItem()` aren't wrapped individually below because a
+      // thrown exception here is caught at this outer boundary instead.
+      try {
+        const attachmentID = Number(rawID);
+        if (!Number.isInteger(attachmentID)) continue;
+        if (attachmentMutationInFlight.has(attachmentID)) continue;
+        const attachment = Zotero.Items.get(attachmentID);
+        if (!attachment || !attachment.isAttachment?.()) continue;
+        const parentID = Number((attachment as any).parentItemID);
+        if (!Number.isInteger(parentID) || parentID <= 0) continue;
+        if (
+          attachmentMutationInFlight.has(parentID) ||
+          parents.has(parentID)
+        ) {
+          continue;
+        }
+        const parent = Zotero.Items.get(parentID);
+        // Whole-item delete (parent + its attachments trashed together in
+        // one batch) resolves the parent too — but it's also being removed,
+        // so tagging it is pointless writing to a doomed item.
+        if (!parent?.isRegularItem() || parent.deleted) continue;
+        parents.set(parentID, parent);
+      } catch (e) {
+        ztoolkit.log("syncSourceStatusOnRemoval: resolving ID failed", rawID, e);
+      }
+    }
+    for (const parent of parents.values()) {
+      // allowCleanup=false — this is a tag re-sync, not license to also
+      // trash a *different* broken sibling attachment the notifier wasn't
+      // told about.
+      void scanAttachmentState(parent, false).catch((e) =>
+        ztoolkit.log(
+          "syncSourceStatusOnRemoval: scanAttachmentState failed",
+          parent.id,
+          e,
+        ),
+      );
     }
   }
 
@@ -1416,6 +1516,7 @@ async function matchAttachment() {
             );
           }
           await clearSuccessfulMatchTags(item);
+          await safeSyncSourceStatus(item); // #nosource must clear too
           await purgeMissingSiblingPdfAttachments(item, existingAttachment.id);
           const relocated =
             await maybeRenameAndMoveMatchedAttachment(existingAttachment);
@@ -1466,6 +1567,7 @@ async function matchAttachment() {
         }
 
         await clearSuccessfulMatchTags(item);
+        await safeSyncSourceStatus(item); // #nosource must clear too
         await purgeMissingSiblingPdfAttachments(item, attItem.id);
         // Import + autoMove notifier may also move; call explicitly so Match
         // always renames to künye and lands under destDir when configured.

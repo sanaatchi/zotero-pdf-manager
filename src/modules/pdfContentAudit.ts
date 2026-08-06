@@ -1,4 +1,4 @@
-// @ajan: cursor · @etiket: katman-2, content-audit, pdf-mismatch, match-tag-clear, multi-pdf-aggregate, tag-clear-log, clear-automation-tags-menu, mismatch-tag-guard
+// @ajan: claude · @etiket: katman-2, content-audit, pdf-mismatch, match-tag-clear, multi-pdf-aggregate, tag-clear-log, clear-automation-tags-menu, mismatch-tag-guard, pdf-candidate-split
 /**
  * Scan already-attached PDFs against parent metadata (PDF text heuristics +
  * optional LLM). Detects wrong binds that slipped past download gates.
@@ -419,12 +419,14 @@ export function itemHasClearablePdfAutomationTag(item: Zotero.Item): boolean {
   return (
     itemHasAutomationTag(item, PDF_MISMATCH_TAG) ||
     itemHasAutomationTag(item, PDF_REVIEW_TAG) ||
-    itemHasAutomationTag(item, "#pdf-quarantine")
+    itemHasAutomationTag(item, "#pdf-quarantine") ||
+    itemHasAutomationTag(item, "#pdf-candidate")
   );
 }
 
 /**
- * Manual recovery: remove #pdf-mismatch / #pdf-review / #pdf-quarantine only.
+ * Manual recovery: remove #pdf-mismatch / #pdf-review / #pdf-quarantine /
+ * #pdf-candidate only.
  * Confirm dialog; does not run content validation or change attachments.
  */
 export async function clearPdfAutomationTagsOnSelected(): Promise<{

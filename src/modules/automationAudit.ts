@@ -1,4 +1,4 @@
-// @ajan: cursor · @etiket: katman-2, automationAudit, pdf-mismatch
+// @ajan: claude · @etiket: katman-2, automationAudit, pdf-mismatch, pdf-candidate-split
 import { config } from "../../package.json";
 import { getPref } from "../utils/prefs";
 import { readJsonOrQuarantine, writeJsonAtomic } from "../utils/atomicJson";
@@ -35,6 +35,7 @@ export const REVERSIBLE_AUTOMATION_TAGS = [
   "#auto-attached",
   "#auto-oa",
   "#pdf-review",
+  "#pdf-candidate",
   "#pdf-mismatch",
   "#pdf-quarantine",
   "#auto-created",

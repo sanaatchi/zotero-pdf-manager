@@ -1,4 +1,4 @@
-// @ajan: cursor · @etiket: katman-2, pdf-sources, bridge-guard, ocr-haystack, content-validate
+// @ajan: claude · @etiket: katman-2, pdf-sources, bridge-guard, ocr-haystack, content-validate, nosource-sync, pdf-candidate-split
 import { getString } from "../utils/locale";
 import { getPref } from "../utils/prefs";
 import {
@@ -628,9 +628,10 @@ export const PDF_AUTOMATION_CLEAR_ON_MATCH = [
   "#pdf-review",
   "#pdf-quarantine",
   "#pdf-mismatch",
+  "#pdf-candidate",
 ] as const;
 
-/** Remove `#pdf-mismatch` / `#pdf-review` / `#pdf-quarantine` after a good attach. */
+/** Remove `#pdf-mismatch` / `#pdf-review` / `#pdf-quarantine` / `#pdf-candidate` after a good attach. */
 export async function clearSuccessfulMatchTags(
   item: Zotero.Item,
 ): Promise<void> {
@@ -683,6 +684,10 @@ export async function validateAttachmentContentDetailed(
   if (!opts.force && !getPref("pdf.validateContent")) {
     return { verdict: "skipped", pdfText: "" };
   }
+  // A validated attachmentID is by contract a real, existing attachment —
+  // #nosource must be false here regardless of caller (download, local
+  // finalize, or the manual "Validate attached PDF content" menu).
+  await removeAutomationTag(item, "#nosource");
   try {
     // Theses are long-form like books — not article-style distinctive kill.
     const book = isBook(item) || isThesis(item);
@@ -1281,6 +1286,11 @@ export async function downloadAndAttach(
     // Keep downloads/ file even if attach failed — never auto-delete disk PDFs.
     return null;
   }
+  // A file attachment now exists, whatever the content verdict turns out to
+  // be below — #nosource must clear here, not wait for the next manual
+  // "Scan library" run (see attachmentScanner.ts's own `!hasFile` branch,
+  // the mirror of this for the opposite direction).
+  await removeAutomationTag(item, "#nosource");
 
   if (opts.validate !== false) {
     const { verdict, pdfText } = await validateAttachmentContentDetailed(
@@ -1597,6 +1607,9 @@ export class LocalFolderSource implements PDFSource {
     via: "doi" | "isbn" | "title" = "title",
     tagCtx?: MismatchTagContext,
   ): Promise<Zotero.Item | null> {
+    // `attachment` is already attached by the caller — #nosource must clear
+    // now, independent of whatever content verdict follows below.
+    await removeAutomationTag(item, "#nosource");
     // Pref off → validate returns "skipped"; still clear tags for DOI/ISBN.
     const detailed = await validateAttachmentContentDetailed(
       item,

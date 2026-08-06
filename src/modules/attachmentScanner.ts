@@ -1,9 +1,12 @@
-// @ajan: claude · @etiket: katman-2, p2, attachmentScanner, safe-regex, stale-mismatch-tag-fix
+// @ajan: claude · @etiket: katman-2, p2, attachmentScanner, safe-regex, stale-mismatch-tag-fix, hash-prefix-normalize
 import { config } from "../../package.json";
 import { getPref } from "../utils/prefs";
 import { compileUserRegex, safeRegexTest } from "../utils/safeRegex";
 import { getWatchRoots } from "./folderIndex";
-import { clearSuccessfulMatchTags } from "./pdfSources";
+import {
+  clearSuccessfulMatchTags,
+  resolveAutomationTagOnItem,
+} from "./pdfSources";
 
 declare const IOUtils: any;
 
@@ -36,12 +39,17 @@ async function regularParent(item: Zotero.Item) {
 
 async function setTag(item: Zotero.Item, tag: string, enabled: boolean) {
   if (!tag) return false;
-  if (enabled && !item.hasTag(tag)) {
+  // `#`-prefix aware lookup — `tag` may come from a user pref
+  // (scannerPref("tagBroken", "#broken") etc.) with no validation that it
+  // actually starts with "#", so a raw hasTag(tag) could miss an
+  // already-stored "#broken" and add a second, differently-spelled tag.
+  const resolved = resolveAutomationTagOnItem(item, tag);
+  if (enabled && !resolved) {
     item.addTag(tag);
     return true;
   }
-  if (!enabled && item.hasTag(tag)) {
-    item.removeTag(tag);
+  if (!enabled && resolved) {
+    item.removeTag(resolved);
     return true;
   }
   return false;

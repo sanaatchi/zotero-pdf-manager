@@ -1,4 +1,4 @@
-// @ajan: cursor · @etiket: katman-2, pdf-metadata, max-path
+// @ajan: claude · @etiket: katman-2, pdf-metadata, max-path, auto-embed-tag-fix
 import { PDFDocument, PDFName } from "pdf-lib";
 import { config } from "../../package.json";
 import { getPref } from "../utils/prefs";
@@ -496,9 +496,12 @@ export async function maybeEmbedMetadata(
     return false;
   }
   try {
-    return await embedMetadataIntoAttachment(item, attachment);
+    const succeeded = await embedMetadataIntoAttachment(item, attachment);
+    await setEmbedStatusTag(item, succeeded);
+    return succeeded;
   } catch (error) {
     ztoolkit.log("Automatic PDF metadata embedding failed", error);
+    await setEmbedStatusTag(item, false);
     return false;
   }
 }

@@ -1,4 +1,4 @@
-// @ajan: cursor · @etiket: katman-2, tests, match-tag-clear, match-rename-move, tag-hash-normalize
+// @ajan: claude · @etiket: katman-2, tests, match-tag-clear, match-rename-move, tag-hash-normalize, nosource-sync, pdf-candidate-split
 const assert = require("node:assert/strict");
 const fs = require("node:fs");
 const path = require("node:path");
@@ -98,6 +98,106 @@ test("clearSuccessfulMatchTags removes mismatch + review on parent", async () =>
   assert.equal(tags.has("#pdf-mismatch"), false);
   assert.equal(tags.has("#pdf-review"), false);
   assert.equal(tags.has("#keep-me"), true);
+});
+
+test("clearSuccessfulMatchTags also removes #pdf-candidate", async () => {
+  // #pdf-candidate is the tag split out of #pdf-review for reconciler
+  // "no attachment yet, low-confidence local match" cases — it must clear
+  // via the same successful-match path as #pdf-mismatch/#pdf-review.
+  const { clearSuccessfulMatchTags } = loadPdfSources();
+  const tags = new Set(["#pdf-candidate", "#keep-me"]);
+  const item = {
+    getTags: () => [...tags].map((tag) => ({ tag })),
+    hasTag: (t) => tags.has(t),
+    removeTag: (tag) => {
+      tags.delete(tag);
+    },
+    saveTx: async () => {},
+  };
+
+  await clearSuccessfulMatchTags(item);
+
+  assert.equal(tags.has("#pdf-candidate"), false);
+  assert.equal(tags.has("#keep-me"), true);
+});
+
+test("#nosource clears at every real attach-success point, not just on content match", () => {
+  // Regression: #nosource used to only clear via a manual "Scan library"
+  // run. downloadAndAttach, finalizeLocalAttachment, and
+  // validateAttachmentContentDetailed all confirm a real file attachment
+  // exists before this point — #nosource must clear there immediately,
+  // independent of whatever content verdict (match/unverifiable/mismatch)
+  // follows, since #nosource is about attachment EXISTENCE, not correctness.
+  const source = fs.readFileSync(
+    path.join(process.cwd(), "src/modules/pdfSources.ts"),
+    "utf8",
+  );
+  const removeNoSourceCalls = source.match(
+    /await removeAutomationTag\(item, "#nosource"\);/g,
+  );
+  assert.equal(
+    removeNoSourceCalls?.length,
+    3,
+    "expected exactly 3 call sites: downloadAndAttach, finalizeLocalAttachment, validateAttachmentContentDetailed",
+  );
+
+  // downloadAndAttach: clear happens right after confirming `attachment`
+  // exists, before the validate/verdict branch that decides match vs.
+  // unverifiable vs. mismatch.
+  const downloadAnchor = source.indexOf(
+    "if (!attachment) {\n    // Keep downloads/",
+  );
+  const downloadVerdictBranch = source.indexOf(
+    "if (opts.validate !== false) {",
+    downloadAnchor,
+  );
+  const downloadNoSourceClear = source.indexOf(
+    'await removeAutomationTag(item, "#nosource");',
+    downloadAnchor,
+  );
+  assert.ok(downloadAnchor >= 0 && downloadVerdictBranch >= 0);
+  assert.ok(
+    downloadAnchor < downloadNoSourceClear &&
+      downloadNoSourceClear < downloadVerdictBranch,
+    "downloadAndAttach must clear #nosource before branching on content verdict",
+  );
+
+  // finalizeLocalAttachment: clear happens before calling
+  // validateAttachmentContentDetailed, so it's independent of the verdict.
+  const finalizeAnchor = source.indexOf(
+    "private async finalizeLocalAttachment(",
+  );
+  const finalizeValidateCall = source.indexOf(
+    "const detailed = await validateAttachmentContentDetailed(",
+    finalizeAnchor,
+  );
+  const finalizeNoSourceClear = source.indexOf(
+    'await removeAutomationTag(item, "#nosource");',
+    finalizeAnchor,
+  );
+  assert.ok(finalizeAnchor >= 0 && finalizeValidateCall >= 0);
+  assert.ok(
+    finalizeAnchor < finalizeNoSourceClear &&
+      finalizeNoSourceClear < finalizeValidateCall,
+    "finalizeLocalAttachment must clear #nosource before calling validateAttachmentContentDetailed",
+  );
+
+  // validateAttachmentContentDetailed: clear happens right after the
+  // pref/force skip-check, before any PDF text extraction / verdict work.
+  const validateAnchor = source.indexOf(
+    "export async function validateAttachmentContentDetailed(",
+  );
+  const validateWorkStart = source.indexOf("try {", validateAnchor);
+  const validateNoSourceClear = source.indexOf(
+    'await removeAutomationTag(item, "#nosource");',
+    validateAnchor,
+  );
+  assert.ok(validateAnchor >= 0 && validateWorkStart >= 0);
+  assert.ok(
+    validateAnchor < validateNoSourceClear &&
+      validateNoSourceClear < validateWorkStart,
+    "validateAttachmentContentDetailed must clear #nosource before any verdict work",
+  );
 });
 
 test("clearSuccessfulMatchTags: getTags without # but hasTag with #", async () => {

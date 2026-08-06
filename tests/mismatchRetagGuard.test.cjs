@@ -141,3 +141,55 @@ test("reconciler attachFile passes reconcile mismatch tag source", () => {
   const reconciler = loadReconcilerPure();
   assert.match(reconciler, /source: `reconcile-\$\{shared\.reason\}`/);
 });
+
+test("reconciler's passive #pdf-candidate add path is routed through the same user-clear guard as #pdf-mismatch", () => {
+  // Regression: addAutomationTag(item, "#pdf-review") for ambiguous/collided
+  // local matches (processItemBatch) used to call a raw, unguarded helper
+  // directly — bypassing shouldSuppressPassiveMismatchTag entirely and
+  // relying only on canReconcileItem's coarser whole-item pre-filter. Also
+  // split from #pdf-review into its own tag (#pdf-candidate): these two
+  // branches fire for a candidate file that was NOT confidently attached —
+  // a different situation from #pdf-mismatch/#pdf-review, which both mean
+  // an attachment exists and its content is wrong/unclear. Both add sites
+  // must go through addReconcileCandidateTag, which checks the guard the
+  // same way #pdf-mismatch does.
+  const reconciler = loadReconcilerPure();
+  assert.match(
+    reconciler,
+    /async function addReconcileCandidateTag\([^)]*\)\s*\{\s*if \(shouldSuppressPassiveMismatchTag\(item\.id, `reconcile-\$\{reason\}`\)\) return;/,
+  );
+  const candidateCallSites = reconciler.match(
+    /await addReconcileCandidateTag\(item, reason\);/g,
+  );
+  assert.equal(
+    candidateCallSites?.length,
+    2,
+    "expected both the ambiguous-match and file-collision branches to use the guarded helper",
+  );
+  // The raw primitive call to add "#pdf-candidate" must appear exactly once
+  // in the whole file — inside addReconcileCandidateTag itself (asserted
+  // above). If it appears anywhere else, some call site is bypassing the
+  // guard. And #pdf-review (the old, now-ambiguous tag) must not be added
+  // by the reconciler's local-match branches at all anymore.
+  const rawCandidateCalls = reconciler.match(
+    /await addAutomationTag\(item, "#pdf-candidate"\)/g,
+  );
+  assert.equal(rawCandidateCalls?.length, 1);
+  assert.doesNotMatch(reconciler, /addAutomationTag\(item, "#pdf-review"\)/);
+});
+
+test("reconciler's addAutomationTag dedups tags with '#'-prefix awareness, not an exact string match", () => {
+  // Regression: the old implementation compared `entry.tag === tag`
+  // (exact string only). If Zotero ever returns/stores a tag without the
+  // leading "#", this silently missed the existing tag and added a second,
+  // differently-spelled one for the same status.
+  const reconciler = loadReconcilerPure();
+  assert.match(
+    reconciler,
+    /if \(resolveAutomationTagOnItem\(item, tag\)\) return;/,
+  );
+  assert.doesNotMatch(
+    reconciler,
+    /tags\.some\(\(entry\) => entry\.tag === tag\)/,
+  );
+});

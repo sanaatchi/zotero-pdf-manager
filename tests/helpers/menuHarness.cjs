@@ -1,3 +1,4 @@
+// @ajan: claude · @etiket: katman-2, tests, harness, nosource-sync
 const path = require("node:path");
 const esbuild = require("esbuild");
 
@@ -679,6 +680,9 @@ function createAttachment(harness, options = {}) {
       return options.tags || [];
     },
     isAttachment() {
+      return true;
+    },
+    isFileAttachment() {
       return true;
     },
     isImportedAttachment() {

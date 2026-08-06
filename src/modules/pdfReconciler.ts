@@ -1,12 +1,15 @@
-// @ajan: claude · @etiket: katman-2, p2, reconciler, mismatch-rematch, mismatch-tag-guard, abortcontroller-fix
+// @ajan: claude · @etiket: katman-2, p2, reconciler, mismatch-rematch, mismatch-tag-guard, abortcontroller-fix, hash-prefix-normalize, review-tag-guard, pdf-candidate-split
 import { getPref } from "../utils/prefs";
-import { wasPdfAutomationTagsUserClearedRecently } from "./pdfAutomationTagGuard";
+import {
+  shouldSuppressPassiveMismatchTag,
+  wasPdfAutomationTagsUserClearedRecently,
+} from "./pdfAutomationTagGuard";
 import {
   buildIndex,
   getLastIndexBuildMeta,
   isFolderIndexComplete,
 } from "./folderIndex";
-import { LocalFolderSource } from "./pdfSources";
+import { LocalFolderSource, resolveAutomationTagOnItem } from "./pdfSources";
 import { tryAutomaticOnlineSources } from "./pdfDownload";
 import {
   processOrphanPDFs,
@@ -144,13 +147,35 @@ export function expandAddedItemIDs(
 
 async function addAutomationTag(item: Zotero.Item, tag: string) {
   try {
-    const tags = (item.getTags() as { tag: string }[]) || [];
-    if (tags.some((entry) => entry.tag === tag)) return;
+    // `#`-prefix aware lookup (see pdfSources.ts resolveTagOnItem) — an exact
+    // string match here would miss an existing un-prefixed variant and add a
+    // second, differently-spelled tag for the same status.
+    if (resolveAutomationTagOnItem(item, tag)) return;
     item.addTag(tag);
     await item.saveTx();
   } catch (e) {
     ztoolkit.log(`Could not add automation tag ${tag}`, e);
   }
+}
+
+/**
+ * `#pdf-candidate` written by passive reconcile matching — ambiguous/mid-
+ * confidence local match, or a file already claimed by another item. Distinct
+ * from `#pdf-mismatch`/`#pdf-review`, which both mean "an attachment exists
+ * and its content is wrong/unclear". This path fires for items that do NOT
+ * have an attachment to point at yet (or, rarely, an item already carrying
+ * a mismatched attachment where a second, low-confidence candidate turned
+ * up) — bundling it under `#pdf-review` made the two situations
+ * indistinguishable in the tag pane. Routed through the same user-clear
+ * guard as `#pdf-mismatch` for consistency — `canReconcileItem` already
+ * excludes recently-cleared items at the whole-item level, but that's a
+ * coarser gate than the per-tag guard the mismatch path uses, so this keeps
+ * both passive tag-writes behaving identically instead of relying on the two
+ * gates staying in sync by coincidence.
+ */
+async function addReconcileCandidateTag(item: Zotero.Item, reason: string) {
+  if (shouldSuppressPassiveMismatchTag(item.id, `reconcile-${reason}`)) return;
+  await addAutomationTag(item, "#pdf-candidate");
 }
 
 /**
@@ -689,6 +714,7 @@ export class PDFReconciler {
   ): Promise<void> {
     const {
       runID,
+      reason,
       dryRun,
       source,
       index,
@@ -709,15 +735,15 @@ export class PDFReconciler {
       try {
         const match = source.matchItem(item, index);
         if (match.status === "ambiguous" || match.status === "review") {
-          if (!dryRun) await addAutomationTag(item, "#pdf-review");
+          if (!dryRun) await addReconcileCandidateTag(item, reason);
           const detail =
             match.status === "review"
               ? dryRun
-                ? `Dry-run: mid-confidence match (${match.score?.toFixed(2) ?? "?"}); review tag not added`
-                : `Mid-confidence match (${match.reason}); tagged #pdf-review`
+                ? `Dry-run: mid-confidence match (${match.score?.toFixed(2) ?? "?"}); candidate tag not added`
+                : `Mid-confidence match (${match.reason}); tagged #pdf-candidate`
               : dryRun
-                ? "Dry-run: ambiguous match; review tag not added"
-                : "Ambiguous match; tagged #pdf-review";
+                ? "Dry-run: ambiguous match; candidate tag not added"
+                : "Ambiguous match; tagged #pdf-candidate";
           await appendAuditEvent({
             run: runID,
             action: "local-match",
@@ -733,7 +759,7 @@ export class PDFReconciler {
         if (match.status === "matched") {
           const filePath = match.file.path;
           if (usedPaths.has(filePath)) {
-            if (!dryRun) await addAutomationTag(item, "#pdf-review");
+            if (!dryRun) await addReconcileCandidateTag(item, reason);
             await appendAuditEvent({
               run: runID,
               action: "local-match",
@@ -743,7 +769,7 @@ export class PDFReconciler {
               path: filePath,
               detail: dryRun
                 ? "Dry-run: file collides with another item's match"
-                : "File already matched to another item; tagged #pdf-review",
+                : "File already matched to another item; tagged #pdf-candidate",
             });
             stats.review++;
             continue;
