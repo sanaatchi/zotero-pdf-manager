@@ -16,9 +16,9 @@ ZotAssets, File Utility, Attachment Scanner, ozefe/yoktez).
 
 ### Son eklenen (v1.0.138)
 
-| Madde                                           | Not                                                                                                                 |
-| ----------------------------------------------- | ------------------------------------------------------------------------------------------------------------------- |
-| Başlık sözcük bantları (1–3 / 4–20 / ≥21)       | Kısa: yazar/yıl/id zorunlu; uzun: distinctiveCoverage ≥0.85 + author\|titleHit; başlık kesilmez                      |
+| Madde                                     | Not                                                                                             |
+| ----------------------------------------- | ----------------------------------------------------------------------------------------------- |
+| Başlık sözcük bantları (1–3 / 4–20 / ≥21) | Kısa: yazar/yıl/id zorunlu; uzun: distinctiveCoverage ≥0.85 + author\|titleHit; başlık kesilmez |
 
 ### Son eklenen (v1.0.137)
 

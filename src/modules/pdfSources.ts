@@ -1064,9 +1064,7 @@ export async function validateAttachmentContentDetailed(
     const itemTitle = String(item.getField("title") || "");
     const titleLengthBand = classifyTitleLength(itemTitle);
     const year = itemYear(item);
-    const yearFound = !!(
-      year && normalizeOcrHaystack(text).includes(year)
-    );
+    const yearFound = !!(year && normalizeOcrHaystack(text).includes(year));
     const distinctiveDetail = distinctiveTitleCoverageDetail(itemTitle, text);
     const distinctiveCoverage = distinctiveDetail.coverage;
     const turkishCharNormalization =
