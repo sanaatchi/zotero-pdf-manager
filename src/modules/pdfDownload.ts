@@ -1,4 +1,4 @@
-// @ajan: cursor · @etiket: katman-2, pdfDownload, mismatch-rematch, keep-mismatch
+// @ajan: cursor · @etiket: katman-2, pdfDownload, mismatch-rematch, keep-mismatch, downloads-probe
 import {
   ALL_SOURCES,
   downloadAndAttach,
@@ -7,6 +7,7 @@ import {
   isBook,
   isContentMismatchError,
   isThesis,
+  LocalFolderSource,
   PDFSource,
 } from "./pdfSources";
 import { getPref } from "../utils/prefs";
@@ -16,7 +17,12 @@ import {
   ItemReport,
   SourceAttempt,
 } from "./downloadReport";
-import { getLastIndexBuildMeta, isFolderIndexComplete } from "./folderIndex";
+import {
+  buildIndex,
+  getLastIndexBuildMeta,
+  getWatchRoots,
+  isFolderIndexComplete,
+} from "./folderIndex";
 import { throwIfRunAborted } from "../utils/cancelToken";
 import {
   cascadeAutomaticSources,
@@ -39,8 +45,15 @@ import {
   fallbackCascadeMessage,
   type CascadeMissHints,
 } from "../utils/oaCascadeMiss";
+import { resolveOaDownloadsDir } from "./oaDownloadPath";
 
 const PDF_MISMATCH_TAG = "#pdf-mismatch";
+/** Download report + cascade: OA landing folder probe before network. */
+export const DOWNLOADS_PROBE_SOURCE_ID = "downloads";
+
+declare const IOUtils: {
+  exists: (path: string) => Promise<boolean>;
+};
 
 export {
   resolveOaDownloadsDir,
@@ -341,6 +354,34 @@ function notify(
 }
 
 /**
+ * Match/attach from `{watchRoot}/downloads/` only (P2-4). Uses the same
+ * LocalFolderSource matching + finalizeLocalAttachment path as reconciliation.
+ * Runs before the manual download cascade so freshly landed OA files attach
+ * without a network round-trip.
+ */
+export async function tryAttachFromDownloadsFolder(
+  item: Zotero.Item,
+): Promise<Zotero.Item | null> {
+  const downloadsDir = resolveOaDownloadsDir(getWatchRoots());
+  if (!downloadsDir) return null;
+  try {
+    if (!(await IOUtils.exists(downloadsDir))) return null;
+  } catch {
+    return null;
+  }
+
+  const index = await buildIndex(true, [downloadsDir], undefined, {
+    ephemeral: true,
+  });
+  if (!index.length) return null;
+
+  const local = new LocalFolderSource();
+  const match = local.matchItem(item, index);
+  if (match.status !== "matched" || !match.file) return null;
+  return local.attachFile(item, match.file, match.via || "title");
+}
+
+/**
  * Download and attach a PDF for every selected top-level regular item, trying
  * each enabled source (that supports the item's type) in priority order.
  */
@@ -395,8 +436,66 @@ export async function downloadPdfForSelectedItems() {
     const attempts: SourceAttempt[] = [];
     let attached: unknown | null = null;
     let attachedSource: string | undefined;
+
+    try {
+      const fromDownloads = await tryAttachFromDownloadsFolder(item);
+      if (fromDownloads) {
+        attempts.push({
+          source: DOWNLOADS_PROBE_SOURCE_ID,
+          outcome: "attached",
+        });
+        attached = fromDownloads;
+        attachedSource = DOWNLOADS_PROBE_SOURCE_ID;
+      } else {
+        attempts.push({
+          source: DOWNLOADS_PROBE_SOURCE_ID,
+          outcome: "no-match",
+        });
+      }
+    } catch (e) {
+      if (isAttachStoppedError(e)) {
+        attempts.push({
+          source: DOWNLOADS_PROBE_SOURCE_ID,
+          outcome: e.reason === "review" ? "rejected" : "error",
+          reason: e.reason,
+        });
+        const stopNote =
+          e.reason === "review"
+            ? isBook(item)
+              ? "PDF doğrulanamadı — eklenti durdu (#pdf-review). Elle kontrol edin."
+              : "PDF review quarantine — cascade stopped"
+            : "Erase failed — cascade stopped; file kept";
+        queueCascadeMissLog(item, attempts, "download-report", stopNote);
+        return {
+          failed: true,
+          report: {
+            itemID: item.id,
+            title,
+            result: "failed" as const,
+            note: stopNote,
+            attempts,
+          },
+        };
+      }
+      if (isContentMismatchError(e)) {
+        attempts.push({
+          source: DOWNLOADS_PROBE_SOURCE_ID,
+          outcome: "rejected",
+          reason: (e as Error).message,
+        });
+      } else {
+        attempts.push({
+          source: DOWNLOADS_PROBE_SOURCE_ID,
+          outcome: "error",
+          reason: (e as Error)?.message || String(e),
+        });
+        ztoolkit.log("Downloads folder probe failed", e);
+      }
+    }
+
     const sources = orderedSourcesForItem(item);
     for (const src of sources) {
+      if (attached) break;
       if (!src.supportsItem(item)) {
         attempts.push({ source: src.id, outcome: "unsupported" });
         continue;

@@ -1,4 +1,4 @@
-// @ajan: cursor · @etiket: katman-2, folderIndex, watch-root-parent
+// @ajan: cursor · @etiket: katman-2, folderIndex, watch-root-parent, downloads-probe
 import { getPref } from "../utils/prefs";
 import { parseFilenameMetadata } from "./filenameMetadata";
 import { readJsonOrQuarantine, writeJsonAtomic } from "../utils/atomicJson";
@@ -409,6 +409,14 @@ async function walk(
   }
 }
 
+export type BuildIndexOptions = {
+  /**
+   * Scoped probe (e.g. `{watchRoot}/downloads/` before OA cascade): do not
+   * update in-memory cache, persist, or lastBuildMeta.
+   */
+  ephemeral?: boolean;
+};
+
 /**
  * Build (or refresh) the folder index across all watched roots. Uses a short
  * in-memory cache; pass `force` to rescan immediately. Unchanged files (same
@@ -418,9 +426,10 @@ export async function buildIndex(
   force = false,
   rootsOverride?: string[],
   signal?: AbortSignal | null,
+  options?: BuildIndexOptions,
 ): Promise<IndexedFile[]> {
   return enqueueIndexMutation(() =>
-    buildIndexLocked(force, rootsOverride, signal),
+    buildIndexLocked(force, rootsOverride, signal, options),
   );
 }
 
@@ -428,9 +437,13 @@ async function buildIndexLocked(
   force = false,
   rootsOverride?: string[],
   signal?: AbortSignal | null,
+  options?: BuildIndexOptions,
 ): Promise<IndexedFile[]> {
+  const ephemeral = options?.ephemeral === true;
   const now = Date.now();
-  if (!force && memCache && now - memCacheAt < 60000) return memCache;
+  if (!ephemeral && !force && memCache && now - memCacheAt < 60000) {
+    return memCache;
+  }
 
   const roots = rootsOverride ?? getWatchRoots();
   const persisted = await loadPersisted();
@@ -443,16 +456,20 @@ async function buildIndexLocked(
     if (root) await walk(root, 0, discovered, walkState, signal);
   }
 
-  lastBuildMeta = {
+  const buildMeta: IndexBuildMeta = {
     incomplete: walkState.incomplete,
     truncateReason: walkState.truncateReason,
     discovered: discovered.length,
     cappedAt: MAX_INDEX_FILES,
     maxDepth: MAX_WALK_DEPTH,
   };
+  if (!ephemeral) {
+    lastBuildMeta = buildMeta;
+  }
   if (walkState.incomplete) {
     ztoolkit.log(
-      `Folder index INCOMPLETE: reason=${walkState.truncateReason} discovered≈${discovered.length} cap=${MAX_INDEX_FILES}`,
+      `Folder index INCOMPLETE: reason=${walkState.truncateReason} discovered≈${discovered.length} cap=${MAX_INDEX_FILES}` +
+        (ephemeral ? " (ephemeral probe)" : ""),
     );
   }
 
@@ -472,14 +489,15 @@ async function buildIndexLocked(
     return indexEntryFromDiscovery(d.path, d.mtime, prev, d.size);
   });
 
-  memCache = index;
-  memCacheAt = now;
-  await persist(index);
+  if (!ephemeral) {
+    memCache = index;
+    memCacheAt = now;
+    await persist(index);
+  }
   ztoolkit.log(
     `Folder index: ${index.length} PDFs across ${roots.length} root(s)` +
-      (lastBuildMeta.incomplete
-        ? ` [INCOMPLETE:${lastBuildMeta.truncateReason}]`
-        : ""),
+      (buildMeta.incomplete ? ` [INCOMPLETE:${buildMeta.truncateReason}]` : "") +
+      (ephemeral ? " [ephemeral]" : ""),
   );
   return index;
 }

@@ -1,4 +1,4 @@
-// @ajan: cursor · @etiket: katman-2, cascade, test, cascade-log
+// @ajan: cursor · @etiket: katman-2, cascade, test, cascade-log, downloads-probe
 const assert = require("node:assert/strict");
 const fs = require("node:fs");
 const path = require("node:path");
@@ -156,4 +156,30 @@ test("pdfDownload wires cascadeAutomaticSources; prefs expose cancel UI", () => 
     "utf8",
   );
   assert.match(audit, /"#pdf-quarantine"/);
+});
+
+test("downloadPdfForSelectedItems probes downloads folder before source cascade", () => {
+  const download = fs.readFileSync(
+    path.join(process.cwd(), "src/modules/pdfDownload.ts"),
+    "utf8",
+  );
+  assert.match(download, /export async function tryAttachFromDownloadsFolder/);
+  assert.match(download, /buildIndex\(true, \[downloadsDir\].*ephemeral:\s*true/s);
+  assert.match(download, /LocalFolderSource/);
+  assert.match(download, /matchItem\(item, index\)/);
+  assert.match(download, /attachFile\(item, match\.file/);
+  const probeIdx = download.indexOf("tryAttachFromDownloadsFolder(item)");
+  const cascadeIdx = download.indexOf("orderedSourcesForItem(item)");
+  assert.ok(probeIdx >= 0 && cascadeIdx >= 0);
+  assert.ok(
+    probeIdx < cascadeIdx,
+    "downloads probe must run before orderedSourcesForItem cascade",
+  );
+  assert.match(download, /DOWNLOADS_PROBE_SOURCE_ID/);
+
+  const folderIndex = fs.readFileSync(
+    path.join(process.cwd(), "src/modules/folderIndex.ts"),
+    "utf8",
+  );
+  assert.match(folderIndex, /ephemeral\?: boolean/);
 });
