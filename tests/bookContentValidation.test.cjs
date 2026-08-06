@@ -142,6 +142,35 @@ test("article validation stays stricter than books", () => {
   );
 });
 
+test("thesis colon subtitle: core in PDF body matches (1980 Sanat: Dönüşümler)", () => {
+  const { decideContentValidation, distinctiveTitleCoverage } = loadModule();
+  const itemTitle = "1980 Sonrası Türkiye'de Sanat: Dönüşümler";
+  const pdfText =
+    "1980 sonrasi turkiye de sanat\nYuksek Lisans Tezi\n" +
+    "Bu calisma 1980 sonrasi turkiye de sanat alaninda incelenmektedir. ".repeat(
+      12,
+    );
+  const coverage = distinctiveTitleCoverage(itemTitle, pdfText);
+  assert.ok(
+    coverage >= 1,
+    "core distinctive tokens in body should satisfy coverage",
+  );
+  assert.equal(
+    decideContentValidation({
+      kind: "book",
+      textChars: 500,
+      titleHit: 0.75,
+      score: 1.0,
+      hasIdConflict: false,
+      hasIdMatch: false,
+      authorExpected: true,
+      authorFound: true,
+      distinctiveCoverage: coverage,
+    }),
+    "match",
+  );
+});
+
 test("article validation rejects Golub name-only PDF without mercenaries", () => {
   const { decideContentValidation, distinctiveTitleCoverage } = loadModule();
   const itemTitle = "The mercenaries: an interview with Leon Golub";

@@ -1,4 +1,4 @@
-// @ajan: cursor · @etiket: katman-2, pdf-sources, match-rename-move, keep-mismatch
+// @ajan: cursor · @etiket: katman-2, pdf-sources, match-rename-move, keep-mismatch, thesis-validate
 import { getString } from "../utils/locale";
 import { getPref } from "../utils/prefs";
 import {
@@ -277,7 +277,9 @@ export function normalizeSearchText(s: string): string {
   return (s || "")
     .normalize("NFKD")
     .replace(/\p{Mark}/gu, "")
-    .toLocaleLowerCase()
+    .replace(/\u0131/g, "i")
+    .replace(/\u0130/g, "i")
+    .toLocaleLowerCase("tr")
     .replace(/[^\p{L}\p{N}\s]/gu, " ");
 }
 
@@ -323,16 +325,37 @@ export function distinctiveTitleTokens(title: string): string[] {
   );
 }
 
+/** Title core before colon/dash — subtitle tokens need not appear in PDF body. */
+function titleCoreForDistinctive(title: string): string {
+  const raw = String(title || "").trim();
+  if (!raw) return "";
+  const head = raw.split(/\s*[:;–—|/]\s+|\s+-\s+/)[0]?.trim();
+  return head || raw;
+}
+
 export function distinctiveTitleCoverage(
   title: string,
   rawText: string,
 ): number {
-  const need = distinctiveTitleTokens(title);
-  if (!need.length) return 1;
+  const needAll = distinctiveTitleTokens(title);
+  if (!needAll.length) return 1;
   const text = normalizeSearchText(rawText);
   if (!text) return 0;
-  const hit = need.filter((t) => text.includes(t)).length;
-  return hit / need.length;
+  const hitAll = needAll.filter((t) => text.includes(t)).length;
+  const coverageAll = hitAll / needAll.length;
+  // Colon subtitles (YÖK tez: «… Sanat: Dönüşümler») often appear only on the
+  // cover line, not in body text — do not fail when the shared core matches.
+  const core = titleCoreForDistinctive(title);
+  if (core && core !== title.trim()) {
+    const needCore = distinctiveTitleTokens(core);
+    if (needCore.length) {
+      const hitCore = needCore.filter((t) => text.includes(t)).length;
+      if (hitCore === needCore.length) {
+        return Math.max(coverageAll, 1);
+      }
+    }
+  }
+  return coverageAll;
 }
 
 function titleSimilar(a: string, b: string): boolean {
@@ -534,7 +557,8 @@ export async function validateAttachmentContentDetailed(
     return { verdict: "skipped", pdfText: "" };
   }
   try {
-    const book = isBook(item);
+    // Theses are long-form like books — not article-style distinctive kill.
+    const book = isBook(item) || isThesis(item);
     const pageLimit = book ? 20 : 5;
     const res = await (Zotero as any).PDFWorker.getFullText(
       attachmentID,
