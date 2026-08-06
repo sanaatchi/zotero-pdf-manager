@@ -3,9 +3,9 @@
     "zotero-pdf-manager@ibrahimyildiz.art": {
       "updates": [
         {
-          "version": "1.0.119",
-          "update_link": "https://github.com/sanaatchi/zotero-pdf-manager-releases/releases/download/v1.0.119/zotero-pdf-manager.xpi",
-          "update_hash": "sha512:481ee5e2a84d415e114253dbbd39d3c6bff722a726455b1776324b9d1b4cf15bcb783880262dbdf89650f526bcf78a5a0ad8e3be3bfcc62b1539434937f85347",
+          "version": "1.0.121",
+          "update_link": "https://github.com/sanaatchi/zotero-pdf-manager-releases/releases/download/v1.0.121/zotero-pdf-manager.xpi",
+          "update_hash": "sha512:a2e2cacc867484184d060505cd77c33d11d217e286ff8a1dfc48e7b1ff76f2e73b8b1be5969395a14ee1a738d798eca2129f27e69bd59411b94fbd576f007fc5",
           "applications": {
             "zotero": {
               "strict_min_version": "7.0",
