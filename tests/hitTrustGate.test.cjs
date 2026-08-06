@@ -710,10 +710,7 @@ test("subtitle enrichment: reject TÜBA publisher street/postal address", () => 
   const item = "Tarihi ve Etimolojik Türkiye Türkçesi Lügatı";
   const addr = "Türkiye Bilimler Akademisi Piyade Sokak No 27, 06690";
   assert.equal(looksLikeAddressOrPublisherHq(addr), true);
-  assert.equal(
-    proposeSubtitleEnrichment(item, `${item}: ${addr}`),
-    null,
-  );
+  assert.equal(proposeSubtitleEnrichment(item, `${item}: ${addr}`), null);
 
   const pdf = `${item}\n${addr}\n${"Bu lügat Türkçenin etimolojik sözlüğüdür. ".repeat(12)}`;
   assert.equal(
