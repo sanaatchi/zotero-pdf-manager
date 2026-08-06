@@ -496,7 +496,9 @@ async function buildIndexLocked(
   }
   ztoolkit.log(
     `Folder index: ${index.length} PDFs across ${roots.length} root(s)` +
-      (buildMeta.incomplete ? ` [INCOMPLETE:${buildMeta.truncateReason}]` : "") +
+      (buildMeta.incomplete
+        ? ` [INCOMPLETE:${buildMeta.truncateReason}]`
+        : "") +
       (ephemeral ? " [ephemeral]" : ""),
   );
   return index;

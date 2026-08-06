@@ -164,7 +164,10 @@ test("downloadPdfForSelectedItems probes downloads folder before source cascade"
     "utf8",
   );
   assert.match(download, /export async function tryAttachFromDownloadsFolder/);
-  assert.match(download, /buildIndex\(true, \[downloadsDir\].*ephemeral:\s*true/s);
+  assert.match(
+    download,
+    /buildIndex\(true, \[downloadsDir\].*ephemeral:\s*true/s,
+  );
   assert.match(download, /LocalFolderSource/);
   assert.match(download, /matchItem\(item, index\)/);
   assert.match(download, /attachFile\(item, match\.file/);
