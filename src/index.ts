@@ -1,8 +1,16 @@
+// @ajan: cursor · @etiket: katman-2, bootstrap, console-group-polyfill
 import { BasicTool } from "zotero-plugin-toolkit";
 import Addon from "./addon";
 import { config } from "../package.json";
+import { ensureConsoleGroupPolyfill } from "./utils/ztoolkit";
+
+// Earliest possible: before BasicTool / Addon touch toolkit logging.
+ensureConsoleGroupPolyfill();
 
 const basicTool = new BasicTool();
+ensureConsoleGroupPolyfill(
+  (basicTool as unknown as { _console?: object })._console,
+);
 
 if (!basicTool.getGlobal("Zotero")[config.addonInstance]) {
   defineGlobal("window");
