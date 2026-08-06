@@ -1,4 +1,4 @@
-/* @ajan: cursor · @etiket: katman-2, menu, ghost-attach-fix, match-tag-clear */
+/* @ajan: cursor · @etiket: katman-2, menu, match-rename-move, mismatch-rematch */
 /*eslint no-constant-condition: ["error", { "checkLoops": false }]*/
 import { getString } from "../utils/locale";
 import { config } from "../../package.json";
@@ -11,7 +11,13 @@ import {
   getShortcutText,
 } from "../utils/shortcut";
 import { compileUserRegex, safeRegexTest } from "../utils/safeRegex";
-import { downloadPdfForSelectedItems, attachPdfFromUrl } from "./pdfDownload";
+import {
+  attachPdfFromUrl,
+  downloadPdfForSelectedItems,
+  itemHasPdfMismatchTag,
+} from "./pdfDownload";
+import { getWatchRoots } from "./folderIndex";
+import { resolveOaDownloadsDir } from "./oaDownloadPath";
 import {
   embedMetadataForSelectedItems,
   embedMetadataForFailedOrMissingSelectedItems,
@@ -40,6 +46,7 @@ import {
   attachmentFileAccessible,
   clearSuccessfulMatchTags,
   purgeMissingSiblingPdfAttachments,
+  registerMatchedAttachmentRelocate,
 } from "./pdfSources";
 import { openOaSearchWindow } from "./oaSearchWindow";
 import {
@@ -88,6 +95,8 @@ export default class Menu {
   constructor() {
     addon.data.menu?.dispose();
     addon.data.menu = this;
+    // LocalFolderSource finalize → rename+move on content match (yerinde link).
+    registerMatchedAttachmentRelocate(maybeRenameAndMoveMatchedAttachment);
     this.notifierID = registerNotify(
       ["item"],
       async (
@@ -118,6 +127,7 @@ export default class Menu {
   public dispose() {
     if (this.disposed) return;
     this.disposed = true;
+    registerMatchedAttachmentRelocate(null);
     if (this.autoProcessTimer !== undefined) {
       window.clearTimeout(this.autoProcessTimer);
       this.autoProcessTimer = undefined;
@@ -1206,9 +1216,31 @@ async function matchAttachment() {
     "item titles: ",
     items.map((i) => i.getDisplayTitle()),
   );
-  const sourceDir = await checkDir("sourceDir", "source path");
-  if (!sourceDir) return;
-  let files = await collectMatchAttachmentFiles(sourceDir);
+  const sourceDir = await checkDir("sourceDir", "source path", true);
+  const searchRoots = await resolveMatchAttachmentSearchRoots(
+    typeof sourceDir === "string" ? sourceDir : "",
+  );
+  if (!searchRoots.length) {
+    // Prompt once for sourceDir when nothing to scan (legacy Attanger UX).
+    const prompted = await checkDir("sourceDir", "source path");
+    if (!prompted) return;
+    searchRoots.push(prompted);
+  }
+  let files: OS.File.Entry[] = [];
+  for (const root of searchRoots) {
+    const found = await collectMatchAttachmentFiles(root);
+    files.push(...found);
+  }
+  // Deduplicate by normalized path (sourceDir may equal downloads/).
+  {
+    const seen = new Set<string>();
+    files = files.filter((f) => {
+      const key = PathUtils.normalize(f.path);
+      if (seen.has(key)) return false;
+      seen.add(key);
+      return true;
+    });
+  }
   ztoolkit.log(
     "found pdf files:",
     files.map((f) => f.path),
@@ -1216,17 +1248,26 @@ async function matchAttachment() {
   if (!files.length) {
     new ztoolkit.ProgressWindow(config.addonName, { closeTime: 4000 })
       .createLine({
-        text: `No PDF files found under ${sourceDir}`,
+        text: `No PDF files found under ${searchRoots.join("; ")}`,
         type: "default",
       })
       .show();
     return;
   }
+  const inboxRoot =
+    typeof sourceDir === "string" && sourceDir
+      ? PathUtils.normalize(sourceDir)
+      : "";
   const readPDFTitle = getPref("readPDFtitle") as string;
   ztoolkit.log("read PDF title: ", readPDFTitle);
   for (const item of items) {
     const itemtitle = getPlainTitle(item);
-    if (await hasAccessiblePDFAttachment(item)) {
+    // `#pdf-mismatch` = wrong PDF kept (v1.0.105). Still search sourceDir /
+    // attach the correct file alongside; clear tag on success (v1.0.107).
+    if (
+      (await hasAccessiblePDFAttachment(item)) &&
+      !itemHasPdfMismatchTag(item)
+    ) {
       ztoolkit.log(
         "Match Attachment skipped: accessible PDF already exists",
         item.id,
@@ -1359,9 +1400,13 @@ async function matchAttachment() {
           }
           await clearSuccessfulMatchTags(item);
           await purgeMissingSiblingPdfAttachments(item, existingAttachment.id);
-          await maybeEmbedMetadata(item, existingAttachment);
-          showAttachmentItem(existingAttachment);
-          await ZoteroPane.selectItem(existingAttachment.id);
+          const relocated = await maybeRenameAndMoveMatchedAttachment(
+            existingAttachment,
+          );
+          const shown = relocated || existingAttachment;
+          await maybeEmbedMetadata(item, shown);
+          showAttachmentItem(shown);
+          await ZoteroPane.selectItem(shown.id);
           files = files.filter((file) => file !== matchedFile);
           continue;
         }
@@ -1406,12 +1451,18 @@ async function matchAttachment() {
 
         await clearSuccessfulMatchTags(item);
         await purgeMissingSiblingPdfAttachments(item, attItem.id);
-        await maybeEmbedMetadata(item, attItem);
-        showAttachmentItem(attItem);
-        await ZoteroPane.selectItem(attItem.id);
-        // Only delete the inbox source after the imported copy is confirmed
-        // accessible — otherwise Match leaves a dimmed stub and no bytes.
-        removeFile(matchedFile.path);
+        // Import + autoMove notifier may also move; call explicitly so Match
+        // always renames to künye and lands under destDir when configured.
+        const relocated = await maybeRenameAndMoveMatchedAttachment(attItem);
+        const shown = relocated || attItem;
+        await maybeEmbedMetadata(item, shown);
+        showAttachmentItem(shown);
+        await ZoteroPane.selectItem(shown.id);
+        // Inbox drain only — never delete watch-root / downloads/ originals.
+        // If relocate already moved/copied from this path, remove is a no-op.
+        if (isPathUnderRoot(matchedFile.path, inboxRoot)) {
+          removeFile(matchedFile.path);
+        }
         files = files.filter((file) => file !== matchedFile);
       } catch (error) {
         ztoolkit.log(
@@ -1602,6 +1653,10 @@ async function reuseOrRepairMatchedAttachment(
     .map((attachmentID) => Zotero.Items.get(attachmentID))
     .filter((attachment): attachment is Zotero.Item => Boolean(attachment));
 
+  // Rematch: parent still has `#pdf-mismatch` → do not treat the wrong PDF as
+  // "already matched" via filename/text score; only reuse exact same path.
+  const rematchMismatch = itemHasPdfMismatchTag(parentItem);
+
   // Do not create a duplicate when the item already has an accessible PDF
   // whose filename/content passes the same conservative metadata checks used
   // for new candidates. This covers both stored and linked attachments.
@@ -1625,6 +1680,8 @@ async function reuseOrRepairMatchedAttachment(
       ztoolkit.log("Matched file is already attached", attachment.id);
       return attachment;
     }
+
+    if (rematchMismatch) continue;
 
     let evidence = String(attachmentName);
     try {
@@ -1707,6 +1764,52 @@ function normalizeAttachmentMatchName(name: string) {
     .replace(/[^\p{L}\p{N}]+/gu, " ")
     .trim()
     .replace(/\s+/g, " ");
+}
+
+async function resolveMatchAttachmentSearchRoots(
+  sourceDir: string,
+): Promise<string[]> {
+  const roots: string[] = [];
+  const seen = new Set<string>();
+  const add = async (dir: string | null | undefined) => {
+    if (!dir) return;
+    let normalized: string;
+    try {
+      normalized = PathUtils.normalize(dir);
+    } catch {
+      return;
+    }
+    if (seen.has(normalized)) return;
+    try {
+      if (!(await pathExists(normalized, "directory"))) return;
+    } catch {
+      return;
+    }
+    seen.add(normalized);
+    roots.push(normalized);
+  };
+  await add(sourceDir);
+  // OA / cascade PDFs land under `{watchRoot}/downloads/` — include so
+  // Match Attachment can rematch `#pdf-mismatch` items without relying on
+  // sourceDir pointing at that folder.
+  try {
+    const downloads = resolveOaDownloadsDir(getWatchRoots());
+    await add(downloads);
+  } catch (e) {
+    ztoolkit.log("Match Attachment: could not resolve downloads root", e);
+  }
+  return roots;
+}
+
+function isPathUnderRoot(filePath: string, rootDir: string): boolean {
+  if (!rootDir) return false;
+  try {
+    const file = PathUtils.normalize(filePath);
+    const root = PathUtils.normalize(rootDir);
+    return file === root || file.startsWith(`${root}\\`) || file.startsWith(`${root}/`);
+  } catch {
+    return false;
+  }
 }
 
 async function collectMatchAttachmentFiles(
@@ -2195,6 +2298,74 @@ export function getSubfolderPath(item: Zotero.Item) {
     .split(/[\\/]/)
     .map((segment) => getOneDriveSafeSegment(segment, 100))
     .join(addon.data.folderSep);
+}
+
+/**
+ * After a successful Match / local content match: move into destDir (when
+ * autoMove + linking + destDir set) then rename to the künye / Zotero file
+ * base name. Linked-in-place attaches skip the imported-only autoMove notifier
+ * path — this fills that gap. Mismatch keep-disk policy must not call this.
+ *
+ * Prefs: `autoMove` (default true), `destDir` (required for move),
+ * `attachType=linking`, `moveWithoutDeleting` (copy vs move),
+ * `filenameSkipRenameRules` / `filenameSkipAutoMoveRenameRules`.
+ */
+export async function maybeRenameAndMoveMatchedAttachment(
+  attItem: Zotero.Item,
+): Promise<Zotero.Item | undefined> {
+  if (!attItem || attItem.deleted) return attItem;
+  let current: Zotero.Item = attItem;
+  try {
+    const skipAuto = await getAttachmentFilenameNoExt(current);
+    if (isFilenameMatched("filenameSkipAutoMoveRenameRules", skipAuto)) {
+      ztoolkit.log(
+        "maybeRenameAndMoveMatchedAttachment skipped by filenameSkipAutoMoveRenameRules",
+        attItem.id,
+      );
+      return current;
+    }
+  } catch (e) {
+    ztoolkit.log(
+      "maybeRenameAndMoveMatchedAttachment skip-rules inspect failed",
+      e,
+    );
+  }
+
+  try {
+    if (getPref("autoMove") && getPref("attachType") == "linking") {
+      const destPref = getPref("destDir");
+      const destConfigured =
+        typeof destPref === "string" && destPref.trim().length > 0;
+      if (destConfigured) {
+        const moved = await moveFile(current, { silent: true });
+        if (moved) current = moved;
+      } else {
+        ztoolkit.log(
+          "maybeRenameAndMoveMatchedAttachment: skip move (destDir unset)",
+        );
+      }
+    }
+  } catch (e) {
+    ztoolkit.log("maybeRenameAndMoveMatchedAttachment move failed", e);
+  }
+
+  try {
+    const renamed = await renameFile(current);
+    if (renamed) current = renamed;
+  } catch (e) {
+    ztoolkit.log("maybeRenameAndMoveMatchedAttachment rename failed", e);
+  }
+
+  try {
+    const { invalidateIndex } = await import("./folderIndex");
+    invalidateIndex();
+  } catch (e) {
+    ztoolkit.log(
+      "maybeRenameAndMoveMatchedAttachment: index invalidate failed",
+      e,
+    );
+  }
+  return current;
 }
 
 /**
@@ -2838,12 +3009,9 @@ async function checkDir(prefName: string, prefDisplay: string, silent = false) {
   let dir = getPref(prefName);
   if (typeof dir !== "string" || !(await pathExists(dir, "directory"))) {
     if (silent) {
-      new ztoolkit.ProgressWindow(config.addonName, { closeTime: 4000 })
-        .createLine({
-          text: getString(`dir-not-set-${prefName}`),
-          type: "default",
-        })
-        .show();
+      // Auto-match / autoMove paths: skip quietly when dest/source unset —
+      // toast spam on every local link success is worse than a log line.
+      ztoolkit.log(`checkDir silent skip: ${prefName} not set or missing`);
       return false;
     }
     // @ts-ignore window

@@ -79,8 +79,8 @@ test("validation + cascade: mismatch keeps PDF; ContentMismatch soft-fail still 
   assert.match(download, /hasAcceptedPdfAttachment/);
   assert.match(download, /detachMismatchPdfAttachments/);
   assert.match(download, /itemHasPdfMismatchTag/);
-  // Any PDF counts as done (mismatch kept, not auto-detached).
-  assert.match(download, /return hasPDFAttachment\(item\)/);
+  // Mismatch-tagged parents are not "done" — rematch from downloads allowed.
+  assert.match(download, /if \(itemHasPdfMismatchTag\(item\)\) return false/);
   assert.match(
     download,
     /isContentMismatchError\(e\)[\s\S]*?outcome:\s*"rejected"/,
@@ -113,15 +113,20 @@ test("validation + cascade: mismatch keeps PDF; ContentMismatch soft-fail still 
   assert.deepEqual(sourcesTried, ["pmc"]);
 });
 
-test("hasAcceptedPdfAttachment: any PDF is done (mismatch kept)", () => {
+test("hasAcceptedPdfAttachment: mismatch tag allows rematch", () => {
   // Pure logic mirror of pdfDownload.hasAcceptedPdfAttachment
   function hasPDFAttachment(item) {
     return (item.attachments || []).some(
       (a) => a.contentType === "application/pdf",
     );
   }
+  function itemHasPdfMismatchTag(item) {
+    return (item.tags || []).includes("#pdf-mismatch");
+  }
   function hasAcceptedPdfAttachment(item) {
-    return hasPDFAttachment(item);
+    if (!hasPDFAttachment(item)) return false;
+    if (itemHasPdfMismatchTag(item)) return false;
+    return true;
   }
 
   assert.equal(
@@ -136,7 +141,7 @@ test("hasAcceptedPdfAttachment: any PDF is done (mismatch kept)", () => {
       attachments: [{ contentType: "application/pdf" }],
       tags: ["#pdf-mismatch"],
     }),
-    true,
+    false,
   );
   assert.equal(
     hasAcceptedPdfAttachment({

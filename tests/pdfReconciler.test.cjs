@@ -115,6 +115,12 @@ test("reconcile considers only regular items without a PDF", () => {
   assert.equal(canReconcileItem(item([])), true);
   assert.equal(canReconcileItem(item([2])), true);
   assert.equal(canReconcileItem(item([1])), false);
+  assert.equal(
+    canReconcileItem(
+      item([1], { hasTag: (tag) => tag === "#pdf-mismatch" }),
+    ),
+    true,
+  );
   assert.equal(canReconcileItem(item([], { deleted: true })), false);
   assert.equal(
     canReconcileItem(item([], { isRegularItem: () => false })),

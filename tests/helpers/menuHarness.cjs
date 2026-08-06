@@ -236,6 +236,19 @@ function createHarness(options = {}) {
       return files.has(path.posix.normalize(p));
     }
 
+    async renameAttachmentFile(newName) {
+      this.calls = this.calls || { rename: [] };
+      this.calls.rename.push(newName);
+      if (!this.currentPath) return false;
+      const next = path.posix.join(path.posix.dirname(this.currentPath), newName);
+      if (files.has(path.posix.normalize(this.currentPath))) {
+        files.delete(path.posix.normalize(this.currentPath));
+        files.add(next);
+      }
+      this.currentPath = next;
+      return true;
+    }
+
     getField(name) {
       return this.fields[name] || "";
     }
@@ -545,6 +558,7 @@ function createRegularItem(harness, options = {}) {
     itemTypeID: options.itemTypeID || 2,
     attachmentIDs: options.attachmentIDs || [],
     collectionIDs: options.collectionIDs || [],
+    tags: [...(options.tags || [])],
     getAttachments() {
       return [...this.attachmentIDs];
     },
@@ -563,6 +577,19 @@ function createRegularItem(harness, options = {}) {
     getImageSrc() {
       return "item-icon";
     },
+    getTags() {
+      return this.tags.map((tag) => ({ tag }));
+    },
+    hasTag(tag) {
+      return this.tags.includes(tag);
+    },
+    addTag(tag) {
+      if (!this.tags.includes(tag)) this.tags.push(tag);
+    },
+    removeTag(tag) {
+      this.tags = this.tags.filter((t) => t !== tag);
+    },
+    async saveTx() {},
     isAttachment() {
       return false;
     },

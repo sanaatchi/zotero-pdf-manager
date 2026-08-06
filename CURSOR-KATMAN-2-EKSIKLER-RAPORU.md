@@ -1,8 +1,8 @@
-<!-- @ajan: cursor · @etiket: katman-2, eksik-raporu, ghost-attach-fix -->
+<!-- @ajan: cursor · @etiket: katman-2, eksik-raporu, match-rename-move -->
 
 # Cursor — Katman 2 Eksikler Raporu
 
-**Tarih:** 2026-08-06 · **Sürüm:** PDF Manager **v1.0.108**  
+**Tarih:** 2026-08-06 · **Sürüm:** PDF Manager **v1.0.109**  
 **Analiz:** ürün ↔ `referanslar/katman-2/` ↔ GitHub (Attanger, Zotadata, Zoplicate,
 ZotAssets, File Utility, Attachment Scanner, ozefe/yoktez).
 
@@ -14,10 +14,11 @@ ZotAssets, File Utility, Attachment Scanner, ozefe/yoktez).
 | Gerçek açık iş?           | Checklist Bölüm B (kullanıcı) + isteğe bağlı P3 |
 | Yeni zorunlu XPI portu?   | **Yok** — GitHub taraması yeni P1 üretmedi      |
 
-### Son eklenen (v1.0.108)
+### Son eklenen (v1.0.109)
 
 | Madde                                           | Not                                                                                                        |
 | ----------------------------------------------- | ---------------------------------------------------------------------------------------------------------- |
+| Match/local link → rename+move                  | Content match sonrası künye adı + destDir; mismatch keep; autoMove/destDir prefs (109)                     |
 | Ghost/dimmed Match attachment stub              | fileExists gate + purge siblings; relocate link-before-erase; no inaccessible stub after success (108)     |
 | Match attachment → `#pdf-mismatch` temizle      | Local finalize + menü Match Attachment; match veya skipped+DOI/ISBN; mismatch etiketi kalır (v1.0.107)     |
 | Alt başlık boşluğu → künye enrich + match       | Same-work core; PDF/hit subtitle → item title; `#pdf-mismatch` temizlenir; yanlış core hâlâ mismatch (106) |

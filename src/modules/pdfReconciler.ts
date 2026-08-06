@@ -1,4 +1,4 @@
-// @ajan: cursor · @etiket: katman-2, p2, reconciler, match-via, match-tag-clear
+// @ajan: cursor · @etiket: katman-2, p2, reconciler, mismatch-rematch
 import { getPref } from "../utils/prefs";
 import {
   buildIndex,
@@ -50,10 +50,17 @@ export function canReconcileItem(item: Zotero.Item): boolean {
     if (!item?.isRegularItem() || (item as any).isFeedItem || item.deleted) {
       return false;
     }
-    return !item.getAttachments().some((id: number) => {
+    const hasPdf = item.getAttachments().some((id: number) => {
       const attachment = Zotero.Items.get(id);
       return attachment?.attachmentContentType === "application/pdf";
     });
+    if (!hasPdf) return true;
+    // Wrong PDF kept + `#pdf-mismatch` (v1.0.105): still allow local rematch.
+    try {
+      return !!item.hasTag?.("#pdf-mismatch");
+    } catch {
+      return false;
+    }
   } catch {
     return false;
   }

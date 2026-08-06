@@ -823,10 +823,11 @@ test("Match Attachment repairs a broken linked attachment instead of duplicating
   assert.equal(harness.calls.importFromFile.length, 0);
   assert.equal(
     await broken.getFilePathAsync(),
-    "/source/topic/Expected Research Paper [journalArticle].pdf",
-    JSON.stringify(harness.logs),
+    "/source/topic/renamed.pdf",
+    "successful Match repairs path then renames to künye base name",
   );
-  assert.equal(broken.calls.save, 1);
+  assert.deepEqual(broken.calls.rename, ["renamed.pdf"]);
+  assert.equal(broken.calls.save, 2); // repair save + rename save
   assert.deepEqual(harness.calls.selectItem, [broken.id]);
   menu.dispose();
 });
@@ -868,6 +869,55 @@ test("Match Attachment is idempotent when an accessible PDF already exists", asy
   assert.equal(harness.calls.importFromFile.length, 0);
   assert.equal(existing.calls.save, 0);
   assert.deepEqual(harness.calls.selectItem, []);
+  menu.dispose();
+});
+
+test("Match Attachment rematches when parent has #pdf-mismatch", async () => {
+  harness = createHarness({
+    directories: ["/source", "/watch", "/watch/downloads"],
+    files: ["/watch/downloads/Expected Research Paper.pdf"],
+    prefs: {
+      moveWithoutDeleting: true,
+      readPDFtitle: "never",
+      sourceDir: "/source",
+      "pdf.watchRoots": "/watch",
+    },
+  });
+  const parent = createRegularItem(harness, {
+    id: 201,
+    title: "Expected Research Paper",
+    tags: ["#pdf-mismatch", "#pdf-review"],
+  });
+  createAttachment(harness, {
+    id: 202,
+    mode: "linked",
+    parent,
+    path: "/library/Wrong Paper.pdf",
+    exists: true,
+  });
+  harness.selectedItems = [parent];
+
+  const menu = new harness.module.default();
+  const rootMenu = harness.menuRegistrations.find(
+    ({ type, config }) => type === "item" && config.id === "zpdfmanager-menu",
+  ).config;
+  const match = rootMenu.children.find(
+    (child) => child.id === "zpdfmanager-match-attachment",
+  );
+
+  await match.commandListener();
+
+  assert.equal(harness.calls.importFromFile.length, 1);
+  assert.equal(
+    harness.calls.importFromFile[0].file,
+    "/watch/downloads/Expected Research Paper.pdf",
+  );
+  assert.equal(parent.hasTag("#pdf-mismatch"), false);
+  // downloads/ original must not be inbox-drained
+  assert.equal(
+    harness.files.has("/watch/downloads/Expected Research Paper.pdf"),
+    true,
+  );
   menu.dispose();
 });
 
@@ -985,8 +1035,10 @@ test("Match Attachment uses a selected broken attachment's parent metadata", asy
 
   assert.equal(
     await broken.getFilePathAsync(),
-    "/source/deep/topic/Expected Research Paper.pdf",
+    "/source/deep/topic/renamed.pdf",
+    "selected broken attachment repaired then renamed",
   );
+  assert.deepEqual(broken.calls.rename, ["renamed.pdf"]);
   assert.deepEqual(harness.calls.selectItem, [broken.id]);
   menu.dispose();
 });

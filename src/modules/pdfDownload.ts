@@ -1,4 +1,4 @@
-// @ajan: cursor · @etiket: katman-2, pdfDownload, keep-mismatch, no-auto-detach
+// @ajan: cursor · @etiket: katman-2, pdfDownload, mismatch-rematch, keep-mismatch
 import {
   ALL_SOURCES,
   downloadAndAttach,
@@ -177,11 +177,14 @@ export function itemHasPdfMismatchTag(item: Zotero.Item): boolean {
 }
 
 /**
- * Successful attach gate for skip/cascade: any PDF attachment counts as done.
- * Mismatch PDFs are kept + tagged (#pdf-mismatch); they are not auto-detached.
+ * Successful attach gate for skip/cascade: any PDF counts as done **unless**
+ * the parent still carries `#pdf-mismatch` (wrong PDF kept — allow rematch
+ * from downloads / OA / Match Attachment without deleting the old file).
  */
 export function hasAcceptedPdfAttachment(item: Zotero.Item): boolean {
-  return hasPDFAttachment(item);
+  if (!hasPDFAttachment(item)) return false;
+  if (itemHasPdfMismatchTag(item)) return false;
+  return true;
 }
 
 /**

@@ -1,4 +1,4 @@
-// @ajan: cursor · @etiket: katman-2, tests, match-tag-clear
+// @ajan: cursor · @etiket: katman-2, tests, match-tag-clear, match-rename-move
 const assert = require("node:assert/strict");
 const fs = require("node:fs");
 const path = require("node:path");
@@ -66,6 +66,7 @@ test("finalizeLocalAttachment wires shouldClearMatchTags + clearSuccessfulMatchT
     source,
     /if \(shouldClearMatchTags\(detailed\.verdict,\s*via\)\) \{[\s\S]*?await clearSuccessfulMatchTags\(item\)/,
   );
+  assert.match(source, /return relocateAfterSuccessfulMatch\(attachment\)/);
   // No early return that skips tag clear when validate pref is off.
   assert.doesNotMatch(
     source,
@@ -88,8 +89,9 @@ test("Match Attachment menu clears tags after successful attach", () => {
   );
   assert.match(
     menu,
-    /await clearSuccessfulMatchTags\(item\);[\s\S]*?await maybeEmbedMetadata\(item,\s*attItem\)/,
+    /await clearSuccessfulMatchTags\(item\);[\s\S]*?await maybeEmbedMetadata\(item,\s*shown\)/,
   );
+  assert.match(menu, /maybeRenameAndMoveMatchedAttachment/);
 });
 
 test("reconciler passes match.via into attachFile", () => {

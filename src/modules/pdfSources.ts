@@ -1,4 +1,4 @@
-// @ajan: cursor · @etiket: katman-2, pdf-sources, ghost-attach-fix, keep-mismatch
+// @ajan: cursor · @etiket: katman-2, pdf-sources, match-rename-move, keep-mismatch
 import { getString } from "../utils/locale";
 import { getPref } from "../utils/prefs";
 import {
@@ -736,6 +736,41 @@ export function shouldClearMatchTags(
   return false;
 }
 
+/**
+ * Menu registers rename+move (destDir / autoMove) so local path-link success
+ * relocates to the library destination without a menu↔pdfSources import cycle.
+ * Mismatch / unverifiable paths must not register a relocate.
+ */
+type MatchedAttachmentRelocateFn = (
+  attachment: Zotero.Item,
+) => Promise<Zotero.Item | undefined | void>;
+
+let matchedAttachmentRelocate: MatchedAttachmentRelocateFn | null = null;
+
+export function registerMatchedAttachmentRelocate(
+  fn: MatchedAttachmentRelocateFn | null,
+): void {
+  matchedAttachmentRelocate = fn;
+}
+
+/** @internal — tests */
+export function __getMatchedAttachmentRelocateForTests(): MatchedAttachmentRelocateFn | null {
+  return matchedAttachmentRelocate;
+}
+
+async function relocateAfterSuccessfulMatch(
+  attachment: Zotero.Item,
+): Promise<Zotero.Item> {
+  if (!matchedAttachmentRelocate) return attachment;
+  try {
+    const next = await matchedAttachmentRelocate(attachment);
+    return next || attachment;
+  } catch (e) {
+    ztoolkit.log("post-match rename/move failed", e);
+    return attachment;
+  }
+}
+
 /** Remove `#pdf-mismatch` / `#pdf-review` / `#pdf-quarantine` after a good attach. */
 export async function clearSuccessfulMatchTags(
   item: Zotero.Item,
@@ -1379,8 +1414,9 @@ export class LocalFolderSource implements PDFSource {
 
   /**
    * Filename match is not proof of content. Mismatch / unverifiable title:
-   * keep the link and tag for review — auto-detach cancelled.
-   * Match (or skipped + DOI/ISBN exact) clears `#pdf-mismatch` / `#pdf-review`.
+   * keep the link and tag for review — auto-detach cancelled (no rename/move).
+   * Match (or skipped + DOI/ISBN exact) clears `#pdf-mismatch` / `#pdf-review`
+   * then rename+move into destDir (autoMove) via registered handler.
    */
   private async finalizeLocalAttachment(
     item: Zotero.Item,
@@ -1396,7 +1432,9 @@ export class LocalFolderSource implements PDFSource {
     if (shouldClearMatchTags(detailed.verdict, via)) {
       await clearSuccessfulMatchTags(item);
       await purgeMissingSiblingPdfAttachments(item, attachment.id);
-      return attachment;
+      // Yerinde link alone left files under downloads/ or inbox names —
+      // relocate to künye filename + configured library dest when prefs allow.
+      return relocateAfterSuccessfulMatch(attachment);
     }
     if (detailed.verdict === "skipped") {
       // Title-only attach with validation disabled — leave existing tags.
