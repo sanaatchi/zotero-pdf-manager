@@ -193,3 +193,46 @@ test("article validation rejects Golub name-only PDF without mercenaries", () =>
     "mismatch",
   );
 });
+
+test("bridge guard: Frege-style titleHit 0.5 + author keeps match vs bridge mismatch", () => {
+  const { isStrongHeuristicContentMatch, shouldSkipBridgeContentValidation } =
+    loadModule();
+  const base = {
+    titleHit: 0.5,
+    score: 1.0,
+    authorFound: true,
+    hasIdMatch: false,
+  };
+  assert.equal(isStrongHeuristicContentMatch(base), true);
+  assert.equal(
+    shouldSkipBridgeContentValidation({ heuristic: "match", ...base }),
+    true,
+  );
+});
+
+test("bridge guard: Bourdieu-style high titleHit keeps match vs bridge mismatch", () => {
+  const { isStrongHeuristicContentMatch } = loadModule();
+  assert.equal(
+    isStrongHeuristicContentMatch({
+      titleHit: 1,
+      score: 1.5,
+      authorFound: true,
+      hasIdMatch: false,
+    }),
+    true,
+  );
+});
+
+test("OCR haystack: doubled dots still yield title token hit", () => {
+  const { normalizeOcrHaystack, titleTokenHit } = loadModule();
+  const hay = normalizeOcrHaystack(
+    "Gottlob Frege\nkavram..yaztst\nKavram Yazisi uzerine calisma " +
+      "x".repeat(80),
+  );
+  assert.ok(hay.includes("kavram yaztst"));
+  const item = {
+    getField: () => "Kavram Yazısı",
+  };
+  const hit = titleTokenHit(item, hay);
+  assert.ok(hit >= 0.5, `expected titleHit>=0.5 got ${hit}`);
+});

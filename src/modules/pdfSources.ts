@@ -1,4 +1,4 @@
-// @ajan: cursor · @etiket: katman-2, pdf-sources, match-rename-move, keep-mismatch, thesis-validate, removeAutomationTag, tag-hash-normalize, batched-tag-clear, mismatch-tag-guard
+// @ajan: cursor · @etiket: katman-2, pdf-sources, bridge-guard, ocr-haystack, content-validate
 import { getString } from "../utils/locale";
 import { getPref } from "../utils/prefs";
 import {
@@ -285,6 +285,14 @@ export function normalizeSearchText(s: string): string {
     .replace(/[^\p{L}\p{N}\s]/gu, " ");
 }
 
+/** OCR haystack: doubled dots / stray punctuation before title-token search. */
+export function normalizeOcrHaystack(s: string): string {
+  return normalizeSearchText(s)
+    .replace(/\.{2,}/g, " ")
+    .replace(/\s+/g, " ")
+    .trim();
+}
+
 function tokenize(s: string): string[] {
   return normalizeSearchText(s)
     .split(/\s+/)
@@ -384,7 +392,7 @@ function firstAuthorSurname(item: Zotero.Item): string {
 
 /** True when any listed creator surname appears in PDF text (not only first). */
 function anyAuthorSurnameFound(item: Zotero.Item, rawText: string): boolean {
-  const text = normalizeSearchText(rawText);
+  const text = normalizeOcrHaystack(rawText);
   if (!text) return false;
   try {
     const creators = (item.getCreators() as any[]) || [];
@@ -422,7 +430,7 @@ function scoreText(item: Zotero.Item, rawText: string): number {
   // Normalize the haystack the SAME way as the tokens (NFKD + strip marks),
   // otherwise accented/Turkish titles (çalışma vs calisma) never match and a
   // correct PDF gets rejected by content validation.
-  const text = normalizeSearchText(rawText);
+  const text = normalizeOcrHaystack(rawText);
   if (!text) return 0;
   let score = 0;
 
@@ -509,8 +517,35 @@ export function decideContentValidation(input: {
   return "mismatch";
 }
 
+/** Bridge/LLM must not downgrade a strong local book match (OCR-noisy PDFs). */
+export function isStrongHeuristicContentMatch(input: {
+  titleHit: number;
+  score: number;
+  authorFound: boolean;
+  hasIdMatch: boolean;
+}): boolean {
+  if (input.hasIdMatch) return true;
+  if (input.titleHit >= 0.5 && input.authorFound && input.score >= 0.45) {
+    return true;
+  }
+  if (input.titleHit >= 0.65 && input.score >= 0.55) return true;
+  return false;
+}
+
+/** Skip bridge when local heuristic already proves title+author in PDF. */
+export function shouldSkipBridgeContentValidation(input: {
+  heuristic: ContentValidation;
+  titleHit: number;
+  authorFound: boolean;
+  hasIdMatch: boolean;
+}): boolean {
+  if (input.heuristic !== "match") return false;
+  if (input.hasIdMatch) return true;
+  return input.titleHit >= 0.5 && input.authorFound;
+}
+
 export function titleTokenHit(item: Zotero.Item, rawText: string): number {
-  const text = normalizeSearchText(rawText);
+  const text = normalizeOcrHaystack(rawText);
   const tokens = tokenize((item.getField("title") as string) || "");
   if (!tokens.length || !text) return 0;
   return tokens.filter((t) => text.includes(t)).length / tokens.length;
@@ -705,6 +740,7 @@ export async function validateAttachmentContentDetailed(
     const authorFound = anyAuthorSurnameFound(item, text);
     const titleHit = titleTokenHit(item, text);
     const score = scoreText(item, text);
+    const hasIdMatch = hasIdentifierMatch(structured);
 
     let heuristic = decideContentValidation({
       kind: book ? "book" : "other",
@@ -712,7 +748,7 @@ export async function validateAttachmentContentDetailed(
       titleHit,
       score,
       hasIdConflict: hasIdentifierConflict(structured),
-      hasIdMatch: hasIdentifierMatch(structured),
+      hasIdMatch,
       authorExpected: surname.length > 2 || authorFound,
       authorFound,
       distinctiveCoverage: distinctiveTitleCoverage(
@@ -721,11 +757,24 @@ export async function validateAttachmentContentDetailed(
       ),
     });
 
+    const strongHeuristicMatch = isStrongHeuristicContentMatch({
+      titleHit,
+      score,
+      authorFound,
+      hasIdMatch,
+    });
+
     // Local LLM (Ollama via 8756 bridge) when enabled and text is usable.
     if (
       getPref("pdf.validateContentLlm") !== false &&
       textChars >= 50 &&
-      heuristic !== "skipped"
+      heuristic !== "skipped" &&
+      !shouldSkipBridgeContentValidation({
+        heuristic,
+        titleHit,
+        authorFound,
+        hasIdMatch,
+      })
     ) {
       try {
         const { validateContentViaBridge } = await import("./oaPdfBridge");
@@ -742,7 +791,7 @@ export async function validateAttachmentContentDetailed(
           doi: getDOI(item),
           isbn: String(item.getField("ISBN") || "").replace(/[^0-9Xx]/g, ""),
           itemType: itemType(item),
-          pdfText: text.slice(0, 8000),
+          pdfText: normalizeOcrHaystack(text).slice(0, 8000),
         });
         // Bridge may also propose subtitle enrichment (Python parity).
         const bridgeEnriched = String(
@@ -762,34 +811,56 @@ export async function validateAttachmentContentDetailed(
             enrichedTitle: bridgeEnriched,
           };
         }
-        // Fail-closed for upgrading mismatch→match. Do NOT let LLM erase a
-        // strong heuristic match (false "mismatch" → delete → re-download loop).
-        const strongHeuristicMatch =
-          heuristic === "match" && titleHit >= 0.65 && score >= 0.55;
+        // Fail-closed for upgrading mismatch→match. Do NOT let bridge/LLM erase a
+        // strong heuristic match (false "mismatch" → #pdf-mismatch loop).
+        const via = String(llm?.via || "");
         if (llm?.verdict === "mismatch" && !strongHeuristicMatch) {
           heuristic = "mismatch";
-          ztoolkit.log(`LLM content validation → mismatch`, llm.reason || "");
+          ztoolkit.log(
+            `Bridge content validation → mismatch (${via || "bridge"})`,
+            llm.reason || "",
+          );
         } else if (llm?.verdict === "mismatch" && strongHeuristicMatch) {
           ztoolkit.log(
-            "LLM said mismatch but strong heuristic match — keeping PDF",
+            "Bridge said mismatch but strong heuristic match — keeping PDF",
+            via ? `${via}: ` : "",
             llm.reason || "",
           );
         } else if (llm?.verdict === "match" && heuristic !== "mismatch") {
           heuristic = "match";
-          ztoolkit.log(`LLM content validation → match`, llm.reason || "");
+          ztoolkit.log(
+            `Bridge content validation → match (${via || "bridge"})`,
+            llm.reason || "",
+          );
         } else if (llm?.verdict === "unverifiable" && heuristic === "match") {
           // Soft: don't erase a heuristic match solely from LLM doubt
         } else if (llm?.verdict === "unverifiable") {
           heuristic = "unverifiable";
         } else if (llm?.verdict === "match" && heuristic === "mismatch") {
           ztoolkit.log(
-            "LLM said match but heuristic mismatch — keeping mismatch",
+            "Bridge said match but heuristic mismatch — keeping mismatch",
             llm.reason || "",
           );
         }
       } catch (e) {
-        ztoolkit.log("LLM content validation unavailable; heuristic only", e);
+        ztoolkit.log(
+          "Bridge content validation unavailable; heuristic only",
+          e,
+        );
       }
+    } else if (
+      getPref("pdf.validateContentLlm") !== false &&
+      heuristic === "match" &&
+      shouldSkipBridgeContentValidation({
+        heuristic,
+        titleHit,
+        authorFound,
+        hasIdMatch,
+      })
+    ) {
+      ztoolkit.log(
+        "Skipping bridge content validation — strong local title+author match",
+      );
     }
 
     if (heuristic === "match") {
