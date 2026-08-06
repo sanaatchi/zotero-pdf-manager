@@ -257,7 +257,10 @@ test("content audit module + menu + locales: tag-only, no detach", () => {
   assert.doesNotMatch(audit, /pdf-content-audit-detach/);
   assert.match(menu, /pdf-content-audit-menu/);
   assert.match(menu, /auditSelectedPdfContent/);
-  assert.match(sources, /opts\.force/);
+  assert.match(menu, /pdf-clear-automation-tags-menu/);
+  assert.match(menu, /clearPdfAutomationTagsOnSelected/);
+  assert.match(sources, /PDF_AUTOMATION_CLEAR_ON_MATCH/);
+  assert.match(sources, /loadAllData/);
   assert.match(sources, /export async function clearSuccessfulMatchTags/);
   assert.match(tags, /"#pdf-mismatch"/);
 
@@ -268,6 +271,7 @@ test("content audit module + menu + locales: tag-only, no detach", () => {
     );
     assert.match(ftl, /^pdf-content-audit-menu\s*=/m);
     assert.match(ftl, /^pdf-content-audit-done\s*=/m);
+    assert.match(ftl, /^pdf-clear-automation-tags-menu\s*=/m);
     assert.match(ftl, /#pdf-mismatch/);
     assert.doesNotMatch(ftl, /pdf-content-audit-detach-confirm/);
     assert.doesNotMatch(ftl, /pdf-content-audit-detached/);

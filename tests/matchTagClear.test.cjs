@@ -38,6 +38,41 @@ test("shouldClearMatchTags: match always; skipped only DOI/ISBN", () => {
   assert.equal(shouldClearMatchTags("unverifiable", "isbn"), false);
 });
 
+test("clearSuccessfulMatchTags: single saveTx removes all automation tags", async () => {
+  const { clearSuccessfulMatchTags } = loadPdfSources();
+  const tags = new Set(["pdf-mismatch", "pdf-review", "pdf-quarantine", "#keep-me"]);
+  let saveCount = 0;
+  const item = {
+    loadAllData: async () => {},
+    getTags: () => [...tags].map((tag) => ({ tag })),
+    hasTag: (t) => tags.has(String(t).replace(/^#/, "")),
+    removeTag: (tag) => {
+      tags.delete(String(tag).replace(/^#/, ""));
+    },
+    saveTx: async () => {
+      saveCount++;
+    },
+  };
+
+  await clearSuccessfulMatchTags(item);
+
+  assert.equal(saveCount, 1);
+  assert.equal(tags.has("pdf-mismatch"), false);
+  assert.equal(tags.has("pdf-review"), false);
+  assert.equal(tags.has("pdf-quarantine"), false);
+  assert.equal(tags.has("#keep-me"), true);
+});
+
+test("resolveAutomationTagOnItem: hash and no-hash storage", () => {
+  const { resolveAutomationTagOnItem } = loadPdfSources();
+  const item = {
+    hasTag: (t) => t === "pdf-mismatch" || t === "#pdf-review",
+    getTags: () => [{ tag: "pdf-mismatch" }, { tag: "pdf-review" }],
+  };
+  assert.equal(resolveAutomationTagOnItem(item, "#pdf-mismatch"), "pdf-mismatch");
+  assert.equal(resolveAutomationTagOnItem(item, "#pdf-quarantine"), null);
+});
+
 test("clearSuccessfulMatchTags removes mismatch + review on parent", async () => {
   const { clearSuccessfulMatchTags } = loadPdfSources();
   const tags = new Set(["#pdf-mismatch", "#pdf-review", "#keep-me"]);

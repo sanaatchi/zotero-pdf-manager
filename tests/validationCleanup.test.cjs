@@ -12,8 +12,9 @@ test("validation verdicts: match clears tags; mismatch+unverifiable keep", () =>
   assert.match(source, /cleanupRejectedAttachment/);
   assert.match(source, /clearSuccessfulMatchTags/);
   assert.match(source, /shouldClearMatchTags/);
-  assert.match(source, /removeAutomationTag\(item,\s*"#pdf-review"\)/);
-  assert.match(source, /removeAutomationTag\(item,\s*"#pdf-mismatch"\)/);
+  assert.match(source, /PDF_AUTOMATION_CLEAR_ON_MATCH/);
+  assert.match(source, /async function removeAutomationTag/);
+  assert.match(source, /await clearSuccessfulMatchTags\(item\)/);
   assert.match(source, /ContentMismatchError/);
   assert.match(source, /decideContentValidation/);
   // OA + local mismatch: keep attachment + tag (auto-detach cancelled).

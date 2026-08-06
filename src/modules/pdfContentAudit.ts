@@ -1,4 +1,4 @@
-// @ajan: cursor · @etiket: katman-2, content-audit, pdf-mismatch, match-tag-clear, multi-pdf-aggregate, tag-clear-log
+// @ajan: cursor · @etiket: katman-2, content-audit, pdf-mismatch, match-tag-clear, multi-pdf-aggregate, tag-clear-log, clear-automation-tags-menu
 /**
  * Scan already-attached PDFs against parent metadata (PDF text heuristics +
  * optional LLM). Detects wrong binds that slipped past download gates.
@@ -407,4 +407,70 @@ export async function auditSelectedPdfContent(): Promise<ContentAuditSummary> {
   await openContentAuditReport(allRows);
 
   return sum;
+}
+
+/** True when parent carries any PDF automation tag cleared on successful match. */
+export function itemHasClearablePdfAutomationTag(item: Zotero.Item): boolean {
+  return (
+    itemHasAutomationTag(item, PDF_MISMATCH_TAG) ||
+    itemHasAutomationTag(item, PDF_REVIEW_TAG) ||
+    itemHasAutomationTag(item, "#pdf-quarantine")
+  );
+}
+
+/**
+ * Manual recovery: remove #pdf-mismatch / #pdf-review / #pdf-quarantine only.
+ * Confirm dialog; does not run content validation or change attachments.
+ */
+export async function clearPdfAutomationTagsOnSelected(): Promise<{
+  cleared: number;
+  skipped: number;
+}> {
+  const pane = Zotero.getActiveZoteroPane?.() ?? null;
+  const selected = pane?.getSelectedItems?.() ?? [];
+  const items = await regularParentsFromSelection(selected);
+  if (!items.length) {
+    new ztoolkit.ProgressWindow(config.addonName, { closeTime: 4000 })
+      .createLine({
+        text: getString("pdf-clear-automation-tags-empty"),
+        type: "default",
+      })
+      .show();
+    return { cleared: 0, skipped: 0 };
+  }
+
+  const targets = items.filter((item) => itemHasClearablePdfAutomationTag(item));
+  if (!targets.length) {
+    new ztoolkit.ProgressWindow(config.addonName, { closeTime: 4000 })
+      .createLine({
+        text: getString("pdf-clear-automation-tags-none"),
+        type: "default",
+      })
+      .show();
+    return { cleared: 0, skipped: items.length };
+  }
+
+  const confirmed = window.confirm(
+    getString("pdf-clear-automation-tags-confirm", {
+      args: { count: targets.length },
+    }),
+  );
+  if (!confirmed) return { cleared: 0, skipped: items.length };
+
+  let cleared = 0;
+  for (const item of targets) {
+    await clearSuccessfulMatchTags(item);
+    if (!itemHasClearablePdfAutomationTag(item)) cleared++;
+  }
+
+  new ztoolkit.ProgressWindow(config.addonName, { closeTime: 5000 })
+    .createLine({
+      text: getString("pdf-clear-automation-tags-done", {
+        args: { cleared, total: targets.length },
+      }),
+      type: cleared === targets.length ? "success" : "default",
+    })
+    .show();
+
+  return { cleared, skipped: items.length - cleared };
 }

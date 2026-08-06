@@ -1,4 +1,4 @@
-/* @ajan: cursor · @etiket: katman-2, menu, match-rename-move, mismatch-rematch */
+/* @ajan: cursor · @etiket: katman-2, menu, match-rename-move, mismatch-rematch, clear-automation-tags-menu */
 /*eslint no-constant-condition: ["error", { "checkLoops": false }]*/
 import { getString } from "../utils/locale";
 import { config } from "../../package.json";
@@ -41,7 +41,7 @@ import {
   scanOrphanFiles,
   scanSelectedAttachments,
 } from "./attachmentScanner";
-import { auditSelectedPdfContent } from "./pdfContentAudit";
+import { auditSelectedPdfContent, clearPdfAutomationTagsOnSelected } from "./pdfContentAudit";
 import {
   attachmentFileAccessible,
   clearSuccessfulMatchTags,
@@ -881,6 +881,20 @@ export default class Menu {
             ),
           commandListener: async () => {
             await auditSelectedPdfContent();
+          },
+        },
+        {
+          tag: "menuitem",
+          label: getString("pdf-clear-automation-tags-menu"),
+          icon: addon.data.icons.downloadPdf,
+          getVisibility: () =>
+            ZoteroPane.getSelectedItems().some(
+              (item) =>
+                item.isRegularItem() ||
+                (item.isAttachment() && Boolean(item.parentItemID)),
+            ),
+          commandListener: async () => {
+            await clearPdfAutomationTagsOnSelected();
           },
         },
         {

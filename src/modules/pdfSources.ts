@@ -1,4 +1,4 @@
-// @ajan: cursor · @etiket: katman-2, pdf-sources, match-rename-move, keep-mismatch, thesis-validate, removeAutomationTag, tag-hash-normalize
+// @ajan: cursor · @etiket: katman-2, pdf-sources, match-rename-move, keep-mismatch, thesis-validate, removeAutomationTag, tag-hash-normalize, batched-tag-clear
 import { getString } from "../utils/locale";
 import { getPref } from "../utils/prefs";
 import {
@@ -530,6 +530,96 @@ export function isContentMismatchError(e: unknown): e is ContentMismatchError {
   );
 }
 
+/** Zotero may store tags with or without leading `#` in getTags(). */
+function tagKey(tag: string): string {
+  return String(tag || "")
+    .replace(/^#/, "")
+    .toLowerCase();
+}
+
+function listTagNames(item: Zotero.Item): string[] {
+  const raw = (item.getTags?.() as unknown[]) || [];
+  return raw
+    .map((entry) =>
+      typeof entry === "string"
+        ? entry
+        : String((entry as { tag?: string })?.tag ?? ""),
+    )
+    .filter(Boolean);
+}
+
+/** Exact tag string as stored on the item (for removeTag), or null. */
+function resolveTagOnItem(item: Zotero.Item, tag: string): string | null {
+  const want = tagKey(tag);
+  if (typeof item.hasTag === "function") {
+    if (item.hasTag(tag)) return tag;
+    const alt = tag.startsWith("#") ? tag.slice(1) : `#${tag}`;
+    if (item.hasTag(alt)) return alt;
+  }
+  for (const name of listTagNames(item)) {
+    if (tagKey(name) === want) return name;
+  }
+  return null;
+}
+
+async function tagItem(item: Zotero.Item, tag: string): Promise<void> {
+  try {
+    if (resolveTagOnItem(item, tag)) return;
+    item.addTag(tag);
+    await item.saveTx();
+  } catch (e) {
+    ztoolkit.log("tagItem failed", tag, e);
+  }
+}
+
+async function removeAutomationTag(
+  item: Zotero.Item,
+  tag: string,
+): Promise<void> {
+  try {
+    const resolved = resolveTagOnItem(item, tag);
+    if (!resolved) return;
+    item.removeTag(resolved);
+    await item.saveTx();
+  } catch (e) {
+    ztoolkit.log("removeAutomationTag failed", tag, e);
+  }
+}
+
+/** Tags cleared after content match / manual recovery (automationAudit parity). */
+export const PDF_AUTOMATION_CLEAR_ON_MATCH = [
+  "#pdf-review",
+  "#pdf-quarantine",
+  "#pdf-mismatch",
+] as const;
+
+/** Remove `#pdf-mismatch` / `#pdf-review` / `#pdf-quarantine` after a good attach. */
+export async function clearSuccessfulMatchTags(
+  item: Zotero.Item,
+): Promise<void> {
+  try {
+    await (item as any).loadAllData?.();
+    let changed = false;
+    for (const tag of PDF_AUTOMATION_CLEAR_ON_MATCH) {
+      const resolved = resolveTagOnItem(item, tag);
+      if (!resolved) continue;
+      item.removeTag(resolved);
+      changed = true;
+    }
+    if (changed) await item.saveTx();
+  } catch (e) {
+    ztoolkit.log("clearSuccessfulMatchTags failed", e);
+  }
+}
+
+/** @internal — unit tests (hash / getTags parity) */
+export function resolveAutomationTagOnItem(
+  item: Zotero.Item,
+  tag: string,
+): string | null {
+  return resolveTagOnItem(item, tag);
+}
+
 export async function validateAttachmentContent(
   item: Zotero.Item,
   attachmentID: number,
@@ -601,8 +691,7 @@ export async function validateAttachmentContentDetailed(
       } catch (e) {
         ztoolkit.log("subtitle enrichment save failed", e);
       }
-      await removeAutomationTag(item, "#pdf-mismatch");
-      await removeAutomationTag(item, "#pdf-review");
+      await clearSuccessfulMatchTags(item);
       ztoolkit.log(
         `Subtitle enrichment for ${item.id}: "${itemTitle}" → "${enriched}"`,
       );
@@ -664,8 +753,7 @@ export async function validateAttachmentContentDetailed(
           } catch (e) {
             ztoolkit.log("bridge subtitle enrichment save failed", e);
           }
-          await removeAutomationTag(item, "#pdf-mismatch");
-          await removeAutomationTag(item, "#pdf-review");
+          await clearSuccessfulMatchTags(item);
           return {
             verdict: "match",
             pdfText: text,
@@ -703,7 +791,7 @@ export async function validateAttachmentContentDetailed(
     }
 
     if (heuristic === "match") {
-      await removeAutomationTag(item, "#pdf-mismatch");
+      await clearSuccessfulMatchTags(item);
     }
     return { verdict: heuristic, pdfText: text };
   } catch (e) {
@@ -719,62 +807,6 @@ export async function contentMatches(
 ): Promise<boolean> {
   const verdict = await validateAttachmentContent(item, attachmentID);
   return verdict === "match" || verdict === "skipped";
-}
-
-/** Zotero may store tags with or without leading `#` in getTags(). */
-function tagKey(tag: string): string {
-  return String(tag || "")
-    .replace(/^#/, "")
-    .toLowerCase();
-}
-
-function listTagNames(item: Zotero.Item): string[] {
-  const raw = (item.getTags?.() as unknown[]) || [];
-  return raw
-    .map((entry) =>
-      typeof entry === "string"
-        ? entry
-        : String((entry as { tag?: string })?.tag ?? ""),
-    )
-    .filter(Boolean);
-}
-
-/** Exact tag string as stored on the item (for removeTag), or null. */
-function resolveTagOnItem(item: Zotero.Item, tag: string): string | null {
-  const want = tagKey(tag);
-  if (typeof item.hasTag === "function") {
-    if (item.hasTag(tag)) return tag;
-    const alt = tag.startsWith("#") ? tag.slice(1) : `#${tag}`;
-    if (item.hasTag(alt)) return alt;
-  }
-  for (const name of listTagNames(item)) {
-    if (tagKey(name) === want) return name;
-  }
-  return null;
-}
-
-async function tagItem(item: Zotero.Item, tag: string): Promise<void> {
-  try {
-    if (resolveTagOnItem(item, tag)) return;
-    item.addTag(tag);
-    await item.saveTx();
-  } catch (e) {
-    ztoolkit.log("tagItem failed", tag, e);
-  }
-}
-
-async function removeAutomationTag(
-  item: Zotero.Item,
-  tag: string,
-): Promise<void> {
-  try {
-    const resolved = resolveTagOnItem(item, tag);
-    if (!resolved) return;
-    item.removeTag(resolved);
-    await item.saveTx();
-  } catch (e) {
-    ztoolkit.log("removeAutomationTag failed", tag, e);
-  }
 }
 
 /**
@@ -824,15 +856,6 @@ async function relocateAfterSuccessfulMatch(
     ztoolkit.log("post-match rename/move failed", e);
     return attachment;
   }
-}
-
-/** Remove `#pdf-mismatch` / `#pdf-review` / `#pdf-quarantine` after a good attach. */
-export async function clearSuccessfulMatchTags(
-  item: Zotero.Item,
-): Promise<void> {
-  await removeAutomationTag(item, "#pdf-review");
-  await removeAutomationTag(item, "#pdf-quarantine");
-  await removeAutomationTag(item, "#pdf-mismatch");
 }
 
 /**
