@@ -18,7 +18,13 @@ function loadGuard() {
     external: ["../utils/prefs"],
   });
   const module = { exports: {} };
-  new Function("module", "exports", "require", "ztoolkit", result.outputFiles[0].text)(
+  new Function(
+    "module",
+    "exports",
+    "require",
+    "ztoolkit",
+    result.outputFiles[0].text,
+  )(
     module,
     module.exports,
     (id) => {
@@ -57,10 +63,7 @@ test("passive mismatch tag suppressed after user clear", () => {
     shouldSuppressPassiveMismatchTag(42, "local-finalize-passive"),
     true,
   );
-  assert.equal(
-    shouldSuppressPassiveMismatchTag(42, "content-audit"),
-    false,
-  );
+  assert.equal(shouldSuppressPassiveMismatchTag(42, "content-audit"), false);
   assert.equal(
     shouldSuppressPassiveMismatchTag(99, "reconcile-startup"),
     false,

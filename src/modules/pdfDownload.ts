@@ -423,104 +423,47 @@ export async function downloadPdfForSelectedItems() {
 
   const outcomes = await mapPool(items, CONCURRENCY, async (item) =>
     runInExplicitMismatchTagSessionAsync(async () => {
-    const title = item.getDisplayTitle();
-    if (skipExisting && hasAcceptedPdfAttachment(item)) {
-      return {
-        skipped: true,
-        report: {
-          itemID: item.id,
-          title,
-          result: "skipped" as const,
-          note: "Zaten PDF eki var",
-          attempts: [] as SourceAttempt[],
-        },
-      };
-    }
-
-    await ensureDOI(item);
-
-    const attempts: SourceAttempt[] = [];
-    let attached: unknown | null = null;
-    let attachedSource: string | undefined;
-
-    try {
-      const fromDownloads = await tryAttachFromDownloadsFolder(item, {
-        source: "downloads-probe",
-      });
-      if (fromDownloads) {
-        attempts.push({
-          source: DOWNLOADS_PROBE_SOURCE_ID,
-          outcome: "attached",
-        });
-        attached = fromDownloads;
-        attachedSource = DOWNLOADS_PROBE_SOURCE_ID;
-      } else {
-        attempts.push({
-          source: DOWNLOADS_PROBE_SOURCE_ID,
-          outcome: "no-match",
-        });
-      }
-    } catch (e) {
-      if (isAttachStoppedError(e)) {
-        attempts.push({
-          source: DOWNLOADS_PROBE_SOURCE_ID,
-          outcome: e.reason === "review" ? "rejected" : "error",
-          reason: e.reason,
-        });
-        const stopNote =
-          e.reason === "review"
-            ? isBook(item)
-              ? "PDF doğrulanamadı — eklenti durdu (#pdf-review). Elle kontrol edin."
-              : "PDF review quarantine — cascade stopped"
-            : "Erase failed — cascade stopped; file kept";
-        queueCascadeMissLog(item, attempts, "download-report", stopNote);
+      const title = item.getDisplayTitle();
+      if (skipExisting && hasAcceptedPdfAttachment(item)) {
         return {
-          failed: true,
+          skipped: true,
           report: {
             itemID: item.id,
             title,
-            result: "failed" as const,
-            note: stopNote,
-            attempts,
+            result: "skipped" as const,
+            note: "Zaten PDF eki var",
+            attempts: [] as SourceAttempt[],
           },
         };
       }
-      if (isContentMismatchError(e)) {
-        attempts.push({
-          source: DOWNLOADS_PROBE_SOURCE_ID,
-          outcome: "rejected",
-          reason: (e as Error).message,
-        });
-      } else {
-        attempts.push({
-          source: DOWNLOADS_PROBE_SOURCE_ID,
-          outcome: "error",
-          reason: (e as Error)?.message || String(e),
-        });
-        ztoolkit.log("Downloads folder probe failed", e);
-      }
-    }
 
-    const sources = orderedSourcesForItem(item);
-    for (const src of sources) {
-      if (attached) break;
-      if (!src.supportsItem(item)) {
-        attempts.push({ source: src.id, outcome: "unsupported" });
-        continue;
-      }
+      await ensureDOI(item);
+
+      const attempts: SourceAttempt[] = [];
+      let attached: unknown | null = null;
+      let attachedSource: string | undefined;
+
       try {
-        const result = await src.tryAttach(item);
-        if (result) {
-          attempts.push({ source: src.id, outcome: "attached" });
-          attached = result;
-          attachedSource = src.id;
-          break;
+        const fromDownloads = await tryAttachFromDownloadsFolder(item, {
+          source: "downloads-probe",
+        });
+        if (fromDownloads) {
+          attempts.push({
+            source: DOWNLOADS_PROBE_SOURCE_ID,
+            outcome: "attached",
+          });
+          attached = fromDownloads;
+          attachedSource = DOWNLOADS_PROBE_SOURCE_ID;
+        } else {
+          attempts.push({
+            source: DOWNLOADS_PROBE_SOURCE_ID,
+            outcome: "no-match",
+          });
         }
-        attempts.push({ source: src.id, outcome: "no-match" });
       } catch (e) {
         if (isAttachStoppedError(e)) {
           attempts.push({
-            source: src.id,
+            source: DOWNLOADS_PROBE_SOURCE_ID,
             outcome: e.reason === "review" ? "rejected" : "error",
             reason: e.reason,
           });
@@ -544,47 +487,104 @@ export async function downloadPdfForSelectedItems() {
         }
         if (isContentMismatchError(e)) {
           attempts.push({
-            source: src.id,
+            source: DOWNLOADS_PROBE_SOURCE_ID,
             outcome: "rejected",
             reason: (e as Error).message,
           });
+        } else {
+          attempts.push({
+            source: DOWNLOADS_PROBE_SOURCE_ID,
+            outcome: "error",
+            reason: (e as Error)?.message || String(e),
+          });
+          ztoolkit.log("Downloads folder probe failed", e);
+        }
+      }
+
+      const sources = orderedSourcesForItem(item);
+      for (const src of sources) {
+        if (attached) break;
+        if (!src.supportsItem(item)) {
+          attempts.push({ source: src.id, outcome: "unsupported" });
           continue;
         }
-        attempts.push({
-          source: src.id,
-          outcome: "error",
-          reason: (e as Error)?.message || String(e),
-        });
-        ztoolkit.log(`Source ${src.id} failed`, e);
+        try {
+          const result = await src.tryAttach(item);
+          if (result) {
+            attempts.push({ source: src.id, outcome: "attached" });
+            attached = result;
+            attachedSource = src.id;
+            break;
+          }
+          attempts.push({ source: src.id, outcome: "no-match" });
+        } catch (e) {
+          if (isAttachStoppedError(e)) {
+            attempts.push({
+              source: src.id,
+              outcome: e.reason === "review" ? "rejected" : "error",
+              reason: e.reason,
+            });
+            const stopNote =
+              e.reason === "review"
+                ? isBook(item)
+                  ? "PDF doğrulanamadı — eklenti durdu (#pdf-review). Elle kontrol edin."
+                  : "PDF review quarantine — cascade stopped"
+                : "Erase failed — cascade stopped; file kept";
+            queueCascadeMissLog(item, attempts, "download-report", stopNote);
+            return {
+              failed: true,
+              report: {
+                itemID: item.id,
+                title,
+                result: "failed" as const,
+                note: stopNote,
+                attempts,
+              },
+            };
+          }
+          if (isContentMismatchError(e)) {
+            attempts.push({
+              source: src.id,
+              outcome: "rejected",
+              reason: (e as Error).message,
+            });
+            continue;
+          }
+          attempts.push({
+            source: src.id,
+            outcome: "error",
+            reason: (e as Error)?.message || String(e),
+          });
+          ztoolkit.log(`Source ${src.id} failed`, e);
+        }
       }
-    }
 
-    if (attached) {
-      await maybeEmbedMetadata(item, attached as Zotero.Item);
+      if (attached) {
+        await maybeEmbedMetadata(item, attached as Zotero.Item);
+        return {
+          success: true,
+          report: {
+            itemID: item.id,
+            title,
+            result: "added" as const,
+            attachedSource,
+            attempts,
+          },
+        };
+      }
+      const note = failureHint(item, attempts);
+      queueCascadeMissLog(item, attempts, "download-report", note);
       return {
-        success: true,
+        failed: true,
         report: {
           itemID: item.id,
           title,
-          result: "added" as const,
-          attachedSource,
+          result: "failed" as const,
           attempts,
+          note,
         },
       };
-    }
-    const note = failureHint(item, attempts);
-    queueCascadeMissLog(item, attempts, "download-report", note);
-    return {
-      failed: true,
-      report: {
-        itemID: item.id,
-        title,
-        result: "failed" as const,
-        attempts,
-        note,
-      },
-    };
-  }),
+    }),
   );
 
   for (const o of outcomes as ItemOutcome[]) {

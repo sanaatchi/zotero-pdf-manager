@@ -5,10 +5,7 @@ import {
   shouldSuppressPassiveMismatchTag,
 } from "./pdfAutomationTagGuard";
 
-export type TagItemFn = (
-  item: Zotero.Item,
-  tag: string,
-) => Promise<void>;
+export type TagItemFn = (item: Zotero.Item, tag: string) => Promise<void>;
 
 /**
  * Apply #pdf-mismatch + #pdf-review with automation audit trail.
@@ -31,11 +28,7 @@ export async function applyPdfMismatchTags(
       detail:
         "Skipped passive #pdf-mismatch re-tag after user cleared automation tags",
     });
-    ztoolkit.log(
-      "applyPdfMismatchTags suppressed",
-      item.id,
-      ctx.source,
-    );
+    ztoolkit.log("applyPdfMismatchTags suppressed", item.id, ctx.source);
     return false;
   }
 
