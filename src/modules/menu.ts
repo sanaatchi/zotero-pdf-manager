@@ -249,14 +249,25 @@ export default class Menu {
    * plugin can prove just disappeared — not a periodic pass, so it only
    * fires for whatever this single trash/delete event can actually resolve.
    *
-   * Deliberately narrow: `Zotero.Items.get(id)` (same sync lookup
-   * `cancelAutomaticProcessing` above already relies on for this event) only
-   * reliably resolves for "trash" (soft delete — the row and its
-   * parent link are still in Zotero's cache) or a "delete" that hasn't yet
-   * evicted the item. A permanent delete (e.g. emptying the trash) that has
-   * already evicted the item from cache is not chased through Zotero's
-   * `extraData` payload — that's an under-documented, version-sensitive
-   * corner of the notifier API not worth the risk here. Those cases still
+   * Deliberately narrow: for "trash" (soft delete via `Items.trashTx`),
+   * `Zotero.Items.get(id)` (same sync lookup `cancelAutomaticProcessing`
+   * above already relies on for this event) reliably resolves — the row and
+   * its parent link are still in Zotero's cache (verified against
+   * `items.js`'s `trash()`: the parent's childItems cache is force-reloaded
+   * *before* the trash notification is even queued).
+   *
+   * For "delete" (permanent erase via `eraseTx`), the attachment is
+   * essentially ALWAYS already gone from `Zotero.Items` by the time this
+   * runs — not a maybe. Traced through `dataObject.js`/`db.js`: the erased
+   * object's cache eviction (`ObjectsClass.unload`) is registered as a
+   * *temporary* per-transaction commit callback, while the notifier's
+   * dispatch to observers (`Zotero.Notifier.commit`) is a *permanent*
+   * commit callback — and `executeTransaction` runs every temporary commit
+   * callback before any permanent one. So this branch is effectively a
+   * no-op for genuine permanent deletes; it's only here because "trash"
+   * and "delete" share this code path and skipping unresolvable IDs is
+   * free. Not chased further through Zotero's `extraData` payload for the
+   * same reason — no realistic win there either. Those cases still
    * self-heal via the periodic reconciler pass or a manual "Scan library"
    * run, same as before this method existed.
    *
