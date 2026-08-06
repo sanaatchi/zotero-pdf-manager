@@ -1,4 +1,4 @@
-// @ajan: cursor · @etiket: katman-2, pdfDownload, mismatch-rematch, keep-mismatch, downloads-probe
+// @ajan: claude · @etiket: katman-2, pdfDownload, mismatch-rematch, keep-mismatch, downloads-probe, explicit-session-scope-fix
 import {
   ALL_SOURCES,
   downloadAndAttach,
@@ -422,7 +422,7 @@ export async function downloadPdfForSelectedItems() {
   };
 
   const outcomes = await mapPool(items, CONCURRENCY, async (item) =>
-    runInExplicitMismatchTagSessionAsync(async () => {
+    runInExplicitMismatchTagSessionAsync(item.id, async () => {
       const title = item.getDisplayTitle();
       if (skipExisting && hasAcceptedPdfAttachment(item)) {
         return {

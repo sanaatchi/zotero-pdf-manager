@@ -1,4 +1,4 @@
-// @ajan: cursor · @etiket: katman-2, tests, pdf-mismatch, tag-guard, user-clear
+// @ajan: claude · @etiket: katman-2, tests, pdf-mismatch, tag-guard, user-clear, explicit-session-scope-fix
 const assert = require("node:assert/strict");
 const fs = require("node:fs");
 const path = require("node:path");
@@ -73,6 +73,43 @@ test("passive mismatch tag suppressed after user clear", () => {
     shouldSuppressPassiveMismatchTag(50, "reconcile-periodic"),
     false,
   );
+});
+
+test("explicit session for one item does not leak into a concurrent item's passive suppression", async () => {
+  const {
+    _resetPdfAutomationTagGuardForTests,
+    recordPdfAutomationTagsUserClear,
+    shouldSuppressPassiveMismatchTag,
+    runInExplicitMismatchTagSessionAsync,
+  } = loadGuard();
+  _resetPdfAutomationTagGuardForTests();
+  // Both items were cleared by the user recently.
+  recordPdfAutomationTagsUserClear(1);
+  recordPdfAutomationTagsUserClear(2);
+
+  let sawBSuppressedWhileAExplicit = false;
+  await Promise.all([
+    // Item 1: explicit download session (e.g. user-triggered "Download & attach").
+    runInExplicitMismatchTagSessionAsync(1, async () => {
+      await new Promise((resolve) => setTimeout(resolve, 10));
+      // Explicit session covers only item 1 — it may re-tag.
+      assert.equal(
+        shouldSuppressPassiveMismatchTag(1, "download-doi"),
+        false,
+      );
+    }),
+    // Item 2: unrelated passive re-tag (e.g. reconciler add-flush) firing
+    // concurrently. It must stay suppressed — item 1's explicit session must
+    // not leak into item 2 via a shared global flag.
+    (async () => {
+      await new Promise((resolve) => setTimeout(resolve, 5));
+      sawBSuppressedWhileAExplicit = shouldSuppressPassiveMismatchTag(
+        2,
+        "reconcile-add",
+      );
+    })(),
+  ]);
+  assert.equal(sawBSuppressedWhileAExplicit, true);
 });
 
 test("applyPdfMismatchTags logs suppressed vs applied (source contract)", () => {

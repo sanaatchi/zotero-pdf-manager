@@ -1,4 +1,4 @@
-<!-- @ajan: cursor · @etiket: katman-2, eksik-raporu, periodical -->
+<!-- @ajan: claude · @etiket: katman-2, eksik-raporu, periodical, pdf-mismatch-concurrency-fix -->
 
 # Cursor — Katman 2 Eksikler Raporu
 
@@ -135,3 +135,39 @@ Yeni **zorunlu** mirror veya port önerilmez.
 3. İsteğe bağlı P3 — G6–G10
 
 _(G2 ajan tarafı: checklist v1.0.49 + otomatik Bölüm A imzalandı. G3–G5 doküman hijyeni uygulandı.)_
+
+---
+
+## Claude — `#pdf-mismatch` kalıcılık teşhisi (2026-08-06, v1.0.119)
+
+**Bağlam:** Kullanıcı 1.0.118'e rağmen ~21 kayıtta `#pdf-mismatch` etiketinin
+kalkmadığını / Clear sonrası geri geldiğini bildirdi.
+
+**Ekarte edilen hipotezler (kanıtlı):**
+- (a) XPI 1.0.118 değil → **hayır**, `gh release view` + `update.json` doğru
+  1.0.118'i işaret ediyor (K3'te bulunan `/releases/latest` sınıfı bug burada yok).
+- Guard/reconciler mantığı kendi içinde tutarlı ve test edilmiş
+  (`mismatchRetagGuard.test.cjs`) — `canReconcileItem` temizlenmiş item'ları
+  30 gün atlıyor, `clearSuccessfulMatchTags` `#` normalizasyonlu tek `saveTx`.
+
+**Bulunan gerçek kök neden (b/c karışımı):** `pdfAutomationTagGuard.ts`'teki
+`explicitTagSessionDepth` **global** sayaçtı. `downloadPdfForSelectedItems`
+eşzamanlı (mapPool, CONCURRENCY≤3) her item'ı bu sayaçla "explicit" işaretliyordu
+— parti sürerken aynı anda tetiklenen **başka bir item'ın** pasif reconcile
+add-flush'ı da yanlışlıkla "explicit" sayılıp o item'ın kullanıcı-temizleme
+guard'ını es geçiyordu. **Fix:** sayaç `Map<itemID, depth>`'e taşındı,
+`isExplicitMismatchTagSession(itemID)` yalnız o item'a bakıyor artık.
+
+**Kasıtlı olarak DEĞİŞTİRİLMEYEN:** `content-audit` (Validate) kaynağı hâlâ
+guard'ı her zaman bypass eder — kullanıcı elle Validate çalıştırıp heuristic
+gerçekten mismatch derse etiket tekrar yazılabilir (bilinçli tasarım, görev
+tanımında da onaylandı). Bu, OCR/heuristic doğruluk sorunu olup bu oturumun
+kapsamı dışında (eşik gevşetme yasak).
+
+**Doğrulama:** `npx tsc --noEmit` temiz · `npm test` 299/299 (yeni concurrency
+regresyon testi dahil, eski kodda fail ettiği teyit edildi).
+
+**Dosyalar:** `src/modules/pdfAutomationTagGuard.ts`, `src/modules/pdfDownload.ts`,
+`tests/mismatchRetagGuard.test.cjs`, `package.json` (→ **v1.0.119**)
+
+**Yayın:** Kullanıcı "yayınla" demeden commit/push/gh-release yok.

@@ -1,4 +1,4 @@
-// @ajan: cursor · @etiket: katman-2, pdf-mismatch, tag-guard, user-clear, automation-audit
+// @ajan: claude · @etiket: katman-2, pdf-mismatch, tag-guard, user-clear, automation-audit, explicit-session-scope-fix
 /**
  * After manual clear of automation tags, passive background paths (reconcile,
  * periodic local rematch) must not immediately re-apply #pdf-mismatch.
@@ -27,7 +27,15 @@ export type MismatchTagContext = {
 
 const clearedAtByItem = new Map<number, number>();
 let loadedFromPref = false;
-let explicitTagSessionDepth = 0;
+/**
+ * Per-item explicit-session depth. Must be keyed by itemID, not a single
+ * global counter: `downloadPdfForSelectedItems` runs items concurrently
+ * (mapPool) via async/await interleaving, so a global flag would mark an
+ * unrelated item's concurrent passive re-tag (e.g. reconciler add-flush
+ * firing mid-batch) as "explicit" too, bypassing the user-clear guard for
+ * that other item.
+ */
+const explicitSessionItemIds = new Map<number, number>();
 
 function loadClearedMapFromPref(): void {
   if (loadedFromPref) return;
@@ -97,41 +105,58 @@ export function shouldSuppressPassiveMismatchTag(
   source: string,
   maxAgeMs = DEFAULT_SUPPRESS_MS,
 ): boolean {
-  if (isExplicitMismatchTagSession()) return false;
+  if (isExplicitMismatchTagSession(itemID)) return false;
   if (isExplicitMismatchTagSource(source)) return false;
   return wasPdfAutomationTagsUserClearedRecently(itemID, maxAgeMs);
 }
 
-/** User-initiated download/attach batch (menu cascade). */
-export function runInExplicitMismatchTagSession<T>(fn: () => T): T {
-  explicitTagSessionDepth++;
+function enterExplicitSession(itemID: number): void {
+  explicitSessionItemIds.set(
+    itemID,
+    (explicitSessionItemIds.get(itemID) || 0) + 1,
+  );
+}
+
+function exitExplicitSession(itemID: number): void {
+  const depth = (explicitSessionItemIds.get(itemID) || 1) - 1;
+  if (depth <= 0) explicitSessionItemIds.delete(itemID);
+  else explicitSessionItemIds.set(itemID, depth);
+}
+
+/** User-initiated download/attach batch (menu cascade) — scoped to one item. */
+export function runInExplicitMismatchTagSession<T>(
+  itemID: number,
+  fn: () => T,
+): T {
+  enterExplicitSession(itemID);
   try {
     return fn();
   } finally {
-    explicitTagSessionDepth--;
+    exitExplicitSession(itemID);
   }
 }
 
 export async function runInExplicitMismatchTagSessionAsync<T>(
+  itemID: number,
   fn: () => Promise<T>,
 ): Promise<T> {
-  explicitTagSessionDepth++;
+  enterExplicitSession(itemID);
   try {
     return await fn();
   } finally {
-    explicitTagSessionDepth--;
+    exitExplicitSession(itemID);
   }
 }
 
-export function isExplicitMismatchTagSession(): boolean {
-  return explicitTagSessionDepth > 0;
+export function isExplicitMismatchTagSession(itemID: number): boolean {
+  return (explicitSessionItemIds.get(itemID) || 0) > 0;
 }
 
 /** @internal tests */
 export function _resetPdfAutomationTagGuardForTests(): void {
   clearedAtByItem.clear();
   loadedFromPref = false;
-  explicitTagSessionDepth = 0;
+  explicitSessionItemIds.clear();
 }
 
 export function _setUserClearTimestampForTests(
