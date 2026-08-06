@@ -1,4 +1,6 @@
+// @ajan: cursor · @etiket: katman-2, tests, content-validate, tr-i-fold, sentence-tr-override, no-validate-subtitle-enrich
 const assert = require("node:assert/strict");
+const fs = require("node:fs");
 const { test } = require("node:test");
 const path = require("node:path");
 const esbuild = require("esbuild");
@@ -278,4 +280,170 @@ test("shouldAllowValidateOcr: force/allowOcr only (passive false)", () => {
     shouldAllowValidateOcr({ force: false, allowOcr: false }),
     false,
   );
+});
+
+test("TR İ fold: İşlenen ≡ işlenen (item 726 false #pdf-mismatch)", () => {
+  const {
+    normalizeSearchText,
+    distinctiveTitleCoverage,
+    distinctiveTitleCoverageDetail,
+    titleSentenceSimilarity,
+    missingDistinctiveAreTurkishIVariants,
+    decideContentValidation,
+    formatContentValidationReason,
+  } = loadModule();
+  // PDF extract often has title-case İ; künye has lowercase i + ş.
+  assert.equal(normalizeSearchText("İşlenen"), normalizeSearchText("işlenen"));
+  assert.equal(normalizeSearchText("İşlenen").trim(), "islenen");
+  assert.equal(normalizeSearchText("ISLENEN").trim(), "islenen");
+
+  const itemTitle =
+    "Çok alanlı sanat eğitimi yönteminin öğrencilerin işlenen derslere " +
+    "yönelik bilgilerini uygulamaya geçirmelerine katkısı";
+  // Extract uses title-case «İşlenen» — previously folded to ıslenen and
+  // missed the künye token islenen → coverage 0.90 → false mismatch.
+  const pdfText =
+    "Çok alanlı sanat eğitimi yönteminin öğrencilerin İşlenen derslere " +
+    "yönelik bilgilerini uygulamaya geçirmelerine katkısı. " +
+    "Alakuş Şahin ".repeat(20);
+  const coverage = distinctiveTitleCoverage(itemTitle, pdfText);
+  assert.equal(
+    coverage,
+    1,
+    `expected full distinctive coverage, got ${coverage}`,
+  );
+  assert.ok(
+    titleSentenceSimilarity(itemTitle, pdfText) >= 0.9,
+    "sentence-level TR fold overlap should be high",
+  );
+  assert.equal(
+    missingDistinctiveAreTurkishIVariants(itemTitle, pdfText),
+    true,
+    "old locale fold must still expose the İ→ı vs i miss pattern",
+  );
+  const detail = distinctiveTitleCoverageDetail(itemTitle, pdfText);
+  assert.equal(detail.coverage, 1);
+  assert.equal(detail.turkishCharNormalization, true);
+  assert.equal(
+    decideContentValidation({
+      kind: "other",
+      textChars: 800,
+      titleHit: 0.92,
+      score: 1.4,
+      hasIdConflict: false,
+      hasIdMatch: false,
+      authorExpected: true,
+      authorFound: true,
+      distinctiveCoverage: coverage,
+    }),
+    "match",
+  );
+  const reason = formatContentValidationReason({
+    verdict: "match",
+    kind: "other",
+    textChars: 800,
+    titleHit: 0.92,
+    score: 1.4,
+    hasIdConflict: false,
+    hasIdMatch: false,
+    authorExpected: true,
+    authorFound: true,
+    distinctiveCoverage: 1,
+    turkishCharNormalization: true,
+  });
+  assert.match(reason, /Türkçe karakter \/ İ-ı normalizasyon farkı/);
+});
+
+test("sentence-level TR override: do not #pdf-mismatch on İ-ı-only miss", () => {
+  const {
+    titleSentenceSimilarity,
+    missingDistinctiveAreTurkishIVariants,
+    distinctiveTitleCoverageDetail,
+    decideContentValidation,
+  } = loadModule();
+  const itemTitle =
+    "Öğrencilerin işlenen derslere yönelik bilgilerini uygulamaya geçirmeleri";
+  // PDF title-cases İ; same sentence otherwise.
+  const pdfHaystack =
+    "Öğrencilerin İşlenen derslere yönelik bilgilerini uygulamaya geçirmeleri. " +
+    "Makale gövdesi ".repeat(30);
+  assert.ok(titleSentenceSimilarity(itemTitle, pdfHaystack) >= 0.9);
+  assert.equal(
+    missingDistinctiveAreTurkishIVariants(itemTitle, pdfHaystack),
+    true,
+  );
+  const detail = distinctiveTitleCoverageDetail(itemTitle, pdfHaystack);
+  assert.equal(detail.coverage, 1);
+  assert.equal(detail.turkishCharNormalization, true);
+  assert.equal(
+    decideContentValidation({
+      kind: "other",
+      textChars: 600,
+      titleHit: 0.91,
+      score: 1.3,
+      hasIdConflict: false,
+      hasIdMatch: false,
+      authorExpected: true,
+      authorFound: true,
+      distinctiveCoverage: detail.coverage,
+    }),
+    "match",
+  );
+});
+
+test("sentence-level TR override: real missing distinctive token still mismatches", () => {
+  const {
+    distinctiveTitleCoverageDetail,
+    missingDistinctiveAreTurkishIVariants,
+    decideContentValidation,
+  } = loadModule();
+  const itemTitle =
+    "Çok alanlı sanat eğitimi yönteminin öğrencilerin işlenen derslere " +
+    "yönelik bilgilerini uygulamaya geçirmelerine katkısı";
+  // Drop a real distinctive stem («yönteminin») — not an İ-ı-only issue.
+  const pdfText =
+    "Çok alanlı sanat eğitimi öğrencilerin İşlenen derslere " +
+    "yönelik bilgilerini uygulamaya geçirmelerine katkısı. WrongPaper ".repeat(
+      10,
+    );
+  assert.equal(
+    missingDistinctiveAreTurkishIVariants(itemTitle, pdfText),
+    false,
+  );
+  const detail = distinctiveTitleCoverageDetail(itemTitle, pdfText);
+  assert.ok(detail.coverage < 1);
+  assert.equal(detail.turkishCharNormalization, undefined);
+  assert.equal(
+    decideContentValidation({
+      kind: "other",
+      textChars: 800,
+      titleHit: 0.85,
+      score: 1.0,
+      hasIdConflict: false,
+      hasIdMatch: false,
+      authorExpected: true,
+      authorFound: true,
+      distinctiveCoverage: detail.coverage,
+    }),
+    "mismatch",
+  );
+});
+
+test("validateAttachmentContentDetailed: no subtitle enrich / title write", () => {
+  const source = fs.readFileSync(
+    path.join(process.cwd(), "src/modules/pdfSources.ts"),
+    "utf8",
+  );
+  const start = source.indexOf(
+    "export async function validateAttachmentContentDetailed(",
+  );
+  assert.ok(start >= 0, "validateAttachmentContentDetailed missing");
+  const nextExport = source.indexOf("\nexport ", start + 10);
+  const body = source.slice(start, nextExport > start ? nextExport : undefined);
+  assert.doesNotMatch(body, /resolveSubtitleEnrichment/);
+  assert.doesNotMatch(body, /proposeSubtitleEnrichment/);
+  assert.doesNotMatch(body, /setField\(\s*["']title["']/);
+  assert.doesNotMatch(body, /enrichedTitle\s*:/);
+  assert.match(body, /never mutate/);
+  assert.match(body, /Ignore enriched_title from bridge/);
 });

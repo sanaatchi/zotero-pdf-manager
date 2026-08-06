@@ -1,4 +1,4 @@
-// @ajan: cursor · @etiket: katman-2, pdf-sources, bridge-guard, ocr-haystack, content-validate, nosource-sync, pdf-candidate-split, mismatch-reason, encoding-gate, re-ocr-validate
+// @ajan: cursor · @etiket: katman-2, pdf-sources, bridge-guard, ocr-haystack, content-validate, nosource-sync, pdf-candidate-split, mismatch-reason, encoding-gate, re-ocr-validate, tr-i-fold, sentence-tr-override, author-line-gate, no-validate-subtitle-enrich
 import { getString } from "../utils/locale";
 import { getPref } from "../utils/prefs";
 import {
@@ -45,7 +45,6 @@ import {
   hasIdentifierMatch,
   normalizeItemIdentifiers,
 } from "./metadataCheck";
-import { resolveSubtitleEnrichment } from "./oaPdfBridge";
 import {
   applyPdfMismatchTags,
   clearMismatchReasonExtra,
@@ -279,12 +278,15 @@ export async function fetchPdfBytes(
 // --------------------------------------------------------------------------
 
 export function normalizeSearchText(s: string): string {
+  // NFKD+strip turns İ→I. Turkish locale then maps I→ı (dotless). Remap
+  // ı/İ→i *after* locale lower so «İşlenen» and «işlenen» fold identically
+  // (Python match_util._fold uses casefold I→i; same end state).
   return (s || "")
     .normalize("NFKD")
     .replace(/\p{Mark}/gu, "")
+    .toLocaleLowerCase("tr")
     .replace(/\u0131/g, "i")
     .replace(/\u0130/g, "i")
-    .toLocaleLowerCase("tr")
     .replace(/[^\p{L}\p{N}\s]/gu, " ");
 }
 
@@ -366,16 +368,79 @@ function titleCoreForDistinctive(title: string): string {
   return head || raw;
 }
 
-export function distinctiveTitleCoverage(
+/**
+ * Locale fold WITHOUT ı→i remap — reproduces the pre-fix TR I trap
+ * (İşlenen→ıslenen vs işlenen→islenen) so we can detect İ-ı-only misses.
+ */
+function normalizeSearchTextKeepDotlessI(s: string): string {
+  return (s || "")
+    .normalize("NFKD")
+    .replace(/\p{Mark}/gu, "")
+    .toLocaleLowerCase("tr")
+    .replace(/[^\p{L}\p{N}\s]/gu, " ");
+}
+
+function unifyTurkishI(s: string): string {
+  return String(s || "")
+    .replace(/\u0131/g, "i")
+    .replace(/\u0130/g, "i");
+}
+
+/**
+ * Diacritic/İ-ı-insensitive title↔haystack token overlap (sentence-level).
+ * ≥ ~0.9 with a near-full distinctive miss → Turkish-char false mismatch.
+ */
+export function titleSentenceSimilarity(
   title: string,
   rawText: string,
 ): number {
-  const needAll = distinctiveTitleTokens(title);
-  if (!needAll.length) return 1;
+  const tokens = tokenize(title);
+  if (!tokens.length) return 1;
   const text = normalizeSearchText(rawText);
   if (!text) return 0;
+  const phrase = tokens.join(" ");
+  if (text.includes(phrase)) return 1;
+  return tokens.filter((t) => text.includes(t)).length / tokens.length;
+}
+
+/**
+ * True when distinctive tokens missing under the old TR-I fold are found
+ * once ı/İ are unified with i — classic «İşlenen» vs «işlenen» pattern.
+ */
+export function missingDistinctiveAreTurkishIVariants(
+  title: string,
+  rawText: string,
+): boolean {
+  const titleFolded = normalizeSearchTextKeepDotlessI(title);
+  const need = titleFolded
+    .split(/\s+/)
+    .filter((t) => t.length >= 7 && !CONTENT_TITLE_STOP.has(unifyTurkishI(t)));
+  if (!need.length) return false;
+  const hay = normalizeSearchTextKeepDotlessI(rawText);
+  if (!hay) return false;
+  const missing = need.filter((t) => !hay.includes(t));
+  // One (or at most two) distinctive token(s) — not a wholly different title.
+  if (missing.length === 0 || missing.length > 2) return false;
+  const hayUni = unifyTurkishI(hay);
+  return missing.every((t) => hayUni.includes(unifyTurkishI(t)));
+}
+
+export type DistinctiveCoverageDetail = {
+  coverage: number;
+  /** Sentence-level override fired for TR İ-ı / diacritic false miss. */
+  turkishCharNormalization?: boolean;
+};
+
+export function distinctiveTitleCoverageDetail(
+  title: string,
+  rawText: string,
+): DistinctiveCoverageDetail {
+  const needAll = distinctiveTitleTokens(title);
+  if (!needAll.length) return { coverage: 1 };
+  const text = normalizeSearchText(rawText);
+  if (!text) return { coverage: 0 };
   const hitAll = needAll.filter((t) => text.includes(t)).length;
-  const coverageAll = hitAll / needAll.length;
+  let coverage = hitAll / needAll.length;
   // Colon subtitles (YÖK tez: «… Sanat: Dönüşümler») often appear only on the
   // cover line, not in body text — do not fail when the shared core matches.
   const core = titleCoreForDistinctive(title);
@@ -384,11 +449,36 @@ export function distinctiveTitleCoverage(
     if (needCore.length) {
       const hitCore = needCore.filter((t) => text.includes(t)).length;
       if (hitCore === needCore.length) {
-        return Math.max(coverageAll, 1);
+        coverage = Math.max(coverage, 1);
       }
     }
   }
-  return coverageAll;
+  const iVariantMiss = missingDistinctiveAreTurkishIVariants(title, rawText);
+  if (coverage >= 1) {
+    // Fold fix already matched; still flag when the old TR-I trap would have
+    // missed so Extra/reason can name «Türkçe karakter / İ-ı…».
+    return {
+      coverage: 1,
+      turkishCharNormalization: iVariantMiss || undefined,
+    };
+  }
+  // Sentence-level safety: high TR-folded title overlap + the only miss(es)
+  // under the pre-fix locale fold are İ-ı/I-i variants → not a wrong work.
+  if (
+    coverage >= 0.85 &&
+    titleSentenceSimilarity(title, rawText) >= 0.9 &&
+    iVariantMiss
+  ) {
+    return { coverage: 1, turkishCharNormalization: true };
+  }
+  return { coverage };
+}
+
+export function distinctiveTitleCoverage(
+  title: string,
+  rawText: string,
+): number {
+  return distinctiveTitleCoverageDetail(title, rawText).coverage;
 }
 
 function titleSimilar(a: string, b: string): boolean {
@@ -559,6 +649,8 @@ export function formatContentValidationReason(input: {
   bridgeReason?: string;
   bridgeForcedMismatch?: boolean;
   encodingUnreliable?: boolean;
+  /** Sentence/fold override: İ-ı-only title miss, not a wrong PDF. */
+  turkishCharNormalization?: boolean;
 }): string {
   const stats = `titleHit=${input.titleHit.toFixed(2)} score=${input.score.toFixed(2)} author=${
     input.authorFound ? "yes" : "no"
@@ -585,6 +677,9 @@ export function formatContentValidationReason(input: {
   }
   if (input.verdict === "skipped") return "validation skipped (pref off)";
   if (input.verdict === "match") {
+    if (input.turkishCharNormalization) {
+      return `match: Türkçe karakter / İ-ı normalizasyon farkı | ${stats}`;
+    }
     if (input.hasIdMatch) return `match: ISBN/DOI found in PDF | ${stats}`;
     return `match: ${stats}`;
   }
@@ -791,7 +886,6 @@ export async function validateAttachmentContentDetailed(
 ): Promise<{
   verdict: ContentValidation;
   pdfText: string;
-  enrichedTitle?: string;
   reason?: string;
 }> {
   // Manual content-audit menus pass force=true so prefs off still scan.
@@ -805,6 +899,8 @@ export async function validateAttachmentContentDetailed(
   // A validated attachmentID is by contract a real, existing attachment —
   // #nosource must be false here regardless of caller (download, local
   // finalize, or the manual "Validate attached PDF content" menu).
+  // Validate = content match/mismatch/unverifiable only — never mutate
+  // künye title (no subtitle enrichment on this path).
   await removeAutomationTag(item, "#nosource");
   try {
     // Theses are long-form like books — not article-style distinctive kill.
@@ -817,52 +913,6 @@ export async function validateAttachmentContentDetailed(
     const text: string = res?.text || "";
     const textChars = text.replace(/\s/g, "").length;
 
-    // Subtitle-only gap → enrich künye title, treat as match, clear mismatch tag.
-    const itemTitle = String(item.getField("title") || "");
-    let fallbackTitle = String(opts.hitTitle || "").trim();
-    if (!fallbackTitle) {
-      try {
-        const att = await Zotero.Items.getAsync(attachmentID);
-        const path = String(
-          (att as any)?.getFilePath?.() ||
-            (att as any)?.attachmentFilename ||
-            "",
-        );
-        const base = path.split(/[/\\]/).pop() || "";
-        fallbackTitle = base
-          .replace(/\.pdf$/i, "")
-          .replace(/[_]+/g, " ")
-          .replace(/\s+/g, " ")
-          .trim();
-      } catch {
-        /* ignore */
-      }
-    }
-    const authorOk = firstAuthorSurname(item).length > 2;
-    const enriched = resolveSubtitleEnrichment(itemTitle, {
-      pdfText: text,
-      fallbackTitle,
-      authorOk,
-    });
-    if (enriched) {
-      try {
-        item.setField("title", enriched);
-        await item.saveTx();
-      } catch (e) {
-        ztoolkit.log("subtitle enrichment save failed", e);
-      }
-      await clearSuccessfulMatchTags(item);
-      ztoolkit.log(
-        `Subtitle enrichment for ${item.id}: "${itemTitle}" → "${enriched}"`,
-      );
-      return {
-        verdict: "match",
-        pdfText: text,
-        enrichedTitle: enriched,
-        reason: `match: subtitle enrichment → "${enriched}"`,
-      };
-    }
-
     const structured = compareItemAgainstText(item, text);
     const surname = firstAuthorSurname(item);
     const authorFound = anyAuthorSurnameFound(item, text);
@@ -870,10 +920,13 @@ export async function validateAttachmentContentDetailed(
     const score = scoreText(item, text);
     const hasIdMatch = hasIdentifierMatch(structured);
     const hasIdConflict = hasIdentifierConflict(structured);
-    const distinctiveCoverage = distinctiveTitleCoverage(
+    const distinctiveDetail = distinctiveTitleCoverageDetail(
       String(item.getField("title") || ""),
       text,
     );
+    const distinctiveCoverage = distinctiveDetail.coverage;
+    const turkishCharNormalization =
+      !!distinctiveDetail.turkishCharNormalization;
     const kind = book ? "book" : "other";
     const authorExpected = surname.length > 2 || authorFound;
 
@@ -1082,25 +1135,7 @@ export async function validateAttachmentContentDetailed(
           pdfPath: attachmentPath,
           allowOcr: false,
         });
-        // Bridge may also propose subtitle enrichment (Python parity).
-        const bridgeEnriched = String(
-          (llm as any)?.enriched_title || (llm as any)?.enrichedTitle || "",
-        ).trim();
-        if (bridgeEnriched && llm?.verdict === "match") {
-          try {
-            item.setField("title", bridgeEnriched);
-            await item.saveTx();
-          } catch (e) {
-            ztoolkit.log("bridge subtitle enrichment save failed", e);
-          }
-          await clearSuccessfulMatchTags(item);
-          return {
-            verdict: "match",
-            pdfText: text,
-            enrichedTitle: bridgeEnriched,
-            reason: `match: bridge subtitle enrichment → "${bridgeEnriched}"`,
-          };
-        }
+        // Ignore enriched_title from bridge — validate must not mutate title.
         if (llm) applyBridgeVerdict(llm, false);
       } catch (e) {
         ztoolkit.log(
@@ -1144,6 +1179,7 @@ export async function validateAttachmentContentDetailed(
       bridgeForcedMismatch,
       encodingUnreliable:
         encodingUnreliable || String(bridgeVia).startsWith("encoding-gate"),
+      turkishCharNormalization,
     });
 
     if (heuristic === "match") {

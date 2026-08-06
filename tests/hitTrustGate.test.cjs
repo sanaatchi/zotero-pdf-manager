@@ -1,4 +1,4 @@
-// @ajan: cursor · @etiket: katman-2, tests, hit-trust, subtitle-enrich, address-gate
+// @ajan: cursor · @etiket: katman-2, tests, hit-trust, subtitle-enrich, address-gate, author-line-gate
 const assert = require("node:assert/strict");
 const { test } = require("node:test");
 const path = require("node:path");
@@ -724,5 +724,49 @@ test("subtitle enrichment: reject TÜBA publisher street/postal address", () => 
   assert.equal(
     proposeSubtitleEnrichment("The Art of Political Storytelling", seargeant),
     seargeant,
+  );
+});
+
+test("subtitle enrichment: reject Altınkurt author line (TR journal)", () => {
+  const {
+    proposeSubtitleEnrichment,
+    resolveSubtitleEnrichment,
+    looksLikeAuthorLine,
+  } = loadBridge();
+
+  const item = "Türkiye'de sanat eğitiminin gelişimi";
+  const author = "Lale ALTINKURT*";
+  assert.equal(looksLikeAuthorLine(author), true);
+  assert.equal(looksLikeAuthorLine("Lale ALTINKURT"), true);
+  assert.equal(looksLikeAuthorLine("ALTINKURT, Lale"), true);
+  assert.equal(looksLikeAuthorLine("John A. Smith"), true);
+  assert.equal(
+    looksLikeAuthorLine("why stories win votes in post-truth politics"),
+    false,
+  );
+  assert.equal(looksLikeAuthorLine("Toplumun evrimi"), false);
+
+  assert.equal(proposeSubtitleEnrichment(item, `${item}: ${author}`), null);
+  assert.equal(
+    proposeSubtitleEnrichment(item, `${item}: Lale ALTINKURT`, {
+      creators: "Lale Altınkurt",
+    }),
+    null,
+  );
+
+  const pdf = `${item}\nLale ALTINKURT*\n${"Sanat eğitimi tarihi üzerine bir inceleme. ".repeat(12)}`;
+  assert.equal(
+    resolveSubtitleEnrichment(item, {
+      pdfText: pdf,
+      authorOk: true,
+      creators: "Lale Altınkurt",
+    }),
+    null,
+  );
+
+  // Creator-overlap Title Case name (no ALLCAPS) still rejected.
+  assert.equal(
+    looksLikeAuthorLine("Philip Seargeant", "Philip Seargeant"),
+    true,
   );
 });

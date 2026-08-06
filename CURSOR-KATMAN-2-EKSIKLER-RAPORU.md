@@ -1,8 +1,8 @@
-<!-- @ajan: cursor · @etiket: katman-2, eksik-raporu, periodical, console-group-polyfill -->
+<!-- @ajan: cursor · @etiket: katman-2, eksik-raporu, periodical, console-group-polyfill, author-line-gate, no-validate-subtitle-enrich -->
 
 # Cursor — Katman 2 Eksikler Raporu
 
-**Tarih:** 2026-08-06 · **Sürüm:** PDF Manager **v1.0.112**  
+**Tarih:** 2026-08-06 · **Sürüm:** PDF Manager **v1.0.137**  
 **Analiz:** ürün ↔ `referanslar/katman-2/` ↔ GitHub (Attanger, Zotadata, Zoplicate,
 ZotAssets, File Utility, Attachment Scanner, ozefe/yoktez).
 
@@ -14,18 +14,20 @@ ZotAssets, File Utility, Attachment Scanner, ozefe/yoktez).
 | Gerçek açık iş?           | Checklist Bölüm B (kullanıcı) + isteğe bağlı P3 |
 | Yeni zorunlu XPI portu?   | **Yok** — GitHub taraması yeni P1 üretmedi      |
 
-### Son eklenen (v1.0.112)
+### Son eklenen (v1.0.137)
 
 | Madde                                           | Not                                                                                                                 |
 | ----------------------------------------------- | ------------------------------------------------------------------------------------------------------------------- |
-| OA Search «Dergi» (tam dergi)                   | kind=`periodical` → Zotero `book` + Extra `type: periodical`; ≠ journalArticle; LibGen/Archive, Sci-Hub yok (112)   |
+| Validate ≠ alt başlık enrich                    | `validateAttachmentContentDetailed` künye title yazmaz; bridge `enriched_title` yok sayılır; Python heuristic temiz |
+| Cümle-bazlı TR İ-ı güvenlik ağı                 | `titleSentenceSimilarity` + İ-ı-only missing → coverage 1; false #pdf-mismatch (136)                                |
+| Alt başlık ≠ yazar satırı (Altınkurt)           | `looksLikeAuthorLine` — ALLCAPS soyad / `*` / initial / creator örtüşmesi enrich yok; Python parity (135)           |
 | Alt başlık ≠ yayınevi adresi                    | Sokak/Cadde/No/posta kodu HQ satırı enrich yok; Seargeant topical OK; Python+K2 parity (111)                        |
 | Validate match → mismatch etiket temizle        | Content-audit `match` → `clearSuccessfulMatchTags` (#pdf-mismatch/#pdf-review/#pdf-quarantine); mismatch keep (110) |
 | `#pdf-mismatch` → Match/reconcile rematch       | Skip gates ignore tagged parents; Match also scans downloads/; old wrong PDF kept (109)                             |
 | Match/local link → rename+move                  | Content match sonrası künye adı + destDir; mismatch keep; autoMove/destDir prefs (109)                              |
 | Ghost/dimmed Match attachment stub              | fileExists gate + purge siblings; relocate link-before-erase; no inaccessible stub after success (108)              |
 | Match attachment → `#pdf-mismatch` temizle      | Local finalize + menü Match Attachment; match veya skipped+DOI/ISBN; mismatch etiketi kalır (v1.0.107)              |
-| Alt başlık boşluğu → künye enrich + match       | Same-work core; PDF/hit subtitle → item title; `#pdf-mismatch` temizlenir; yanlış core hâlâ mismatch (106)          |
+| Alt başlık boşluğu → künye enrich + match       | **Kaldırıldı validate yolundan (137)** — helper OA/attach için kalır; validate title mutate etmez                   |
 | Validate attached mismatch: ek kaldırma yok     | Content-audit yalnız `#pdf-mismatch`/`#pdf-review`; confirm-detach + eraseTx kaldırıldı (v1.0.105)                  |
 | Watch root = `1A_E_KAYNAKLARIM` (tüm altklasör) | Varsayılan + migrate parent; nested Dışı düşer; indeks recursive (`MAX_WALK_DEPTH` 8) (v1.0.104)                    |
 | Seargeant alt başlık çekirdek trust (v1.0.103)  | LibGen kısa core + boş yazar; `titleCorePhrase` colon-before-fold; Devlet thrash korunur; köprü + XPI               |

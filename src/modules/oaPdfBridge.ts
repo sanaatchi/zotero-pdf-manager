@@ -1,4 +1,4 @@
-// @ajan: cursor · @etiket: katman-2, oa-pdf-bridge, subtitle-enrich, address-gate, encoding-gate-ocr
+// @ajan: cursor · @etiket: katman-2, oa-pdf-bridge, subtitle-enrich, address-gate, author-line-gate, no-validate-subtitle-enrich
 /**
  * Katman-2 → Kutuphane köprü (8756) `oa_pdf_search` client.
  * Online PDF discovery runs in Python; this module only POSTs queries.
@@ -920,15 +920,218 @@ export function looksLikeAddressOrPublisherHq(subtitle: string): boolean {
   return false;
 }
 
+const FOOTNOTE_TRAIL_RE = /(?:\s*(?:[*†‡§¶✱⁎∗]+|[¹²³⁴⁵⁶⁷⁸⁹⁰]+|\(\d+\)))+\s*$/u;
+const NAME_PARTICLE = new Set([
+  "de",
+  "da",
+  "das",
+  "dos",
+  "del",
+  "della",
+  "van",
+  "von",
+  "der",
+  "den",
+  "di",
+  "la",
+  "le",
+  "du",
+  "bin",
+  "ibn",
+  "al",
+  "el",
+]);
+const AUTHOR_LINE_TOPIC = new Set([
+  "why",
+  "how",
+  "what",
+  "when",
+  "where",
+  "which",
+  "whose",
+  "whom",
+  "and",
+  "or",
+  "the",
+  "for",
+  "from",
+  "with",
+  "into",
+  "onto",
+  "over",
+  "under",
+  "about",
+  "between",
+  "through",
+  "towards",
+  "toward",
+  "against",
+  "study",
+  "analysis",
+  "research",
+  "history",
+  "introduction",
+  "review",
+  "essay",
+  "notes",
+  "volume",
+  "edition",
+  "part",
+  "chapter",
+  "case",
+  "theory",
+  "practice",
+  "approach",
+  "perspective",
+  "critique",
+  "votes",
+  "stories",
+  "politics",
+  "posttruth",
+  "bir",
+  "ve",
+  "ile",
+  "icin",
+  "uzerine",
+  "hakkinda",
+  "uzerinden",
+  "olarak",
+  "gore",
+  "karsi",
+  "arasinda",
+  "icinde",
+  "baglaminda",
+  "inceleme",
+  "calisma",
+  "arastirma",
+  "tarih",
+  "giris",
+  "ornek",
+  "gelisim",
+  "egitim",
+  "sanat",
+  "toplum",
+  "kuram",
+  "yaklasim",
+  "evrim",
+  "evrimi",
+  "toplumun",
+]);
+
+function stripAuthorFootnoteMarkers(subtitle: string): {
+  cleaned: string;
+  hadFootnote: boolean;
+} {
+  const s = String(subtitle || "").trim();
+  if (!s) return { cleaned: "", hadFootnote: false };
+  const hadFootnote = FOOTNOTE_TRAIL_RE.test(s);
+  const cleaned = hadFootnote ? s.replace(FOOTNOTE_TRAIL_RE, "").trim() : s;
+  return { cleaned, hadFootnote };
+}
+
+function authorLineParts(subtitle: string): string[] {
+  return String(subtitle || "")
+    .trim()
+    .split(/[\s,]+/)
+    .filter(Boolean);
+}
+
+function isNameInitialToken(tok: string): boolean {
+  return /^[A-Za-zÀ-ÖØ-öø-ÿĞğİıŞşÜüÇçÖö]\.?$/u.test(String(tok || "").trim());
+}
+
+function isAllCapsNameToken(tok: string): boolean {
+  const t = String(tok || "")
+    .trim()
+    .replace(/\.+$/, "");
+  const letters = [...t].filter((c) => /\p{L}/u.test(c));
+  if (letters.length < 2) return false;
+  return letters.every((c) => c === c.toLocaleUpperCase("tr"));
+}
+
+function isTitleCaseNameToken(tok: string): boolean {
+  const raw = String(tok || "").trim();
+  if (isNameInitialToken(raw)) return true;
+  const t = raw.replace(/\.+$/, "");
+  if (!t || !/\p{L}/u.test(t[0] || "")) return false;
+  if (t[0] !== t[0].toLocaleUpperCase("tr")) return false;
+  const rest = t.slice(1);
+  if (!rest) return true;
+  return rest === rest.toLocaleLowerCase("tr") || isAllCapsNameToken(t);
+}
+
+function isNameParticleToken(tok: string): boolean {
+  return NAME_PARTICLE.has(foldedPhrase(tok));
+}
+
+function looksPersonNameToken(tok: string): boolean {
+  if (isNameParticleToken(tok) || isNameInitialToken(tok)) return true;
+  return isTitleCaseNameToken(tok);
+}
+
+function subtitleCreatorOverlap(subtitle: string, creators: string): boolean {
+  const sub = String(subtitle || "").trim();
+  const cre = String(creators || "").trim();
+  if (!sub || !cre) return false;
+  const subToks = new Set(normTokens(sub).filter((t) => t.length >= 3));
+  const creToks = new Set(normTokens(cre).filter((t) => t.length >= 3));
+  if (!subToks.size || !creToks.size) return false;
+  for (const t of subToks) {
+    if (t.length >= 4 && creToks.has(t)) return true;
+  }
+  // Full token set of subtitle lands inside creators bag.
+  for (const t of subToks) {
+    if (!creToks.has(t)) return false;
+  }
+  return subToks.size > 0;
+}
+
+/** Mirror Python ``looks_like_author_line``. */
+export function looksLikeAuthorLine(subtitle: string, creators = ""): boolean {
+  const raw = String(subtitle || "").trim();
+  if (!raw || raw.length > 80) return false;
+  const { cleaned, hadFootnote } = stripAuthorFootnoteMarkers(raw);
+  if (!cleaned) return false;
+  const parts = authorLineParts(cleaned);
+  if (!parts.length || parts.length > 4) return false;
+  if (parts.some((p) => AUTHOR_LINE_TOPIC.has(foldedPhrase(p)))) return false;
+  if (parts.some((p) => /\d/.test(p))) return false;
+  if (!parts.every((p) => looksPersonNameToken(p))) return false;
+
+  const hasAllCaps = parts.some((p) => isAllCapsNameToken(p));
+  const hasMidInitial = parts.some(
+    (p, i) => i > 0 && i < parts.length - 1 && isNameInitialToken(p),
+  );
+  const creatorHit = subtitleCreatorOverlap(cleaned, creators);
+  const nonInitial = parts.filter(
+    (p) => !isNameInitialToken(p) && !isNameParticleToken(p),
+  );
+
+  if (hasAllCaps && parts.length >= 1 && parts.length <= 4) return true;
+  if (hadFootnote && parts.length >= 1 && parts.length <= 3) return true;
+  if (hasMidInitial && nonInitial.length >= 2 && parts.length <= 4) {
+    return true;
+  }
+  if (
+    isNameInitialToken(parts[0]) &&
+    nonInitial.length === 1 &&
+    parts.length <= 3
+  ) {
+    return true;
+  }
+  if (creatorHit && parts.length >= 1 && parts.length <= 3) return true;
+  return false;
+}
+
 /**
  * When item lacks a subtitle that a longer same-work PDF/hit title has,
  * return the enriched künye title. Else null (wrong core / weak / already
- * full / publisher street-postal HQ line).
+ * full / publisher street-postal HQ line / author byline).
  */
 export function proposeSubtitleEnrichment(
   itemTitle: string,
   evidenceTitle: string,
-  opts: { authorOk?: boolean } = {},
+  opts: { authorOk?: boolean; creators?: string } = {},
 ): string | null {
   const item = String(itemTitle || "").trim();
   const evidence = String(evidenceTitle || "").trim();
@@ -940,6 +1143,7 @@ export function proposeSubtitleEnrichment(
   const { sep, sub } = subtitleTail(evidence);
   if (!sep || !sub) return null;
   if (looksLikeAddressOrPublisherHq(sub)) return null;
+  if (looksLikeAuthorLine(sub, opts.creators || "")) return null;
   const itemTail = subtitleTail(item);
   if (itemTail.sub) return null; // already has subtitle — no overwrite
   const enriched = sep === " (" ? `${item} (${sub})` : `${item}${sep}${sub}`;
@@ -999,18 +1203,24 @@ export function resolveSubtitleEnrichment(
     pdfText?: string;
     fallbackTitle?: string;
     authorOk?: boolean;
+    creators?: string;
   } = {},
 ): string | null {
   const authorOk = !!opts.authorOk;
+  const creators = String(opts.creators || "");
   for (const evidence of guessPdfTitleEvidence(opts.pdfText || "", itemTitle)) {
     const enriched = proposeSubtitleEnrichment(itemTitle, evidence, {
       authorOk,
+      creators,
     });
     if (enriched) return enriched;
   }
   const fallback = String(opts.fallbackTitle || "").trim();
   if (fallback) {
-    return proposeSubtitleEnrichment(itemTitle, fallback, { authorOk });
+    return proposeSubtitleEnrichment(itemTitle, fallback, {
+      authorOk,
+      creators,
+    });
   }
   return null;
 }
@@ -1781,7 +1991,7 @@ export type ContentValidateResult = {
   reason?: string;
   error?: string;
   via?: string;
-  /** Künye title after subtitle enrichment (Python ``enriched_title``). */
+  /** Künye title after subtitle enrichment (legacy field; validate ignores). */
   enriched_title?: string;
   enrichedTitle?: string;
   ocr_attempted?: boolean;
