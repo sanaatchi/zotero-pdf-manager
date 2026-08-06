@@ -239,6 +239,7 @@ hâlâ mismatch).
 devam ediyor neden" dedi ve canlı Zotero hata ayıklama çıkışını paylaştı.
 
 **Canlı log kanıtı:**
+
 ```
 appName => Zotero, version => 9.0.6 ... Zotero PDF Manager (1.0.120, extension)
 [JavaScript Error: "ReferenceError: AbortController is not defined"
@@ -269,6 +270,7 @@ global — yalnız gerçek Zotero bootstrap ortamında (`Components`/pencere
 globalleri farklı) ortaya çıkıyor. Canlı debug log olmadan bulunamazdı.
 
 **Fix:**
+
 - Modül yüklenirken `typeof AbortController === "undefined"` ise
   `Components.utils.importGlobalProperties(["AbortController"])` çağrılır.
 - `run()` artık kendi reddini `.catch` edip `reconcile-crash` audit event'i

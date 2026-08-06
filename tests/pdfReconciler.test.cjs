@@ -276,7 +276,10 @@ test("run() catches its own rejection instead of leaving an unhandled promise", 
   // start()'s timers call `void this.run(...)` with nothing else awaiting
   // it — run() itself must swallow failures or a crash (like the
   // AbortController one) silently disables the reconciler forever again.
-  assert.match(source, /this\.activeRun = this\.performRun\(reason\)\s*\n\s*\.catch/);
+  assert.match(
+    source,
+    /this\.activeRun = this\.performRun\(reason\)\s*\n\s*\.catch/,
+  );
   assert.match(source, /reconcile-crash/);
 });
 
