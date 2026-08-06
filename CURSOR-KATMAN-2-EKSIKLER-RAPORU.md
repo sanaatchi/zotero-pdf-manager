@@ -144,6 +144,7 @@ _(G2 ajan tarafı: checklist v1.0.49 + otomatik Bölüm A imzalandı. G3–G5 do
 kalkmadığını / Clear sonrası geri geldiğini bildirdi.
 
 **Ekarte edilen hipotezler (kanıtlı):**
+
 - (a) XPI 1.0.118 değil → **hayır**, `gh release view` + `update.json` doğru
   1.0.118'i işaret ediyor (K3'te bulunan `/releases/latest` sınıfı bug burada yok).
 - Guard/reconciler mantığı kendi içinde tutarlı ve test edilmiş

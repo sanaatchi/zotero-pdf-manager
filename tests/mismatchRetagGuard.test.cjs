@@ -93,10 +93,7 @@ test("explicit session for one item does not leak into a concurrent item's passi
     runInExplicitMismatchTagSessionAsync(1, async () => {
       await new Promise((resolve) => setTimeout(resolve, 10));
       // Explicit session covers only item 1 — it may re-tag.
-      assert.equal(
-        shouldSuppressPassiveMismatchTag(1, "download-doi"),
-        false,
-      );
+      assert.equal(shouldSuppressPassiveMismatchTag(1, "download-doi"), false);
     }),
     // Item 2: unrelated passive re-tag (e.g. reconciler add-flush) firing
     // concurrently. It must stay suppressed — item 1's explicit session must
