@@ -1,3 +1,4 @@
+// @ajan: claude · @etiket: katman-2, tests, attachmentScanner, stale-mismatch-tag-fix
 const assert = require("node:assert/strict");
 const { test } = require("node:test");
 const path = require("node:path");
@@ -100,6 +101,89 @@ test("a directory containing only ignorable system files IS reported as empty", 
   );
   assert.deepEqual(orphanFiles, []);
   assert.deepEqual(emptyDirs, ["/root/sub"]);
+});
+
+test("scanAttachmentState clears stale #pdf-mismatch/#pdf-review when the item has no file attachment left", async () => {
+  global.Zotero = {
+    Prefs: { get: () => undefined, set: () => {} },
+    ItemTypes: { getID: () => 1 },
+  };
+  try {
+    const { scanAttachmentState } = loadModule();
+    const tags = new Set(["pdf-mismatch", "pdf-review"]);
+    let saveCount = 0;
+    const item = {
+      isRegularItem: () => true,
+      loadAllData: async () => {},
+      getAttachments: () => [],
+      getTags: () => [...tags].map((tag) => ({ tag })),
+      hasTag: (t) => tags.has(String(t).replace(/^#/, "")),
+      addTag: (t) => {
+        tags.add(String(t).replace(/^#/, ""));
+      },
+      removeTag: (t) => {
+        tags.delete(String(t).replace(/^#/, ""));
+      },
+      saveTx: async () => {
+        saveCount++;
+      },
+    };
+
+    const state = await scanAttachmentState(item, false);
+
+    assert.equal(state.noSource, true);
+    // #nosource added (scanner's own tag) + #pdf-mismatch/#pdf-review cleared
+    // (stale — no attachment left for a "mismatch" to point at).
+    assert.equal(tags.has("nosource"), true);
+    assert.equal(tags.has("pdf-mismatch"), false);
+    assert.equal(tags.has("pdf-review"), false);
+    assert.ok(saveCount >= 1);
+  } finally {
+    delete global.Zotero;
+  }
+});
+
+test("scanAttachmentState leaves #pdf-mismatch alone when the item still has a file attachment", async () => {
+  global.Zotero = {
+    Prefs: { get: () => undefined, set: () => {} },
+    ItemTypes: { getID: () => 1 },
+  };
+  try {
+    const { scanAttachmentState } = loadModule();
+    const tags = new Set(["pdf-mismatch", "pdf-review"]);
+    const attachment = {
+      isEmbeddedImageAttachment: () => false,
+      isSnapshotAttachment: () => false,
+      isFileAttachment: () => true,
+      fileExists: async () => true,
+      isPDFAttachment: () => true,
+      attachmentContentType: "application/pdf",
+      attachmentFilename: "kept.pdf",
+    };
+    const item = {
+      isRegularItem: () => true,
+      loadAllData: async () => {},
+      getAttachments: () => [1],
+      getTags: () => [...tags].map((tag) => ({ tag })),
+      hasTag: (t) => tags.has(String(t).replace(/^#/, "")),
+      addTag: (t) => {
+        tags.add(String(t).replace(/^#/, ""));
+      },
+      removeTag: (t) => {
+        tags.delete(String(t).replace(/^#/, ""));
+      },
+      saveTx: async () => {},
+    };
+    global.Zotero.Items = { getAsync: async () => attachment };
+
+    const state = await scanAttachmentState(item, false);
+
+    assert.equal(state.noSource, false);
+    assert.equal(tags.has("pdf-mismatch"), true);
+    assert.equal(tags.has("pdf-review"), true);
+  } finally {
+    delete global.Zotero;
+  }
 });
 
 test("nested empty directories are all reported, siblings with content are not", async () => {

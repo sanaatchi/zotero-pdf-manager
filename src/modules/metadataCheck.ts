@@ -1,8 +1,10 @@
-// @ajan: cursor · @etiket: katman-2, format-metadata, metadataCheck
+// @ajan: claude · @etiket: katman-2, format-metadata, metadataCheck, isbn-checksum-fix
 import { PDFDocument } from "pdf-lib";
 import { config } from "../../package.json";
 import {
   isbnsEquivalent,
+  isValidIsbn10,
+  isValidIsbn13,
   normalizeDOI,
   normalizeISBNDigits,
   normalizePagesConnector,
@@ -103,7 +105,24 @@ export function compareMetadata(
 
   const zoteroISBN = cleanISBN(zotero.isbn || "");
   const pdfISBN = cleanISBN(`${pdf.isbn || ""}\n${contentEvidence}`);
-  if (zoteroISBN && pdfISBN) {
+  // A stored ISBN that fails its own check digit is provably corrupted data
+  // (common OCR sans-serif 0/8/3 digit confusion during cataloging) — not
+  // reliable evidence of an actual conflict with a different book. Comparing
+  // against it would hard-fail an otherwise correct match forever, since
+  // nothing ever corrects the stored value. A 13-digit code not starting
+  // with 978/979 is the same class of corruption (confirmed: this library's
+  // 13-digit ISBNs are exclusively 978-prefixed; a "970..." etc. is a typo,
+  // not a different valid registrant range).
+  const zoteroISBNValid =
+    !!zoteroISBN &&
+    (isValidIsbn10(zoteroISBN) ||
+      (isValidIsbn13(zoteroISBN) && /^97[89]/.test(zoteroISBN)));
+  if (zoteroISBN && pdfISBN && !zoteroISBNValid) {
+    warning = true;
+    details.push(
+      `Zotero ISBN kontrol basamağı geçersiz (${zoteroISBN}) — karşılaştırma atlandı`,
+    );
+  } else if (zoteroISBN && pdfISBN) {
     possible += 4;
     if (isbnsEquivalent(zoteroISBN, pdfISBN)) {
       points += 4;

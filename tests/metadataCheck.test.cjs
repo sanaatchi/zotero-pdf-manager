@@ -101,6 +101,45 @@ test("PDF page text can verify metadata when embedded fields are empty", () => {
   );
 });
 
+test("a Zotero ISBN that fails its own check digit is not treated as a real conflict (OCR 0/8/3 digit confusion)", () => {
+  const { compareMetadata, hasIdentifierConflict } = loadModule();
+  // Real case: stored "970-625-6774-03-4" (check digit fails; also not a
+  // real 978/979 prefix) vs the PDF's actual, checksum-valid ISBN.
+  const result = compareMetadata(
+    {
+      title: "Dakikalar içinde Selçuklular",
+      creators: ["Cihan Piyadeoğlu"],
+      isbn: "970-625-6774-03-4",
+    },
+    {
+      evidence:
+        "Dakikalar İçinde Selçuklular\nCihan Piyadeoğlu\nISBN 978-625-6774-83-4",
+    },
+  );
+  assert.notEqual(result.status, "mismatch");
+  assert.equal(hasIdentifierConflict(result), false);
+  assert.equal(
+    result.details.some((d) => d.includes("kontrol basamağı geçersiz")),
+    true,
+  );
+});
+
+test("two genuinely different, checksum-valid ISBNs still hard-fail as a conflict", () => {
+  const { compareMetadata, hasIdentifierConflict } = loadModule();
+  const result = compareMetadata(
+    {
+      title: "Same title",
+      creators: ["Author Name"],
+      isbn: "978-0-13-468599-1",
+    },
+    {
+      evidence: "Same title\nAuthor Name\nISBN 978-0-596-52068-7",
+    },
+  );
+  assert.equal(result.status, "mismatch");
+  assert.equal(hasIdentifierConflict(result), true);
+});
+
 test("isEncryptedPdfError recognizes pdf-lib's encrypted-document message", () => {
   const { isEncryptedPdfError } = loadModule();
   const pdfLibError = new Error(

@@ -172,3 +172,61 @@ regresyon testi dahil, eski kodda fail ettiği teyit edildi).
 `tests/mismatchRetagGuard.test.cjs`, `package.json` (→ **v1.0.119**)
 
 **Yayın:** Kullanıcı "yayınla" demeden commit/push/gh-release yok.
+
+---
+
+## Claude — canlı doğrulama: `#pdf-mismatch` ~100 kayıt, ISBN checksum kök nedeni (2026-08-06, v1.0.120)
+
+**Bağlam:** Kullanıcı "canlı kontrol etmelisin" — Zotero MCP ile gerçek
+kütüphane sorgulandı. `#pdf-mismatch` etiketli kayıt sayısı **21 değil,
+en az ~100** (arama limiti 100'de kesildi, muhtemelen daha fazla) ve
+kullanıcıya göre "sayı giderek artıyor".
+
+**İki alt-kategori canlı doğrulandı:**
+
+1. **Ek yok (`#nosource` + `#pdf-mismatch` birlikte):** ör. "Devlet" (Platon),
+   "Sanat sevdası" (Bourdieu), "Sapiens", "Tietze I" — `zotero_get_items_children`
+   ile sıfır çocuk item doğrulandı. v1.0.100'den beri hiçbir yol otomatik
+   silme yapmıyor (`applyPdfMismatchTags` her zaman "keep"), o yüzden bu
+   ek-kaybı K2 dışı (disk reorg / kırık link temizliği) → `#nosource` doğru
+   ama `#pdf-mismatch` artık anlamsız/temizlenemez kalıyordu. **v1.0.119'da
+   `attachmentScanner.ts` fix'i bunu kapsıyor.**
+2. **Ek VAR, gerçek PDF doğru, hâlâ mismatch:** "Dakikalar içinde Selçuklular"
+   (Piyadeoğlu) — PDF'in kapağı/telif sayfası/gövde metni (sayfa 16-20) elle
+   okunup doğrulandı, %100 doğru kitap. Zotero ISBN alanı `970-625-6774-03-4`,
+   gerçek kitap ISBN'i (telif sayfası) `978-625-6774-83-4`. **Kullanıcı teyidi:**
+   "ocr'de sans serif farkından dolayı 0,8,3 birbirine karıştırılabiliyor" +
+   "13 rakamlılar 978 ile başlar bu kesin". ISBN-13 kontrol basamağı ile
+   kanıtlandı: saklanan değer kendi checksum'ını GEÇMİYOR (hesaplanan=0,
+   son hane=4) — matematiksel olarak bozuk veri, muhtemelen K1 OCR/kataloglama
+   adımından. `metadataCheck.ts`'in `cleanISBN`'i uzunluk dışında hiçbir
+   doğrulama yapmıyordu → bozuk ISBN, PDF'teki gerçek ISBN'le eşleşmeyince
+   `criticalMismatch` → `decideContentValidation`'da koşulsuz "mismatch"
+   override (başlık+yazar ne kadar güçlü olursa olsun). **Fix v1.0.120:**
+   saklanan ISBN `isValidIsbn10/13` + `978`/`979` önek testinden geçmezse
+   (kendi checksum'ını geçmiyorsa) ISBN karşılaştırması atlanır (warning,
+   sert mismatch DEĞİL); iki GERÇEKTEN farklı checksum-geçerli ISBN hâlâ sert
+   mismatch sayılır — eşik gevşetme yok, yalnız kanıtlı bozuk veriye güvenmeme.
+
+**Hâlâ tam çözülmemiş (Sinisgalli örneği):** "Perspective in the Visual
+Culture of Classical Antiquity" — DOI VE ISBN ikisi de canlı doğrulamada TAM
+eşleşiyor (Cambridge Books Online kapak sayfası: Book DOI + Hardback ISBN
+ikisi de Zotero kaydıyla birebir aynı), kodun mantığına göre `hasIdMatch`
+anında "match" dönüp temizlemesi gerekirdi — ama etiket hâlâ duruyor. Bu,
+reconciler'ın bu kayda pratikte hiç uğramadığını düşündürüyor. Kesinleştirmek
+için kullanıcının `zpdfmanager-automation-audit.json` dosyası gerekiyor
+(bu ortamdan erişilemiyor) — **açık madde, sonraki oturuma**.
+
+**Kapsam ölçülmedi:** ISBN-checksum bug'ının 100 kayıttan kaçını açıkladığı
+tam sayılmadı (örneklem: 14 kayıt manuel incelendi, 3'ünde ISBN alanı vardı,
+1'i (Selçuklular) kanıtlı bozuk). Kullanıcı "Scan All Attachments" çalıştırıp
+audit log paylaşırsa kapsam netleşir.
+
+**Doğrulama:** `npx tsc --noEmit` temiz · `npm test` 303/303 (2 yeni ISBN
+checksum testi dahil: bozuk ISBN → mismatch DEĞİL; iki geçerli farklı ISBN →
+hâlâ mismatch).
+
+**Dosyalar:** `src/modules/metadataCheck.ts`, `tests/metadataCheck.test.cjs`,
+`package.json` (→ **v1.0.120**)
+
+**Yayın:** Kullanıcı "yayınla" demeden commit/push/gh-release yok.

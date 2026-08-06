@@ -1,8 +1,9 @@
-// @ajan: cursor · @etiket: katman-2, p2, attachmentScanner, safe-regex
+// @ajan: claude · @etiket: katman-2, p2, attachmentScanner, safe-regex, stale-mismatch-tag-fix
 import { config } from "../../package.json";
 import { getPref } from "../utils/prefs";
 import { compileUserRegex, safeRegexTest } from "../utils/safeRegex";
 import { getWatchRoots } from "./folderIndex";
+import { clearSuccessfulMatchTags } from "./pdfSources";
 
 declare const IOUtils: any;
 
@@ -156,6 +157,18 @@ export async function scanAttachmentState(
     changed = true;
   }
   if (changed) await item.saveTx();
+
+  // `#pdf-mismatch` / `#pdf-review` / `#pdf-quarantine` claim "a PDF was
+  // attached and it didn't match" — meaningless (and permanently unclearable
+  // via the normal match flow, which only clears on a NEW successful match)
+  // once the item has no file attachment left at all. Whatever removed the
+  // last attachment (broken-link cleanup here, or an external process moving
+  // files on disk) already leaves `#nosource`; don't also leave a stale
+  // mismatch claim with nothing left to point at.
+  if (!hasFile) {
+    await clearSuccessfulMatchTags(item);
+  }
+
   return {
     noSource: !hasFile,
     broken: hasBroken,
