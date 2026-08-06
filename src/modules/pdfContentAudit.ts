@@ -1,4 +1,4 @@
-// @ajan: cursor · @etiket: katman-2, content-audit, pdf-mismatch, match-tag-clear
+// @ajan: cursor · @etiket: katman-2, content-audit, pdf-mismatch, match-tag-clear, multi-pdf-aggregate
 /**
  * Scan already-attached PDFs against parent metadata (PDF text heuristics +
  * optional LLM). Detects wrong binds that slipped past download gates.
@@ -127,7 +127,8 @@ async function listPdfAttachments(item: Zotero.Item): Promise<Zotero.Item[]> {
 }
 
 /**
- * Validate one parent item's PDF attachments. Match clears mismatch tags;
+ * Validate one parent item's PDF attachments. If any attachment matches,
+ * clear mismatch tags once and do not tag siblings in the same run; otherwise
  * mismatch/unverifiable only tags. Never detaches.
  */
 export async function auditItemPdfContent(
@@ -148,7 +149,16 @@ export async function auditItemPdfContent(
     ];
   }
 
-  const rows: ContentAuditRow[] = [];
+  type PendingRow = {
+    attachmentID: number;
+    verdict: ContentValidation | "error";
+    plan: ReturnType<typeof decideContentAuditAction>;
+    note: string;
+  };
+
+  const pending: PendingRow[] = [];
+  const errors: ContentAuditRow[] = [];
+
   for (const att of pdfs) {
     try {
       const { verdict } = await validateAttachmentContentDetailed(
@@ -156,51 +166,15 @@ export async function auditItemPdfContent(
         att.id,
         { force: true },
       );
-      const plan = decideContentAuditAction({ verdict });
-      let action: ContentAuditRow["action"] = "skipped";
-      let note = `verdict=${verdict}`;
-
-      if (plan === "ok") {
-        // Same cleanup as Match Attachment success (v1.0.107+).
-        await clearSuccessfulMatchTags(item);
-        action = "ok";
-        note = "PDF text matches metadata — cleared mismatch tags";
-      } else if (plan === "tag-mismatch") {
-        await tagItem(item, PDF_MISMATCH_TAG);
-        await tagItem(item, PDF_REVIEW_TAG);
-        action = "tagged";
-        note = "Content mismatch — tagged #pdf-mismatch (attachment kept)";
-      } else if (plan === "tag-review") {
-        await tagItem(item, PDF_REVIEW_TAG);
-        action = "tagged";
-        note = "Unverifiable text — tagged #pdf-review";
-      }
-
-      rows.push({
-        itemID: item.id,
+      pending.push({
         attachmentID: att.id,
-        title,
         verdict,
-        action,
-        note,
-      });
-
-      void appendAuditEvent({
-        run: "content-audit",
-        action: "pdf-content-audit",
-        outcome:
-          verdict === "match"
-            ? "success"
-            : verdict === "mismatch"
-              ? "failed"
-              : "review",
-        itemID: item.id,
-        title,
-        detail: note,
+        plan: decideContentAuditAction({ verdict }),
+        note: `verdict=${verdict}`,
       });
     } catch (e) {
       ztoolkit.log("content audit item failed", item.id, e);
-      rows.push({
+      errors.push({
         itemID: item.id,
         attachmentID: att.id,
         title,
@@ -210,6 +184,67 @@ export async function auditItemPdfContent(
       });
     }
   }
+
+  const anyMatch = pending.some((p) => p.verdict === "match");
+  const rows: ContentAuditRow[] = [...errors];
+
+  if (anyMatch) {
+    // One good PDF is enough — clear automation tags once; do not re-tag siblings.
+    await clearSuccessfulMatchTags(item);
+  }
+
+  for (const p of pending) {
+    let action: ContentAuditRow["action"] = "skipped";
+    let note = p.note;
+
+    if (anyMatch) {
+      if (p.plan === "ok") {
+        action = "ok";
+        note = "PDF text matches metadata — cleared mismatch tags";
+      } else {
+        action = "skipped";
+        note =
+          p.verdict === "mismatch"
+            ? "Sibling PDF matched metadata — #pdf-mismatch not applied"
+            : p.verdict === "unverifiable"
+              ? "Sibling PDF matched metadata — #pdf-review not applied"
+              : note;
+      }
+    } else if (p.plan === "tag-mismatch") {
+      await tagItem(item, PDF_MISMATCH_TAG);
+      await tagItem(item, PDF_REVIEW_TAG);
+      action = "tagged";
+      note = "Content mismatch — tagged #pdf-mismatch (attachment kept)";
+    } else if (p.plan === "tag-review") {
+      await tagItem(item, PDF_REVIEW_TAG);
+      action = "tagged";
+      note = "Unverifiable text — tagged #pdf-review";
+    }
+
+    rows.push({
+      itemID: item.id,
+      attachmentID: p.attachmentID,
+      title,
+      verdict: p.verdict,
+      action,
+      note,
+    });
+
+    void appendAuditEvent({
+      run: "content-audit",
+      action: "pdf-content-audit",
+      outcome:
+        p.verdict === "match"
+          ? "success"
+          : p.verdict === "mismatch"
+            ? "failed"
+            : "review",
+      itemID: item.id,
+      title,
+      detail: note,
+    });
+  }
+
   return rows;
 }
 

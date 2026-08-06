@@ -1,4 +1,4 @@
-// @ajan: cursor · @etiket: katman-2, pdf-sources, match-rename-move, keep-mismatch, thesis-validate
+// @ajan: cursor · @etiket: katman-2, pdf-sources, match-rename-move, keep-mismatch, thesis-validate, removeAutomationTag
 import { getString } from "../utils/locale";
 import { getPref } from "../utils/prefs";
 import {
@@ -737,6 +737,7 @@ async function removeAutomationTag(
   tag: string,
 ): Promise<void> {
   try {
+    if (typeof item.hasTag === "function" && !item.hasTag(tag)) return;
     const tags = (item.getTags() as { tag: string }[]) || [];
     if (!tags.some((entry) => entry.tag === tag)) return;
     item.removeTag(tag);
