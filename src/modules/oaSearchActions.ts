@@ -342,7 +342,10 @@ export async function createItemFromHit(
       const prev = String(item.getField("extra") || "");
       if (!/^type:\s*periodical\b/im.test(prev)) {
         const line = "type: periodical";
-        item.setField("extra", prev ? `${prev.replace(/\s+$/, "")}\n${line}` : line);
+        item.setField(
+          "extra",
+          prev ? `${prev.replace(/\s+$/, "")}\n${line}` : line,
+        );
       }
     } catch {
       /* Extra may be unavailable */

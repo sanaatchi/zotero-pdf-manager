@@ -127,10 +127,7 @@ test("kind fields match product criteria matrix", () => {
 });
 
 test("periodical maps to Zotero book + Extra type", () => {
-  const {
-    zoteroItemTypeFromOaKind,
-    kindFromZoteroItemType,
-  } = loadCriteria();
+  const { zoteroItemTypeFromOaKind, kindFromZoteroItemType } = loadCriteria();
   assert.equal(zoteroItemTypeFromOaKind("periodical"), "book");
   assert.equal(zoteroItemTypeFromOaKind("journalArticle"), "journalArticle");
   assert.equal(
