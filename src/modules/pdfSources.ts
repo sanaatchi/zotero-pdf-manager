@@ -1,4 +1,4 @@
-// @ajan: cursor · @etiket: katman-2, pdf-sources, bridge-guard, ocr-haystack, content-validate, nosource-sync, pdf-candidate-split, mismatch-reason
+// @ajan: cursor · @etiket: katman-2, pdf-sources, bridge-guard, ocr-haystack, content-validate, nosource-sync, pdf-candidate-split, mismatch-reason, encoding-gate, re-ocr-validate
 import { getString } from "../utils/locale";
 import { getPref } from "../utils/prefs";
 import {
@@ -296,6 +296,26 @@ export function normalizeOcrHaystack(s: string): string {
     .trim();
 }
 
+/**
+ * Long extract that is mostly unreadable (CID / glyph-map mojibake).
+ * Title-absence mismatch is unreliable when this is true (Afacan 2014 case).
+ */
+export function looksLikeGarbledPdfText(text: string): boolean {
+  const sample = String(text || "").slice(0, 5000);
+  if (sample.length < 120) return false;
+  const nons = [...sample].filter((c) => !/\s/.test(c));
+  if (nons.length < 80) return false;
+  const ctrl = nons.filter((c) => c.charCodeAt(0) < 32).length;
+  if (ctrl / nons.length >= 0.015) return true;
+  const letters = nons.filter((c) => /\p{L}/u.test(c)).length;
+  if (letters / nons.length < 0.42) return true;
+  const words = sample.match(/[A-Za-zÀ-ÿÇĞİÖŞÜçğıöşüÂÎÛâîû]{3,}/g) || [];
+  if (nons.length >= 400 && words.length < 18) return true;
+  const dollars = (sample.match(/\$/g) || []).length;
+  if (dollars >= 12 && letters / nons.length < 0.62) return true;
+  return false;
+}
+
 function tokenize(s: string): string[] {
   return normalizeSearchText(s)
     .split(/\s+/)
@@ -538,14 +558,30 @@ export function formatContentValidationReason(input: {
   bridgeVia?: string;
   bridgeReason?: string;
   bridgeForcedMismatch?: boolean;
+  encodingUnreliable?: boolean;
 }): string {
   const stats = `titleHit=${input.titleHit.toFixed(2)} score=${input.score.toFixed(2)} author=${
     input.authorFound ? "yes" : "no"
   }`;
   if (input.verdict === "unverifiable") {
-    return input.textChars < 50
-      ? `unverifiable: too little PDF text (${input.textChars} chars)`
-      : `unverifiable: ${stats}`;
+    if (input.textChars < 50) {
+      return `unverifiable: too little PDF text (${input.textChars} chars)`;
+    }
+    // OCR-fallback outcome (encoding-gate-no-ocr / -ocr-failed / -ocr-empty /
+    // -ocr-garbled / -ocr-unverifiable) — surface the Python bridge's exact
+    // reason (e.g. "encoding-garbled; OCR unavailable…") on #pdf-review.
+    if (input.bridgeReason) {
+      const via = input.bridgeVia || "bridge";
+      const why = String(input.bridgeReason)
+        .replace(/\s+/g, " ")
+        .trim()
+        .slice(0, 280);
+      return `bridge(${via}): ${why} | ${stats}`;
+    }
+    if (input.encodingUnreliable) {
+      return `unverifiable: PDF text encoding unreliable | ${stats}`;
+    }
+    return `unverifiable: ${stats}`;
   }
   if (input.verdict === "skipped") return "validation skipped (pref off)";
   if (input.verdict === "match") {
@@ -736,10 +772,22 @@ export async function validateAttachmentContent(
   return detailed.verdict;
 }
 
+/**
+ * Whether this validation path may spend OCR cost on encoding recovery.
+ * Content-audit (`force`) and explicit attach/validate (`allowOcr`) do;
+ * passive reconcile/notifier leave both unset → gate-only unverifiable.
+ */
+export function shouldAllowValidateOcr(opts: {
+  force?: boolean;
+  allowOcr?: boolean;
+}): boolean {
+  return opts.allowOcr === true || opts.force === true;
+}
+
 export async function validateAttachmentContentDetailed(
   item: Zotero.Item,
   attachmentID: number,
-  opts: { force?: boolean; hitTitle?: string } = {},
+  opts: { force?: boolean; hitTitle?: string; allowOcr?: boolean } = {},
 ): Promise<{
   verdict: ContentValidation;
   pdfText: string;
@@ -848,15 +896,166 @@ export async function validateAttachmentContentDetailed(
       hasIdMatch,
     });
 
+    // Encoding/CID mojibake: titleHit=0 is not evidence of a wrong PDF.
+    const encodingUnreliable =
+      !hasIdConflict &&
+      !hasIdMatch &&
+      titleHit < 0.2 &&
+      looksLikeGarbledPdfText(text);
+    const wouldMismatchLowTitle =
+      heuristic === "mismatch" &&
+      !hasIdConflict &&
+      !hasIdMatch &&
+      titleHit < 0.2 &&
+      textChars >= 400;
+    if (heuristic === "mismatch" && encodingUnreliable) {
+      heuristic = "unverifiable";
+      ztoolkit.log(
+        "Content mismatch downgraded — PDF text encoding unreliable",
+        item.id,
+      );
+    }
+
+    const allowOcr = shouldAllowValidateOcr(opts);
+    const needsOcrRecovery =
+      allowOcr && (encodingUnreliable || wouldMismatchLowTitle);
+
     let bridgeVia = "";
     let bridgeReason = "";
     let bridgeForcedMismatch = false;
 
-    // Local LLM (Ollama via 8756 bridge) when enabled and text is usable.
-    if (
+    // Resolve path once — OCR needs absolute disk path under watch roots.
+    let attachmentPath = "";
+    if (needsOcrRecovery || getPref("pdf.validateContentLlm") !== false) {
+      try {
+        const att = await Zotero.Items.getAsync(attachmentID);
+        attachmentPath = String(
+          (await (att as any)?.getFilePathAsync?.()) ||
+            (att as any)?.getFilePath?.() ||
+            "",
+        );
+      } catch {
+        attachmentPath = "";
+      }
+    }
+
+    const applyBridgeVerdict = (
+      llm: {
+        verdict?: string | null;
+        via?: string;
+        reason?: string;
+      },
+      ocrPath: boolean,
+    ) => {
+      const via = String(llm?.via || "");
+      const ocrFailVia =
+        via.startsWith("encoding-gate-") || via === "encoding-gate";
+      if (llm?.verdict === "match" && (ocrPath || heuristic !== "mismatch")) {
+        heuristic = "match";
+        bridgeVia = via;
+        bridgeReason = String(llm.reason || "");
+        ztoolkit.log(
+          `Bridge content validation → match (${via || "bridge"})`,
+          llm.reason || "",
+        );
+        return;
+      }
+      if (llm?.verdict === "mismatch" && via.startsWith("ocr-")) {
+        // OCR recovered readable text and still disagrees — real mismatch.
+        if (!strongHeuristicMatch) {
+          heuristic = "mismatch";
+          bridgeForcedMismatch = true;
+          bridgeVia = via;
+          bridgeReason = String(llm.reason || "");
+          ztoolkit.log(
+            `Bridge OCR validation → mismatch (${via})`,
+            llm.reason || "",
+          );
+        }
+        return;
+      }
+      if (llm?.verdict === "mismatch" && ocrFailVia) {
+        heuristic = "unverifiable";
+        bridgeVia = via;
+        bridgeReason = String(llm.reason || "");
+        return;
+      }
+      if (llm?.verdict === "mismatch" && !strongHeuristicMatch && !ocrFailVia) {
+        heuristic = "mismatch";
+        bridgeForcedMismatch = true;
+        bridgeVia = via;
+        bridgeReason = String(llm.reason || "");
+        ztoolkit.log(
+          `Bridge content validation → mismatch (${via || "bridge"})`,
+          llm.reason || "",
+        );
+        return;
+      }
+      if (llm?.verdict === "mismatch" && strongHeuristicMatch) {
+        ztoolkit.log(
+          "Bridge said mismatch but strong heuristic match — keeping PDF",
+          via ? `${via}: ` : "",
+          llm.reason || "",
+        );
+        return;
+      }
+      if (llm?.verdict === "unverifiable" && heuristic === "match") {
+        return;
+      }
+      if (llm?.verdict === "unverifiable" || ocrFailVia) {
+        heuristic = "unverifiable";
+        bridgeVia = via;
+        bridgeReason = String(llm.reason || "");
+        return;
+      }
+      if (llm?.verdict === "match" && heuristic === "mismatch") {
+        ztoolkit.log(
+          "Bridge said match but heuristic mismatch — keeping mismatch",
+          llm.reason || "",
+        );
+      }
+    };
+
+    // Encoding / low-title Validate path: re-OCR via bridge before tagging.
+    if (needsOcrRecovery) {
+      try {
+        const { validateContentViaBridge } = await import("./oaPdfBridge");
+        const llm = await validateContentViaBridge({
+          title: String(item.getField("title") || ""),
+          creators: ((item.getCreators() as any[]) || [])
+            .slice(0, 6)
+            .map((c) =>
+              `${c.firstName || ""} ${c.lastName || c.name || ""}`.trim(),
+            )
+            .filter(Boolean)
+            .join("; "),
+          year: itemYear(item),
+          doi: getDOI(item),
+          isbn: String(item.getField("ISBN") || "").replace(/[^0-9Xx]/g, ""),
+          itemType: itemType(item),
+          pdfText: normalizeOcrHaystack(text).slice(0, 8000),
+          pdfPath: attachmentPath,
+          allowOcr: true,
+        });
+        if (llm) {
+          applyBridgeVerdict(llm, true);
+        } else if (encodingUnreliable || wouldMismatchLowTitle) {
+          // Bridge down: prefer review over false mismatch.
+          heuristic = "unverifiable";
+          bridgeVia = "encoding-gate-no-ocr";
+          bridgeReason = "bridge unreachable during OCR recovery";
+        }
+      } catch (e) {
+        ztoolkit.log("Bridge OCR validation unavailable; unverifiable", e);
+        heuristic = "unverifiable";
+        bridgeVia = "encoding-gate-no-ocr";
+        bridgeReason = String((e as Error)?.message || e).slice(0, 120);
+      }
+    } else if (
       getPref("pdf.validateContentLlm") !== false &&
       textChars >= 50 &&
       heuristic !== "skipped" &&
+      !encodingUnreliable &&
       !shouldSkipBridgeContentValidation({
         heuristic,
         titleHit,
@@ -880,6 +1079,8 @@ export async function validateAttachmentContentDetailed(
           isbn: String(item.getField("ISBN") || "").replace(/[^0-9Xx]/g, ""),
           itemType: itemType(item),
           pdfText: normalizeOcrHaystack(text).slice(0, 8000),
+          pdfPath: attachmentPath,
+          allowOcr: false,
         });
         // Bridge may also propose subtitle enrichment (Python parity).
         const bridgeEnriched = String(
@@ -900,50 +1101,18 @@ export async function validateAttachmentContentDetailed(
             reason: `match: bridge subtitle enrichment → "${bridgeEnriched}"`,
           };
         }
-        // Fail-closed for upgrading mismatch→match. Do NOT let bridge/LLM erase a
-        // strong heuristic match (false "mismatch" → #pdf-mismatch loop).
-        const via = String(llm?.via || "");
-        if (llm?.verdict === "mismatch" && !strongHeuristicMatch) {
-          heuristic = "mismatch";
-          bridgeForcedMismatch = true;
-          bridgeVia = via;
-          bridgeReason = String(llm.reason || "");
-          ztoolkit.log(
-            `Bridge content validation → mismatch (${via || "bridge"})`,
-            llm.reason || "",
-          );
-        } else if (llm?.verdict === "mismatch" && strongHeuristicMatch) {
-          ztoolkit.log(
-            "Bridge said mismatch but strong heuristic match — keeping PDF",
-            via ? `${via}: ` : "",
-            llm.reason || "",
-          );
-        } else if (llm?.verdict === "match" && heuristic !== "mismatch") {
-          heuristic = "match";
-          bridgeVia = via;
-          bridgeReason = String(llm.reason || "");
-          ztoolkit.log(
-            `Bridge content validation → match (${via || "bridge"})`,
-            llm.reason || "",
-          );
-        } else if (llm?.verdict === "unverifiable" && heuristic === "match") {
-          // Soft: don't erase a heuristic match solely from LLM doubt
-        } else if (llm?.verdict === "unverifiable") {
-          heuristic = "unverifiable";
-          bridgeVia = via;
-          bridgeReason = String(llm.reason || "");
-        } else if (llm?.verdict === "match" && heuristic === "mismatch") {
-          ztoolkit.log(
-            "Bridge said match but heuristic mismatch — keeping mismatch",
-            llm.reason || "",
-          );
-        }
+        if (llm) applyBridgeVerdict(llm, false);
       } catch (e) {
         ztoolkit.log(
           "Bridge content validation unavailable; heuristic only",
           e,
         );
       }
+    } else if (encodingUnreliable) {
+      ztoolkit.log(
+        "Passive path: encoding unreliable → unverifiable (no OCR)",
+        item.id,
+      );
     } else if (
       getPref("pdf.validateContentLlm") !== false &&
       heuristic === "match" &&
@@ -973,6 +1142,8 @@ export async function validateAttachmentContentDetailed(
       bridgeVia,
       bridgeReason,
       bridgeForcedMismatch,
+      encodingUnreliable:
+        encodingUnreliable || String(bridgeVia).startsWith("encoding-gate"),
     });
 
     if (heuristic === "match") {
@@ -1405,7 +1576,9 @@ export async function downloadAndAttach(
 
   if (opts.validate !== false) {
     const { verdict, pdfText, reason } =
-      await validateAttachmentContentDetailed(item, attachment.id);
+      await validateAttachmentContentDetailed(item, attachment.id, {
+        allowOcr: true,
+      });
     if (verdict === "match" || verdict === "skipped") {
       await clearSuccessfulMatchTags(item);
       return attachment;
@@ -1729,6 +1902,7 @@ export class LocalFolderSource implements PDFSource {
     const detailed = await validateAttachmentContentDetailed(
       item,
       attachment.id,
+      { allowOcr: true },
     );
     if (shouldClearMatchTags(detailed.verdict, via)) {
       await clearSuccessfulMatchTags(item);

@@ -236,3 +236,46 @@ test("OCR haystack: doubled dots still yield title token hit", () => {
   const hit = titleTokenHit(item, hay);
   assert.ok(hit >= 0.5, `expected titleHit>=0.5 got ${hit}`);
 });
+
+test("garbled encoding extract is detected; clean Turkish text is not", () => {
+  const { looksLikeGarbledPdfText } = loadModule();
+  const garbled =
+    "Hakemli Makale.\n6$1$7\x13(GITIM\x13" +
+    "$\x13".repeat(40) +
+    "\n,QWHUGLVFLSOLQDU\\ $SSURDFK\n" +
+    "\x01\x02\x03abc ".repeat(80);
+  assert.equal(looksLikeGarbledPdfText(garbled), true);
+  const clean =
+    "Sanat egitiminde disiplinlerarasi yaklasim ve muzeler. Aydin Afacan. ".repeat(
+      10,
+    );
+  assert.equal(looksLikeGarbledPdfText(clean), false);
+});
+
+test("formatContentValidationReason notes encodingUnreliable unverifiable", () => {
+  const { formatContentValidationReason } = loadModule();
+  const reason = formatContentValidationReason({
+    verdict: "unverifiable",
+    kind: "other",
+    textChars: 5000,
+    titleHit: 0,
+    score: 0,
+    hasIdConflict: false,
+    hasIdMatch: false,
+    authorExpected: true,
+    authorFound: false,
+    encodingUnreliable: true,
+  });
+  assert.match(reason, /encoding unreliable/);
+});
+
+test("shouldAllowValidateOcr: force/allowOcr only (passive false)", () => {
+  const { shouldAllowValidateOcr } = loadModule();
+  assert.equal(shouldAllowValidateOcr({}), false);
+  assert.equal(shouldAllowValidateOcr({ force: true }), true);
+  assert.equal(shouldAllowValidateOcr({ allowOcr: true }), true);
+  assert.equal(
+    shouldAllowValidateOcr({ force: false, allowOcr: false }),
+    false,
+  );
+});

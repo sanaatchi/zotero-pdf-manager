@@ -1,6 +1,6 @@
 {
   "name": "zotero-pdf-manager",
-  "version": "1.0.130",
+  "version": "1.0.133",
   "engines": {
     "node": ">=22"
   },

@@ -94,6 +94,42 @@ test("formatContentValidationReason: bridge reason preferred when forced", () =>
   assert.match(reason, /PDF makale/);
 });
 
+test("formatContentValidationReason: unverifiable surfaces OCR-fallback bridge reason", () => {
+  const { formatContentValidationReason } = loadSources();
+  const reason = formatContentValidationReason({
+    verdict: "unverifiable",
+    kind: "book",
+    textChars: 2000,
+    titleHit: 0,
+    score: 0,
+    hasIdConflict: false,
+    hasIdMatch: false,
+    authorExpected: true,
+    authorFound: false,
+    bridgeVia: "encoding-gate-no-ocr",
+    bridgeReason: "encoding-garbled; OCR unavailable (tesseract/pymupdf yok)",
+    encodingUnreliable: true,
+  });
+  assert.match(reason, /bridge\(encoding-gate-no-ocr\)/);
+  assert.match(reason, /OCR unavailable/);
+});
+
+test("formatContentValidationReason: unverifiable without bridge reason keeps generic text", () => {
+  const { formatContentValidationReason } = loadSources();
+  const reason = formatContentValidationReason({
+    verdict: "unverifiable",
+    kind: "book",
+    textChars: 2000,
+    titleHit: 0.2,
+    score: 0.2,
+    hasIdConflict: false,
+    hasIdMatch: false,
+    authorExpected: true,
+    authorFound: false,
+  });
+  assert.match(reason, /^unverifiable: titleHit=0\.20/);
+});
+
 test("Extra mismatch reason upsert/clear round-trip", () => {
   const {
     MISMATCH_REASON_PREFIX,

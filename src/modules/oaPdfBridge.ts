@@ -1,4 +1,4 @@
-// @ajan: cursor · @etiket: katman-2, oa-pdf-bridge, subtitle-enrich, address-gate
+// @ajan: cursor · @etiket: katman-2, oa-pdf-bridge, subtitle-enrich, address-gate, encoding-gate-ocr
 /**
  * Katman-2 → Kutuphane köprü (8756) `oa_pdf_search` client.
  * Online PDF discovery runs in Python; this module only POSTs queries.
@@ -1768,6 +1768,10 @@ export type ContentValidateRequest = {
   isbn?: string;
   itemType?: string;
   pdfText?: string;
+  /** Absolute attachment path for encoding-gate re-OCR (bridge-side). */
+  pdfPath?: string;
+  /** Validate/content-audit/attach only — never on passive reconcile. */
+  allowOcr?: boolean;
 };
 
 export type ContentValidateResult = {
@@ -1780,6 +1784,8 @@ export type ContentValidateResult = {
   /** Künye title after subtitle enrichment (Python ``enriched_title``). */
   enriched_title?: string;
   enrichedTitle?: string;
+  ocr_attempted?: boolean;
+  ocr_used?: boolean;
 };
 
 /** Local Ollama content check via Kutuphane bridge POST /pdf-validate-content. */
@@ -1788,6 +1794,7 @@ export async function validateContentViaBridge(
 ): Promise<ContentValidateResult | null> {
   const base = resolveOaBridgeUrl();
   const endpoint = `${base}/pdf-validate-content`;
+  const allowOcr = !!req.allowOcr;
   let xhr: any;
   try {
     xhr = await (Zotero.HTTP as any).request("POST", endpoint, {
@@ -1800,9 +1807,12 @@ export async function validateContentViaBridge(
         isbn: req.isbn || "",
         itemType: req.itemType || "",
         pdfText: req.pdfText || "",
+        pdfPath: req.pdfPath || "",
+        allowOcr,
       }),
       responseType: "json",
-      timeout: 120000,
+      // Re-OCR (pymupdf render + tesseract) can exceed the LLM-only budget.
+      timeout: allowOcr ? 300000 : 120000,
       successCodes: false,
     });
   } catch (e) {
