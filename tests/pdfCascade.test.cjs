@@ -171,7 +171,7 @@ test("downloadPdfForSelectedItems probes downloads folder before source cascade"
   assert.match(download, /LocalFolderSource/);
   assert.match(download, /matchItem\(item, index\)/);
   assert.match(download, /attachFile\(item, match\.file/);
-  const probeIdx = download.indexOf("tryAttachFromDownloadsFolder(item)");
+  const probeIdx = download.indexOf("tryAttachFromDownloadsFolder(item");
   const cascadeIdx = download.indexOf("orderedSourcesForItem(item)");
   assert.ok(probeIdx >= 0 && cascadeIdx >= 0);
   assert.ok(

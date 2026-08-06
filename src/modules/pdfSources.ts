@@ -1,4 +1,4 @@
-// @ajan: cursor · @etiket: katman-2, pdf-sources, match-rename-move, keep-mismatch, thesis-validate, removeAutomationTag, tag-hash-normalize, batched-tag-clear
+// @ajan: cursor · @etiket: katman-2, pdf-sources, match-rename-move, keep-mismatch, thesis-validate, removeAutomationTag, tag-hash-normalize, batched-tag-clear, mismatch-tag-guard
 import { getString } from "../utils/locale";
 import { getPref } from "../utils/prefs";
 import {
@@ -46,6 +46,8 @@ import {
   normalizeItemIdentifiers,
 } from "./metadataCheck";
 import { resolveSubtitleEnrichment } from "./oaPdfBridge";
+import { applyPdfMismatchTags } from "./pdfAutomationTags";
+import type { MismatchTagContext } from "./pdfAutomationTagGuard";
 
 /** Stops further URL/source cascade after quarantine or erase-failed keep. */
 export class AttachStoppedError extends Error {
@@ -1040,6 +1042,8 @@ export async function downloadAndAttach(
     /** Pre-fetched PDF bytes (e.g. YÖK via bridge session). */
     bytes?: Uint8Array | null;
     onProgress?: (loaded: number, total: number) => void;
+    mismatchTagSource?: string;
+    mismatchTagRun?: string;
   } = {},
 ): Promise<unknown | null> {
   throwIfRunAborted();
@@ -1228,8 +1232,14 @@ export async function downloadAndAttach(
     ztoolkit.log(
       `PDF content mismatch for ${item.id} — keeping attachment (#pdf-mismatch)`,
     );
-    await tagItem(item, "#pdf-mismatch");
-    await tagItem(item, "#pdf-review");
+    const mismatchSource =
+      opts.mismatchTagSource ||
+      (opts.sourceId ? `download-${opts.sourceId}` : "download-attach");
+    await applyPdfMismatchTags(
+      item,
+      { source: mismatchSource, run: opts.mismatchTagRun },
+      tagItem,
+    );
     void pdfText;
     void persistedPath;
     void finalCreatedByThisRun;
@@ -1447,13 +1457,20 @@ export class LocalFolderSource implements PDFSource {
     item: Zotero.Item,
     match: IndexedFile,
     via: "doi" | "isbn" | "title" = "title",
+    tagCtx?: MismatchTagContext,
   ) {
     // Same disk file must never get a second attachment on this parent
     // (and never be import-copied into Zotero storage from the watch root).
     // findParentLinkedPdfByPath only returns accessible files — ghosts skipped.
     const existing = await findParentLinkedPdfByPath(item, match.path);
     if (existing) {
-      return this.finalizeLocalAttachment(item, existing, match.path, via);
+      return this.finalizeLocalAttachment(
+        item,
+        existing,
+        match.path,
+        via,
+        tagCtx,
+      );
     }
     try {
       // Refuse to create a dimmed link to a missing / online-only stub.
@@ -1481,7 +1498,13 @@ export class LocalFolderSource implements PDFSource {
         }
         return null;
       }
-      return this.finalizeLocalAttachment(item, attachment, match.path, via);
+      return this.finalizeLocalAttachment(
+        item,
+        attachment,
+        match.path,
+        via,
+        tagCtx,
+      );
     } catch (e) {
       rethrowAttachControlFlow(e);
       if (isContentMismatchError(e)) throw e;
@@ -1501,6 +1524,7 @@ export class LocalFolderSource implements PDFSource {
     attachment: Zotero.Item,
     diskPath: string,
     via: "doi" | "isbn" | "title" = "title",
+    tagCtx?: MismatchTagContext,
   ): Promise<Zotero.Item | null> {
     // Pref off → validate returns "skipped"; still clear tags for DOI/ISBN.
     const detailed = await validateAttachmentContentDetailed(
@@ -1532,8 +1556,12 @@ export class LocalFolderSource implements PDFSource {
       `Local PDF mismatch for ${item.id} — keeping attachment (#pdf-mismatch)`,
       diskPath,
     );
-    await tagItem(item, "#pdf-mismatch");
-    await tagItem(item, "#pdf-review");
+    const mismatchSource = tagCtx?.source || "local-finalize-passive";
+    await applyPdfMismatchTags(
+      item,
+      { source: mismatchSource, run: tagCtx?.run },
+      tagItem,
+    );
     // Keep the real (mismatch) file; only drop other missing-file ghosts.
     await purgeMissingSiblingPdfAttachments(item, attachment.id);
     return attachment;

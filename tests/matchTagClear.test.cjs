@@ -136,7 +136,7 @@ test("finalizeLocalAttachment wires shouldClearMatchTags + clearSuccessfulMatchT
   );
   // Mismatch path still tags (does not clear).
   assert.match(source, /keeping attachment \(#pdf-mismatch\)/);
-  assert.match(source, /await tagItem\(item, "#pdf-mismatch"\)/);
+  assert.match(source, /applyPdfMismatchTags/);
 });
 
 test("Match Attachment menu clears tags after successful attach", () => {

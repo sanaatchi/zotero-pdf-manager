@@ -96,6 +96,10 @@ test("match confidence thresholds classify attach / review / skip", () => {
 
 test("reconcile considers only regular items without a PDF", () => {
   global.Zotero = {
+    Prefs: {
+      get: () => "",
+      set: () => {},
+    },
     Items: {
       get: (id) =>
         id === 1
@@ -105,6 +109,7 @@ test("reconcile considers only regular items without a PDF", () => {
   };
   const { canReconcileItem } = loadModule("src/modules/pdfReconciler.ts");
   const item = (attachments, overrides = {}) => ({
+    id: 100,
     isRegularItem: () => true,
     isFeedItem: false,
     deleted: false,

@@ -24,6 +24,7 @@ import {
   isFolderIndexComplete,
 } from "./folderIndex";
 import { throwIfRunAborted } from "../utils/cancelToken";
+import { runInExplicitMismatchTagSessionAsync } from "./pdfAutomationTagGuard";
 import {
   cascadeAutomaticSources,
   type CascadeSourceLike,
@@ -361,6 +362,7 @@ function notify(
  */
 export async function tryAttachFromDownloadsFolder(
   item: Zotero.Item,
+  tagCtx?: { source: string; run?: string },
 ): Promise<Zotero.Item | null> {
   const downloadsDir = resolveOaDownloadsDir(getWatchRoots());
   if (!downloadsDir) return null;
@@ -378,7 +380,10 @@ export async function tryAttachFromDownloadsFolder(
   const local = new LocalFolderSource();
   const match = local.matchItem(item, index);
   if (match.status !== "matched" || !match.file) return null;
-  return local.attachFile(item, match.file, match.via || "title");
+  return local.attachFile(item, match.file, match.via || "title", {
+    source: tagCtx?.source || "downloads-probe",
+    run: tagCtx?.run,
+  });
 }
 
 /**
@@ -416,7 +421,8 @@ export async function downloadPdfForSelectedItems() {
     report: ItemReport;
   };
 
-  const outcomes = await mapPool(items, CONCURRENCY, async (item) => {
+  const outcomes = await mapPool(items, CONCURRENCY, async (item) =>
+    runInExplicitMismatchTagSessionAsync(async () => {
     const title = item.getDisplayTitle();
     if (skipExisting && hasAcceptedPdfAttachment(item)) {
       return {
@@ -438,7 +444,9 @@ export async function downloadPdfForSelectedItems() {
     let attachedSource: string | undefined;
 
     try {
-      const fromDownloads = await tryAttachFromDownloadsFolder(item);
+      const fromDownloads = await tryAttachFromDownloadsFolder(item, {
+        source: "downloads-probe",
+      });
       if (fromDownloads) {
         attempts.push({
           source: DOWNLOADS_PROBE_SOURCE_ID,
@@ -576,7 +584,8 @@ export async function downloadPdfForSelectedItems() {
         note,
       },
     };
-  });
+  }),
+  );
 
   for (const o of outcomes as ItemOutcome[]) {
     reports.push(o.report);

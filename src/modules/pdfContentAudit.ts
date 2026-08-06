@@ -1,4 +1,4 @@
-// @ajan: cursor · @etiket: katman-2, content-audit, pdf-mismatch, match-tag-clear, multi-pdf-aggregate, tag-clear-log, clear-automation-tags-menu
+// @ajan: cursor · @etiket: katman-2, content-audit, pdf-mismatch, match-tag-clear, multi-pdf-aggregate, tag-clear-log, clear-automation-tags-menu, mismatch-tag-guard
 /**
  * Scan already-attached PDFs against parent metadata (PDF text heuristics +
  * optional LLM). Detects wrong binds that slipped past download gates.
@@ -10,6 +10,8 @@ import { config } from "../../package.json";
 import { getString } from "../utils/locale";
 import { getPref } from "../utils/prefs";
 import { appendAuditEvent } from "./automationAudit";
+import { applyPdfMismatchTags } from "./pdfAutomationTags";
+import { recordPdfAutomationTagsUserClear } from "./pdfAutomationTagGuard";
 import {
   clearSuccessfulMatchTags,
   type ContentValidation,
@@ -234,8 +236,11 @@ export async function auditItemPdfContent(
               : note;
       }
     } else if (p.plan === "tag-mismatch") {
-      await tagItem(item, PDF_MISMATCH_TAG);
-      await tagItem(item, PDF_REVIEW_TAG);
+      await applyPdfMismatchTags(
+        item,
+        { source: "content-audit", run: "content-audit" },
+        tagItem,
+      );
       action = "tagged";
       note = "Content mismatch — tagged #pdf-mismatch (attachment kept)";
     } else if (p.plan === "tag-review") {
@@ -462,6 +467,17 @@ export async function clearPdfAutomationTagsOnSelected(): Promise<{
   let cleared = 0;
   for (const item of targets) {
     await clearSuccessfulMatchTags(item);
+    recordPdfAutomationTagsUserClear(item.id);
+    void appendAuditEvent({
+      run: "manual-clear",
+      action: "pdf-automation-tags-user-clear",
+      outcome: "success",
+      itemID: item.id,
+      title: String(item.getField("title") || `#${item.id}`),
+      source: "clear-automation-tags-menu",
+      detail:
+        "User cleared #pdf-mismatch / #pdf-review / #pdf-quarantine; passive re-tag suppressed",
+    });
     if (!itemHasClearablePdfAutomationTag(item)) cleared++;
   }
 

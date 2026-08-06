@@ -1,5 +1,6 @@
-// @ajan: cursor · @etiket: katman-2, p2, reconciler, mismatch-rematch
+// @ajan: cursor · @etiket: katman-2, p2, reconciler, mismatch-rematch, mismatch-tag-guard
 import { getPref } from "../utils/prefs";
+import { wasPdfAutomationTagsUserClearedRecently } from "./pdfAutomationTagGuard";
 import {
   buildIndex,
   getLastIndexBuildMeta,
@@ -48,6 +49,9 @@ export function normalizeAddSettleMs(value: unknown): number {
 export function canReconcileItem(item: Zotero.Item): boolean {
   try {
     if (!item?.isRegularItem() || (item as any).isFeedItem || item.deleted) {
+      return false;
+    }
+    if (wasPdfAutomationTagsUserClearedRecently(item.id)) {
       return false;
     }
     const hasPdf = item.getAttachments().some((id: number) => {
@@ -717,6 +721,10 @@ export class PDFReconciler {
             item,
             match.file,
             match.via || "title",
+            {
+              source: `reconcile-${shared.reason}`,
+              run: runID,
+            },
           );
           if (attachment) {
             await addAutomationTag(item, "#auto-attached");
