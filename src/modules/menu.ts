@@ -41,7 +41,10 @@ import {
   scanOrphanFiles,
   scanSelectedAttachments,
 } from "./attachmentScanner";
-import { auditSelectedPdfContent, clearPdfAutomationTagsOnSelected } from "./pdfContentAudit";
+import {
+  auditSelectedPdfContent,
+  clearPdfAutomationTagsOnSelected,
+} from "./pdfContentAudit";
 import {
   attachmentFileAccessible,
   clearSuccessfulMatchTags,

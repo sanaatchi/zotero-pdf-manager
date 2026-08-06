@@ -439,7 +439,9 @@ export async function clearPdfAutomationTagsOnSelected(): Promise<{
     return { cleared: 0, skipped: 0 };
   }
 
-  const targets = items.filter((item) => itemHasClearablePdfAutomationTag(item));
+  const targets = items.filter((item) =>
+    itemHasClearablePdfAutomationTag(item),
+  );
   if (!targets.length) {
     new ztoolkit.ProgressWindow(config.addonName, { closeTime: 4000 })
       .createLine({

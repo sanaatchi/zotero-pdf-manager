@@ -40,7 +40,12 @@ test("shouldClearMatchTags: match always; skipped only DOI/ISBN", () => {
 
 test("clearSuccessfulMatchTags: single saveTx removes all automation tags", async () => {
   const { clearSuccessfulMatchTags } = loadPdfSources();
-  const tags = new Set(["pdf-mismatch", "pdf-review", "pdf-quarantine", "#keep-me"]);
+  const tags = new Set([
+    "pdf-mismatch",
+    "pdf-review",
+    "pdf-quarantine",
+    "#keep-me",
+  ]);
   let saveCount = 0;
   const item = {
     loadAllData: async () => {},
@@ -69,7 +74,10 @@ test("resolveAutomationTagOnItem: hash and no-hash storage", () => {
     hasTag: (t) => t === "pdf-mismatch" || t === "#pdf-review",
     getTags: () => [{ tag: "pdf-mismatch" }, { tag: "pdf-review" }],
   };
-  assert.equal(resolveAutomationTagOnItem(item, "#pdf-mismatch"), "pdf-mismatch");
+  assert.equal(
+    resolveAutomationTagOnItem(item, "#pdf-mismatch"),
+    "pdf-mismatch",
+  );
   assert.equal(resolveAutomationTagOnItem(item, "#pdf-quarantine"), null);
 });
 
