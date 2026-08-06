@@ -1,16 +1,17 @@
-// @ajan: cursor · @etiket: katman-2, content-audit, pdf-mismatch, no-detach
+// @ajan: cursor · @etiket: katman-2, content-audit, pdf-mismatch, match-tag-clear
 /**
  * Scan already-attached PDFs against parent metadata (PDF text heuristics +
  * optional LLM). Detects wrong binds that slipped past download gates.
  *
- * Mismatch/unverifiable: tag only (#pdf-mismatch / #pdf-review). Never
- * detach or remove attachments or disk files.
+ * Match: clear #pdf-mismatch / #pdf-review / #pdf-quarantine (same as Match
+ * Attachment success). Mismatch/unverifiable: tag only. Never detach.
  */
 import { config } from "../../package.json";
 import { getString } from "../utils/locale";
 import { getPref } from "../utils/prefs";
 import { appendAuditEvent } from "./automationAudit";
 import {
+  clearSuccessfulMatchTags,
   type ContentValidation,
   validateAttachmentContentDetailed,
 } from "./pdfSources";
@@ -84,16 +85,6 @@ async function tagItem(item: Zotero.Item, tag: string): Promise<void> {
   }
 }
 
-async function removeTag(item: Zotero.Item, tag: string): Promise<void> {
-  try {
-    if (!item.hasTag(tag)) return;
-    item.removeTag(tag);
-    await item.saveTx();
-  } catch (e) {
-    ztoolkit.log("content audit untag failed", tag, e);
-  }
-}
-
 function isPdfAttachment(att: Zotero.Item): boolean {
   return Boolean(
     att?.isPDFAttachment?.() ||
@@ -136,8 +127,8 @@ async function listPdfAttachments(item: Zotero.Item): Promise<Zotero.Item[]> {
 }
 
 /**
- * Validate one parent item's PDF attachments. Tags mismatches
- * (#pdf-mismatch / #pdf-review); never detaches.
+ * Validate one parent item's PDF attachments. Match clears mismatch tags;
+ * mismatch/unverifiable only tags. Never detaches.
  */
 export async function auditItemPdfContent(
   item: Zotero.Item,
@@ -170,9 +161,10 @@ export async function auditItemPdfContent(
       let note = `verdict=${verdict}`;
 
       if (plan === "ok") {
-        await removeTag(item, PDF_MISMATCH_TAG);
+        // Same cleanup as Match Attachment success (v1.0.107+).
+        await clearSuccessfulMatchTags(item);
         action = "ok";
-        note = "PDF text matches metadata";
+        note = "PDF text matches metadata — cleared mismatch tags";
       } else if (plan === "tag-mismatch") {
         await tagItem(item, PDF_MISMATCH_TAG);
         await tagItem(item, PDF_REVIEW_TAG);

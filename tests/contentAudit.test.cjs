@@ -1,11 +1,13 @@
-// @ajan: cursor · @etiket: katman-2, tests, content-audit, no-detach
+// @ajan: cursor · @etiket: katman-2, tests, content-audit, match-tag-clear
 const assert = require("node:assert/strict");
 const fs = require("node:fs");
 const path = require("node:path");
 const { test } = require("node:test");
 const esbuild = require("esbuild");
 
-function loadAuditPure() {
+function loadAuditPure(opts = {}) {
+  const verdict = opts.verdict || "match";
+  const clearCalls = opts.clearCalls || [];
   const result = esbuild.buildSync({
     entryPoints: [path.join(process.cwd(), "src/modules/pdfContentAudit.ts")],
     bundle: true,
@@ -36,8 +38,18 @@ function loadAuditPure() {
             "content-audit must not call cleanupRejectedAttachment",
           );
         },
+        clearSuccessfulMatchTags: async (item) => {
+          clearCalls.push(item);
+          for (const tag of [
+            "#pdf-review",
+            "#pdf-quarantine",
+            "#pdf-mismatch",
+          ]) {
+            if (item.hasTag?.(tag)) item.removeTag(tag);
+          }
+        },
         validateAttachmentContentDetailed: async () => ({
-          verdict: "match",
+          verdict,
           pdfText: "",
         }),
       };
@@ -87,6 +99,83 @@ test("summarizeContentAudit counts verdicts (no detached field)", () => {
   assert.equal(sum.detached, undefined);
 });
 
+test("auditItemPdfContent match clears mismatch/review/quarantine tags", async () => {
+  const clearCalls = [];
+  const { auditItemPdfContent } = loadAuditPure({
+    verdict: "match",
+    clearCalls,
+  });
+  const tags = new Set(["#pdf-mismatch", "#pdf-review", "#pdf-quarantine"]);
+  const att = {
+    id: 22,
+    isFileAttachment: () => true,
+    isPDFAttachment: () => true,
+    attachmentContentType: "application/pdf",
+    fileExists: async () => true,
+  };
+  const item = {
+    id: 11,
+    getField: () => "Okunan Kitap",
+    getAttachments: () => [22],
+    hasTag: (t) => tags.has(t),
+    addTag: (t) => tags.add(t),
+    removeTag: (t) => tags.delete(t),
+    saveTx: async () => {},
+  };
+  globalThis.Zotero = {
+    Items: {
+      getAsync: async (id) => (id === 22 ? att : item),
+    },
+  };
+
+  const rows = await auditItemPdfContent(item);
+  assert.equal(rows.length, 1);
+  assert.equal(rows[0].verdict, "match");
+  assert.equal(rows[0].action, "ok");
+  assert.equal(clearCalls.length, 1);
+  assert.equal(tags.has("#pdf-mismatch"), false);
+  assert.equal(tags.has("#pdf-review"), false);
+  assert.equal(tags.has("#pdf-quarantine"), false);
+  assert.match(rows[0].note || "", /cleared mismatch tags/);
+});
+
+test("auditItemPdfContent mismatch keeps tags (no clearSuccessfulMatchTags)", async () => {
+  const clearCalls = [];
+  const { auditItemPdfContent } = loadAuditPure({
+    verdict: "mismatch",
+    clearCalls,
+  });
+  const tags = new Set();
+  const att = {
+    id: 22,
+    isFileAttachment: () => true,
+    isPDFAttachment: () => true,
+    attachmentContentType: "application/pdf",
+    fileExists: async () => true,
+  };
+  const item = {
+    id: 11,
+    getField: () => "Yanlis Kitap",
+    getAttachments: () => [22],
+    hasTag: (t) => tags.has(t),
+    addTag: (t) => tags.add(t),
+    removeTag: (t) => tags.delete(t),
+    saveTx: async () => {},
+  };
+  globalThis.Zotero = {
+    Items: {
+      getAsync: async (id) => (id === 22 ? att : item),
+    },
+  };
+
+  const rows = await auditItemPdfContent(item);
+  assert.equal(rows[0].verdict, "mismatch");
+  assert.equal(rows[0].action, "tagged");
+  assert.equal(clearCalls.length, 0);
+  assert.equal(tags.has("#pdf-mismatch"), true);
+  assert.equal(tags.has("#pdf-review"), true);
+});
+
 test("content audit module + menu + locales: tag-only, no detach", () => {
   const root = process.cwd();
   const audit = fs.readFileSync(
@@ -107,6 +196,11 @@ test("content audit module + menu + locales: tag-only, no detach", () => {
   assert.match(audit, /validateAttachmentContentDetailed/);
   assert.match(audit, /force:\s*true/);
   assert.match(audit, /auditSelectedPdfContent/);
+  assert.match(audit, /clearSuccessfulMatchTags/);
+  assert.match(
+    audit,
+    /plan === "ok"[\s\S]*?await clearSuccessfulMatchTags\(item\)/,
+  );
   assert.doesNotMatch(audit, /cleanupRejectedAttachment/);
   assert.doesNotMatch(audit, /detachMismatch/);
   assert.doesNotMatch(audit, /eraseTx/);
@@ -115,6 +209,7 @@ test("content audit module + menu + locales: tag-only, no detach", () => {
   assert.match(menu, /pdf-content-audit-menu/);
   assert.match(menu, /auditSelectedPdfContent/);
   assert.match(sources, /opts\.force/);
+  assert.match(sources, /export async function clearSuccessfulMatchTags/);
   assert.match(tags, /"#pdf-mismatch"/);
 
   for (const locale of ["en-US", "de", "it-IT"]) {
