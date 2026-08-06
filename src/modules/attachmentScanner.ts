@@ -1,4 +1,4 @@
-// @ajan: claude · @etiket: katman-2, p2, attachmentScanner, safe-regex, stale-mismatch-tag-fix, hash-prefix-normalize
+// @ajan: claude · @etiket: katman-2, p2, attachmentScanner, safe-regex, stale-mismatch-tag-fix, hash-prefix-normalize, library-scope-fix
 import { config } from "../../package.json";
 import { getPref } from "../utils/prefs";
 import { compileUserRegex, safeRegexTest } from "../utils/safeRegex";
@@ -237,10 +237,18 @@ export async function scanAllAttachments() {
   const hidden = ["webpage", "attachment", "note", "annotation"]
     .map((name) => Zotero.ItemTypes.getID(name))
     .join(",");
+  // Scoped to the personal library — same boundary pdfReconciler.ts already
+  // enforces everywhere via `Zotero.Libraries.userLibraryID`. Without this,
+  // a connected group library would get automation tags written to it too,
+  // the same cross-library scope bug already found and fixed once in this
+  // codebase's markdb sync (a sibling extension, different tag system).
+  const libraryID = (Zotero.Libraries as any).userLibraryID;
   const rows =
     (await Zotero.DB.queryAsync(
       `SELECT itemID FROM items WHERE itemTypeID NOT IN (${hidden}) ` +
+        `AND libraryID = ? ` +
         `AND itemID NOT IN (SELECT itemID FROM deletedItems)`,
+      [libraryID],
     )) || [];
   const items: Zotero.Item[] = [];
   for (const row of rows) {
@@ -380,6 +388,12 @@ export async function scanOrphanFiles() {
     return;
   }
 
+  // Deliberately NOT scoped to userLibraryID (unlike scanAllAttachments
+  // above) — this set means "a file already claimed by SOME Zotero item,
+  // don't call it orphan," and that must hold across every library sharing
+  // these watch roots. Restricting it would make a group-library item's
+  // attachment file look unreferenced and get flagged as an orphan
+  // candidate, which is the opposite of what scoping is meant to prevent.
   const referenced = new Set<string>();
   const rows =
     (await Zotero.DB.queryAsync(

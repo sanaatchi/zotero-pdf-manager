@@ -1,4 +1,4 @@
-// @ajan: claude · @etiket: katman-2, tests, attachmentScanner, stale-mismatch-tag-fix
+// @ajan: claude · @etiket: katman-2, tests, attachmentScanner, stale-mismatch-tag-fix, library-scope-fix
 const assert = require("node:assert/strict");
 const { test } = require("node:test");
 const path = require("node:path");
@@ -101,6 +101,70 @@ test("a directory containing only ignorable system files IS reported as empty", 
   );
   assert.deepEqual(orphanFiles, []);
   assert.deepEqual(emptyDirs, ["/root/sub"]);
+});
+
+test("scanAllAttachments scopes its library-wide SQL query to the personal library, not every connected library", async () => {
+  // Regression: the raw SQL query had no libraryID filter at all — running
+  // "Scan entire library" would also tag items in any connected group
+  // library, unlike pdfReconciler.ts's own passes which are deliberately
+  // scoped to Zotero.Libraries.userLibraryID everywhere. Same bug class as
+  // the cross-library markdb staleness fixed once already in LibRart (K3),
+  // now proven against real Zotero: item.js's items table has a NOT NULL
+  // libraryID column, and Zotero.DB.queryAsync(sql, [param]) is the real
+  // `?`-placeholder binding form (verified against zotero/zotero source).
+  const capturedQueries = [];
+  global.Zotero = {
+    Prefs: { get: () => undefined, set: () => {} },
+    ItemTypes: { getID: () => 1 },
+    Libraries: { userLibraryID: 42 },
+    DB: {
+      queryAsync: async (sql, params) => {
+        capturedQueries.push({ sql, params });
+        return [];
+      },
+    },
+  };
+  global.ztoolkit = {
+    ProgressWindow: class {
+      createLine() {
+        return this;
+      }
+      show() {
+        return this;
+      }
+    },
+  };
+  try {
+    const { scanAllAttachments } = loadModule();
+    await scanAllAttachments();
+
+    assert.equal(capturedQueries.length, 1);
+    assert.match(capturedQueries[0].sql, /AND libraryID = \?/);
+    assert.deepEqual(capturedQueries[0].params, [42]);
+  } finally {
+    delete global.Zotero;
+    delete global.ztoolkit;
+  }
+});
+
+test("scanOrphanFiles' 'referenced' query is deliberately NOT library-scoped", () => {
+  // Opposite of the fix above, on purpose: this set means "some Zotero item
+  // already claims this file," and must hold across every library sharing
+  // the watch roots, or a group-library attachment's file would be
+  // misclassified as an orphan.
+  const source = require("node:fs").readFileSync(
+    require("node:path").join(
+      process.cwd(),
+      "src/modules/attachmentScanner.ts",
+    ),
+    "utf8",
+  );
+  const anchor = source.indexOf("const referenced = new Set<string>();");
+  assert.ok(anchor >= 0);
+  const nextQuery = source.indexOf("Zotero.DB.queryAsync(", anchor);
+  const queryEnd = source.indexOf(")) || [];", nextQuery);
+  const querySlice = source.slice(nextQuery, queryEnd);
+  assert.doesNotMatch(querySlice, /libraryID/);
 });
 
 test("scanAttachmentState clears stale #pdf-mismatch/#pdf-review when the item has no file attachment left", async () => {
