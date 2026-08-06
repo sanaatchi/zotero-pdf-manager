@@ -296,8 +296,8 @@ politikası (`AGENTS.md`) uyarınca commit/push/gh-release bekletilmeden yapıld
 
 ## Cursor — runtime triage (2026-08-06, restart doğrulaması)
 
-| ID | Bug | Durum |
-|----|-----|-------|
+| ID     | Bug                                                                                                                                                                          | Durum                                                                                                                            |
+| ------ | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------- |
 | **R1** | `_console.group is not a function` — v1.0.122 polyfill ataması Zotero 9 sandbox'ta non-writable `undefined` üzerinde no-op; toolkit `BasicTool.log` hâlâ `group` çağırıyordu | ✅ kod **v1.0.128** — `defineProperty` + erken bootstrap + `_console` yaması + `log` sarmalayıcı; XPI yayın bekliyor («yayınla») |
 
 Canlı log doğruladı: restart sonrası hâlâ mevcut; reconciler `PDF reconcile started (startup)` çalışıyor; `#pdf-review` tag purge Zotero tarafı (beklenen).

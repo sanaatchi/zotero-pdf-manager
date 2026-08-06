@@ -26,7 +26,10 @@ function ensureConsoleGroupPolyfill(consoleLike?: object | null): void {
         /* ignore */
       }
     };
-    const install = (name: "group" | "groupCollapsed" | "groupEnd", fn: (...args: unknown[]) => void) => {
+    const install = (
+      name: "group" | "groupCollapsed" | "groupEnd",
+      fn: (...args: unknown[]) => void,
+    ) => {
       if (typeof target[name] === "function") return;
       try {
         Object.defineProperty(target, name, {
@@ -82,7 +85,9 @@ function wrapToolkitLog(toolkit: ZoteroToolkit): void {
   toolkit.log = ((...data: Parameters<ZoteroToolkit["log"]>) => {
     ensureConsoleGroupPolyfill();
     try {
-      ensureConsoleGroupPolyfill((toolkit as unknown as { _console?: object })._console);
+      ensureConsoleGroupPolyfill(
+        (toolkit as unknown as { _console?: object })._console,
+      );
     } catch {
       /* ignore */
     }
