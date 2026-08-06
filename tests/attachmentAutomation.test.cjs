@@ -895,7 +895,24 @@ test("Match Attachment rematches when parent has #pdf-mismatch", async () => {
     path: "/library/Wrong Paper.pdf",
     exists: true,
   });
+  const importedResult = createAttachment(harness, {
+    id: 203,
+    mode: "imported",
+    parent,
+    // Real importFromFile copies into storage — path is not the downloads file.
+    path: "/storage/203/Expected Research Paper.pdf",
+  });
+  parent.attachmentIDs = parent.attachmentIDs.filter((id) => id !== 203);
+  harness.items.delete(importedResult.id);
+  harness.files.add("/storage/203/Expected Research Paper.pdf");
+  harness.directories.add("/storage/203");
   harness.selectedItems = [parent];
+  global.Zotero.Attachments.importFromFile = async (input) => {
+    harness.calls.importFromFile.push(input);
+    parent.attachmentIDs.push(importedResult.id);
+    harness.items.set(importedResult.id, importedResult);
+    return importedResult;
+  };
 
   const menu = new harness.module.default();
   const rootMenu = harness.menuRegistrations.find(
@@ -913,11 +930,13 @@ test("Match Attachment rematches when parent has #pdf-mismatch", async () => {
     "/watch/downloads/Expected Research Paper.pdf",
   );
   assert.equal(parent.hasTag("#pdf-mismatch"), false);
-  // downloads/ original must not be inbox-drained
+  // downloads/ original must not be inbox-drained (or renamed away)
   assert.equal(
     harness.files.has("/watch/downloads/Expected Research Paper.pdf"),
     true,
   );
+  // Imported storage copy may be renamed to künye base name
+  assert.deepEqual(importedResult.calls.rename, ["renamed.pdf"]);
   menu.dispose();
 });
 
