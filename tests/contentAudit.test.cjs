@@ -32,7 +32,9 @@ function loadAuditPure() {
     if (id.includes("pdfSources")) {
       return {
         cleanupRejectedAttachment: async () => {
-          throw new Error("content-audit must not call cleanupRejectedAttachment");
+          throw new Error(
+            "content-audit must not call cleanupRejectedAttachment",
+          );
         },
         validateAttachmentContentDetailed: async () => ({
           verdict: "match",
