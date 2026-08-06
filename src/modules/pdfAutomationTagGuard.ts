@@ -23,6 +23,8 @@ const EXPLICIT_MISMATCH_SOURCES = new Set([
 export type MismatchTagContext = {
   source: string;
   run?: string;
+  /** Human-readable validation reason (titleHit/score/bridge) for Extra + audit. */
+  reason?: string;
 };
 
 const clearedAtByItem = new Map<number, number>();

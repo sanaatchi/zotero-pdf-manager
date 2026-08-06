@@ -1,4 +1,4 @@
-// @ajan: claude · @etiket: katman-2, pdf-sources, bridge-guard, ocr-haystack, content-validate, nosource-sync, pdf-candidate-split
+// @ajan: cursor · @etiket: katman-2, pdf-sources, bridge-guard, ocr-haystack, content-validate, nosource-sync, pdf-candidate-split, mismatch-reason
 import { getString } from "../utils/locale";
 import { getPref } from "../utils/prefs";
 import {
@@ -46,7 +46,10 @@ import {
   normalizeItemIdentifiers,
 } from "./metadataCheck";
 import { resolveSubtitleEnrichment } from "./oaPdfBridge";
-import { applyPdfMismatchTags } from "./pdfAutomationTags";
+import {
+  applyPdfMismatchTags,
+  clearMismatchReasonExtra,
+} from "./pdfAutomationTags";
 import type { MismatchTagContext } from "./pdfAutomationTagGuard";
 
 /** Stops further URL/source cascade after quarantine or erase-failed keep. */
@@ -517,6 +520,70 @@ export function decideContentValidation(input: {
   return "mismatch";
 }
 
+/**
+ * Human-readable why content validation chose match/mismatch/unverifiable.
+ * Surfaced on Extra (`ZPDF-Mismatch-Reason:`) + automation audit detail.
+ */
+export function formatContentValidationReason(input: {
+  verdict: ContentValidation;
+  kind: "book" | "other";
+  textChars: number;
+  titleHit: number;
+  score: number;
+  hasIdConflict: boolean;
+  hasIdMatch: boolean;
+  authorExpected: boolean;
+  authorFound: boolean;
+  distinctiveCoverage?: number;
+  bridgeVia?: string;
+  bridgeReason?: string;
+  bridgeForcedMismatch?: boolean;
+}): string {
+  const stats = `titleHit=${input.titleHit.toFixed(2)} score=${input.score.toFixed(2)} author=${
+    input.authorFound ? "yes" : "no"
+  }`;
+  if (input.verdict === "unverifiable") {
+    return input.textChars < 50
+      ? `unverifiable: too little PDF text (${input.textChars} chars)`
+      : `unverifiable: ${stats}`;
+  }
+  if (input.verdict === "skipped") return "validation skipped (pref off)";
+  if (input.verdict === "match") {
+    if (input.hasIdMatch) return `match: ISBN/DOI found in PDF | ${stats}`;
+    return `match: ${stats}`;
+  }
+  // mismatch
+  if (
+    input.bridgeForcedMismatch &&
+    (input.bridgeReason || input.bridgeVia)
+  ) {
+    const via = input.bridgeVia || "bridge";
+    const why = String(input.bridgeReason || "mismatch")
+      .replace(/\s+/g, " ")
+      .trim()
+      .slice(0, 280);
+    return `bridge(${via}): ${why} | ${stats}`;
+  }
+  if (input.hasIdConflict) {
+    return `ISBN/DOI conflict in PDF | ${stats}`;
+  }
+  if (input.kind === "book" && input.authorExpected && !input.authorFound) {
+    const strongTitle = input.titleHit >= 0.65 && input.score >= 0.55;
+    if (!strongTitle) {
+      return `book: author missing and title evidence weak | ${stats}`;
+    }
+  }
+  if (input.kind !== "book" && (input.distinctiveCoverage ?? 1) < 1) {
+    return `article: incomplete distinctive title tokens (${(
+      input.distinctiveCoverage ?? 0
+    ).toFixed(2)}) | ${stats}`;
+  }
+  if (input.kind === "book") {
+    return `book: title/score below match threshold | ${stats}`;
+  }
+  return `title/score below match threshold | ${stats}`;
+}
+
 /** Bridge/LLM must not downgrade a strong local book match (OCR-noisy PDFs). */
 export function isStrongHeuristicContentMatch(input: {
   titleHit: number;
@@ -645,6 +712,7 @@ export async function clearSuccessfulMatchTags(
       changed = true;
     }
     if (changed) await item.saveTx();
+    await clearMismatchReasonExtra(item);
   } catch (e) {
     ztoolkit.log("clearSuccessfulMatchTags failed", e);
   }
@@ -679,10 +747,15 @@ export async function validateAttachmentContentDetailed(
   verdict: ContentValidation;
   pdfText: string;
   enrichedTitle?: string;
+  reason?: string;
 }> {
   // Manual content-audit menus pass force=true so prefs off still scan.
   if (!opts.force && !getPref("pdf.validateContent")) {
-    return { verdict: "skipped", pdfText: "" };
+    return {
+      verdict: "skipped",
+      pdfText: "",
+      reason: "validation skipped (pref off)",
+    };
   }
   // A validated attachmentID is by contract a real, existing attachment —
   // #nosource must be false here regardless of caller (download, local
@@ -737,7 +810,12 @@ export async function validateAttachmentContentDetailed(
       ztoolkit.log(
         `Subtitle enrichment for ${item.id}: "${itemTitle}" → "${enriched}"`,
       );
-      return { verdict: "match", pdfText: text, enrichedTitle: enriched };
+      return {
+        verdict: "match",
+        pdfText: text,
+        enrichedTitle: enriched,
+        reason: `match: subtitle enrichment → "${enriched}"`,
+      };
     }
 
     const structured = compareItemAgainstText(item, text);
@@ -746,20 +824,24 @@ export async function validateAttachmentContentDetailed(
     const titleHit = titleTokenHit(item, text);
     const score = scoreText(item, text);
     const hasIdMatch = hasIdentifierMatch(structured);
+    const hasIdConflict = hasIdentifierConflict(structured);
+    const distinctiveCoverage = distinctiveTitleCoverage(
+      String(item.getField("title") || ""),
+      text,
+    );
+    const kind = book ? "book" : "other";
+    const authorExpected = surname.length > 2 || authorFound;
 
     let heuristic = decideContentValidation({
-      kind: book ? "book" : "other",
+      kind,
       textChars,
       titleHit,
       score,
-      hasIdConflict: hasIdentifierConflict(structured),
+      hasIdConflict,
       hasIdMatch,
-      authorExpected: surname.length > 2 || authorFound,
+      authorExpected,
       authorFound,
-      distinctiveCoverage: distinctiveTitleCoverage(
-        String(item.getField("title") || ""),
-        text,
-      ),
+      distinctiveCoverage,
     });
 
     const strongHeuristicMatch = isStrongHeuristicContentMatch({
@@ -768,6 +850,10 @@ export async function validateAttachmentContentDetailed(
       authorFound,
       hasIdMatch,
     });
+
+    let bridgeVia = "";
+    let bridgeReason = "";
+    let bridgeForcedMismatch = false;
 
     // Local LLM (Ollama via 8756 bridge) when enabled and text is usable.
     if (
@@ -814,6 +900,7 @@ export async function validateAttachmentContentDetailed(
             verdict: "match",
             pdfText: text,
             enrichedTitle: bridgeEnriched,
+            reason: `match: bridge subtitle enrichment → "${bridgeEnriched}"`,
           };
         }
         // Fail-closed for upgrading mismatch→match. Do NOT let bridge/LLM erase a
@@ -821,6 +908,9 @@ export async function validateAttachmentContentDetailed(
         const via = String(llm?.via || "");
         if (llm?.verdict === "mismatch" && !strongHeuristicMatch) {
           heuristic = "mismatch";
+          bridgeForcedMismatch = true;
+          bridgeVia = via;
+          bridgeReason = String(llm.reason || "");
           ztoolkit.log(
             `Bridge content validation → mismatch (${via || "bridge"})`,
             llm.reason || "",
@@ -833,6 +923,8 @@ export async function validateAttachmentContentDetailed(
           );
         } else if (llm?.verdict === "match" && heuristic !== "mismatch") {
           heuristic = "match";
+          bridgeVia = via;
+          bridgeReason = String(llm.reason || "");
           ztoolkit.log(
             `Bridge content validation → match (${via || "bridge"})`,
             llm.reason || "",
@@ -841,6 +933,8 @@ export async function validateAttachmentContentDetailed(
           // Soft: don't erase a heuristic match solely from LLM doubt
         } else if (llm?.verdict === "unverifiable") {
           heuristic = "unverifiable";
+          bridgeVia = via;
+          bridgeReason = String(llm.reason || "");
         } else if (llm?.verdict === "match" && heuristic === "mismatch") {
           ztoolkit.log(
             "Bridge said match but heuristic mismatch — keeping mismatch",
@@ -868,13 +962,33 @@ export async function validateAttachmentContentDetailed(
       );
     }
 
+    const reason = formatContentValidationReason({
+      verdict: heuristic,
+      kind,
+      textChars,
+      titleHit,
+      score,
+      hasIdConflict,
+      hasIdMatch,
+      authorExpected,
+      authorFound,
+      distinctiveCoverage,
+      bridgeVia,
+      bridgeReason,
+      bridgeForcedMismatch,
+    });
+
     if (heuristic === "match") {
       await clearSuccessfulMatchTags(item);
     }
-    return { verdict: heuristic, pdfText: text };
+    return { verdict: heuristic, pdfText: text, reason };
   } catch (e) {
     ztoolkit.log("content validation error", e);
-    return { verdict: "unverifiable", pdfText: "" };
+    return {
+      verdict: "unverifiable",
+      pdfText: "",
+      reason: `unverifiable: PDF text extract failed (${String((e as Error)?.message || e).slice(0, 120)})`,
+    };
   }
 }
 
@@ -1293,10 +1407,8 @@ export async function downloadAndAttach(
   await removeAutomationTag(item, "#nosource");
 
   if (opts.validate !== false) {
-    const { verdict, pdfText } = await validateAttachmentContentDetailed(
-      item,
-      attachment.id,
-    );
+    const { verdict, pdfText, reason } =
+      await validateAttachmentContentDetailed(item, attachment.id);
     if (verdict === "match" || verdict === "skipped") {
       await clearSuccessfulMatchTags(item);
       return attachment;
@@ -1305,6 +1417,7 @@ export async function downloadAndAttach(
     if (verdict === "unverifiable") {
       ztoolkit.log(
         `PDF content unverifiable for ${item.id} — keeping attachment (#pdf-review)`,
+        reason || "",
       );
       await tagItem(item, "#pdf-review");
       return attachment;
@@ -1312,13 +1425,18 @@ export async function downloadAndAttach(
     // mismatch: keep attachment; tag for review (no auto erase/detach).
     ztoolkit.log(
       `PDF content mismatch for ${item.id} — keeping attachment (#pdf-mismatch)`,
+      reason || "",
     );
     const mismatchSource =
       opts.mismatchTagSource ||
       (opts.sourceId ? `download-${opts.sourceId}` : "download-attach");
     await applyPdfMismatchTags(
       item,
-      { source: mismatchSource, run: opts.mismatchTagRun },
+      {
+        source: mismatchSource,
+        run: opts.mismatchTagRun,
+        reason,
+      },
       tagItem,
     );
     void pdfText;
@@ -1639,11 +1757,16 @@ export class LocalFolderSource implements PDFSource {
     ztoolkit.log(
       `Local PDF mismatch for ${item.id} — keeping attachment (#pdf-mismatch)`,
       diskPath,
+      detailed.reason || "",
     );
     const mismatchSource = tagCtx?.source || "local-finalize-passive";
     await applyPdfMismatchTags(
       item,
-      { source: mismatchSource, run: tagCtx?.run },
+      {
+        source: mismatchSource,
+        run: tagCtx?.run,
+        reason: detailed.reason || tagCtx?.reason,
+      },
       tagItem,
     );
     // Keep the real (mismatch) file; only drop other missing-file ghosts.
