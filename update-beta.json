@@ -5,7 +5,7 @@
         {
           "version": "1.0.113",
           "update_link": "https://github.com/sanaatchi/zotero-pdf-manager-releases/releases/download/v1.0.113/zotero-pdf-manager.xpi",
-          "update_hash": "sha512:ed0fd0ef642fc0d96d619c96fc99752f937b7cbd771ca83016003b9ff308aff1df4c42473d58c3fc039c5bd98538ef0fa9a7297ce713326832ae7c5b00a3443d",
+          "update_hash": "sha512:d0a42181731e540ef60bb8cfa675679767d79b30ebd56fc210b627a04d2eecce132b2844da620a7872139bde291a96151e69ef900519a713dca47cbf1a1fe870",
           "applications": {
             "zotero": {
               "strict_min_version": "7.0",
