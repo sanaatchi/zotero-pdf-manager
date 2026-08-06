@@ -266,9 +266,7 @@ test("matchAttachment's two success paths sync source status through the non-thr
   );
   const callSites = menuSrc.match(/await safeSyncSourceStatus\(item\);/g);
   assert.equal(callSites?.length, 2);
-  const wrapperStart = menuSrc.indexOf(
-    "async function safeSyncSourceStatus",
-  );
+  const wrapperStart = menuSrc.indexOf("async function safeSyncSourceStatus");
   assert.ok(wrapperStart >= 0);
   const wrapperEnd = menuSrc.indexOf("\n}\n", wrapperStart);
   const wrapperBody = menuSrc.slice(wrapperStart, wrapperEnd);

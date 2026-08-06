@@ -279,10 +279,7 @@ export default class Menu {
         if (!attachment || !attachment.isAttachment?.()) continue;
         const parentID = Number((attachment as any).parentItemID);
         if (!Number.isInteger(parentID) || parentID <= 0) continue;
-        if (
-          attachmentMutationInFlight.has(parentID) ||
-          parents.has(parentID)
-        ) {
+        if (attachmentMutationInFlight.has(parentID) || parents.has(parentID)) {
           continue;
         }
         const parent = Zotero.Items.get(parentID);
@@ -292,7 +289,11 @@ export default class Menu {
         if (!parent?.isRegularItem() || parent.deleted) continue;
         parents.set(parentID, parent);
       } catch (e) {
-        ztoolkit.log("syncSourceStatusOnRemoval: resolving ID failed", rawID, e);
+        ztoolkit.log(
+          "syncSourceStatusOnRemoval: resolving ID failed",
+          rawID,
+          e,
+        );
       }
     }
     for (const parent of parents.values()) {
