@@ -60,15 +60,15 @@ test("Menu registers relocate handler and Match Attachment calls it", () => {
     menu,
     /registerMatchedAttachmentRelocate\(maybeRenameAndMoveMatchedAttachment\)/,
   );
-  assert.match(menu, /export async function maybeRenameAndMoveMatchedAttachment/);
+  assert.match(
+    menu,
+    /export async function maybeRenameAndMoveMatchedAttachment/,
+  );
   assert.match(
     menu,
     /await maybeRenameAndMoveMatchedAttachment\(\s*existingAttachment/,
   );
-  assert.match(
-    menu,
-    /await maybeRenameAndMoveMatchedAttachment\(attItem\)/,
-  );
+  assert.match(menu, /await maybeRenameAndMoveMatchedAttachment\(attItem\)/);
   // Move gated on autoMove + destDir; rename always attempted after.
   assert.match(menu, /getPref\("autoMove"\)/);
   assert.match(menu, /destDir unset/);
@@ -128,9 +128,8 @@ test("maybeRenameAndMoveMatchedAttachment moves linked file then renames", async
       "expected copy toward destDir",
     );
     const renamedOnResult =
-      result.calls?.rename?.some((name) =>
-        /Author - Title\.pdf/i.test(name),
-      ) || false;
+      result.calls?.rename?.some((name) => /Author - Title\.pdf/i.test(name)) ||
+      false;
     const pathAfter = await result.getFilePathAsync();
     assert.ok(
       renamedOnResult || /Author - Title\.pdf$/i.test(pathAfter || ""),
@@ -171,7 +170,10 @@ test("maybeRenameAndMoveMatchedAttachment renames in place when destDir unset", 
 
     assert.equal(harness.calls.copy.length, 0, "no move without destDir");
     assert.deepEqual(attachment.calls.rename, ["Author - Title.pdf"]);
-    assert.equal(await attachment.getFilePathAsync(), "/inbox/Author - Title.pdf");
+    assert.equal(
+      await attachment.getFilePathAsync(),
+      "/inbox/Author - Title.pdf",
+    );
   } finally {
     harness.cleanup();
   }

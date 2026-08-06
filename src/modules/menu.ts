@@ -1400,9 +1400,8 @@ async function matchAttachment() {
           }
           await clearSuccessfulMatchTags(item);
           await purgeMissingSiblingPdfAttachments(item, existingAttachment.id);
-          const relocated = await maybeRenameAndMoveMatchedAttachment(
-            existingAttachment,
-          );
+          const relocated =
+            await maybeRenameAndMoveMatchedAttachment(existingAttachment);
           const shown = relocated || existingAttachment;
           await maybeEmbedMetadata(item, shown);
           showAttachmentItem(shown);
@@ -1806,7 +1805,11 @@ function isPathUnderRoot(filePath: string, rootDir: string): boolean {
   try {
     const file = PathUtils.normalize(filePath);
     const root = PathUtils.normalize(rootDir);
-    return file === root || file.startsWith(`${root}\\`) || file.startsWith(`${root}/`);
+    return (
+      file === root ||
+      file.startsWith(`${root}\\`) ||
+      file.startsWith(`${root}/`)
+    );
   } catch {
     return false;
   }

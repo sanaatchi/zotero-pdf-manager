@@ -240,7 +240,10 @@ function createHarness(options = {}) {
       this.calls = this.calls || { rename: [] };
       this.calls.rename.push(newName);
       if (!this.currentPath) return false;
-      const next = path.posix.join(path.posix.dirname(this.currentPath), newName);
+      const next = path.posix.join(
+        path.posix.dirname(this.currentPath),
+        newName,
+      );
       if (files.has(path.posix.normalize(this.currentPath))) {
         files.delete(path.posix.normalize(this.currentPath));
         files.add(next);
