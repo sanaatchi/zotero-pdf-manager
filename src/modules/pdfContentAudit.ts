@@ -1,4 +1,4 @@
-// @ajan: cursor · @etiket: katman-2, content-audit, pdf-mismatch, match-tag-clear, multi-pdf-aggregate
+// @ajan: cursor · @etiket: katman-2, content-audit, pdf-mismatch, match-tag-clear, multi-pdf-aggregate, tag-clear-log
 /**
  * Scan already-attached PDFs against parent metadata (PDF text heuristics +
  * optional LLM). Detects wrong binds that slipped past download gates.
@@ -75,9 +75,16 @@ export function summarizeContentAudit(
   return s;
 }
 
+function itemHasAutomationTag(item: Zotero.Item, tag: string): boolean {
+  if (typeof item.hasTag !== "function") return false;
+  if (item.hasTag(tag)) return true;
+  const alt = tag.startsWith("#") ? tag.slice(1) : `#${tag}`;
+  return item.hasTag(alt);
+}
+
 async function tagItem(item: Zotero.Item, tag: string): Promise<void> {
   try {
-    if (item.hasTag(tag)) return;
+    if (itemHasAutomationTag(item, tag)) return;
     item.addTag(tag);
     await item.saveTx();
   } catch (e) {
@@ -191,6 +198,22 @@ export async function auditItemPdfContent(
   if (anyMatch) {
     // One good PDF is enough — clear automation tags once; do not re-tag siblings.
     await clearSuccessfulMatchTags(item);
+    if (itemHasAutomationTag(item, PDF_MISMATCH_TAG)) {
+      void appendAuditEvent({
+        run: "content-audit",
+        action: "pdf-content-audit-tag-clear-failed",
+        outcome: "failed",
+        itemID: item.id,
+        title,
+        detail:
+          "verdict match on attachment but #pdf-mismatch still on item after clearSuccessfulMatchTags",
+      });
+      ztoolkit.log(
+        "content audit: tag clear failed after match",
+        item.id,
+        title,
+      );
+    }
   }
 
   for (const p of pending) {

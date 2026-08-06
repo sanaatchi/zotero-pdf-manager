@@ -1,4 +1,4 @@
-// @ajan: cursor · @etiket: katman-2, tests, match-tag-clear, match-rename-move
+// @ajan: cursor · @etiket: katman-2, tests, match-tag-clear, match-rename-move, tag-hash-normalize
 const assert = require("node:assert/strict");
 const fs = require("node:fs");
 const path = require("node:path");
@@ -43,6 +43,7 @@ test("clearSuccessfulMatchTags removes mismatch + review on parent", async () =>
   const tags = new Set(["#pdf-mismatch", "#pdf-review", "#keep-me"]);
   const item = {
     getTags: () => [...tags].map((tag) => ({ tag })),
+    hasTag: (t) => tags.has(t),
     removeTag: (tag) => {
       tags.delete(tag);
     },
@@ -54,6 +55,24 @@ test("clearSuccessfulMatchTags removes mismatch + review on parent", async () =>
   assert.equal(tags.has("#pdf-mismatch"), false);
   assert.equal(tags.has("#pdf-review"), false);
   assert.equal(tags.has("#keep-me"), true);
+});
+
+test("clearSuccessfulMatchTags: getTags without # but hasTag with #", async () => {
+  const { clearSuccessfulMatchTags } = loadPdfSources();
+  const tags = new Set(["pdf-mismatch", "pdf-review"]);
+  const item = {
+    getTags: () => [...tags].map((tag) => ({ tag })),
+    hasTag: (t) => tags.has(String(t).replace(/^#/, "")),
+    removeTag: (tag) => {
+      tags.delete(String(tag).replace(/^#/, ""));
+    },
+    saveTx: async () => {},
+  };
+
+  await clearSuccessfulMatchTags(item);
+
+  assert.equal(tags.has("pdf-mismatch"), false);
+  assert.equal(tags.has("pdf-review"), false);
 });
 
 test("finalizeLocalAttachment wires shouldClearMatchTags + clearSuccessfulMatchTags", () => {

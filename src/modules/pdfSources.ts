@@ -1,4 +1,4 @@
-// @ajan: cursor · @etiket: katman-2, pdf-sources, match-rename-move, keep-mismatch, thesis-validate, removeAutomationTag
+// @ajan: cursor · @etiket: katman-2, pdf-sources, match-rename-move, keep-mismatch, thesis-validate, removeAutomationTag, tag-hash-normalize
 import { getString } from "../utils/locale";
 import { getPref } from "../utils/prefs";
 import {
@@ -721,10 +721,41 @@ export async function contentMatches(
   return verdict === "match" || verdict === "skipped";
 }
 
+/** Zotero may store tags with or without leading `#` in getTags(). */
+function tagKey(tag: string): string {
+  return String(tag || "")
+    .replace(/^#/, "")
+    .toLowerCase();
+}
+
+function listTagNames(item: Zotero.Item): string[] {
+  const raw = (item.getTags?.() as unknown[]) || [];
+  return raw
+    .map((entry) =>
+      typeof entry === "string"
+        ? entry
+        : String((entry as { tag?: string })?.tag ?? ""),
+    )
+    .filter(Boolean);
+}
+
+/** Exact tag string as stored on the item (for removeTag), or null. */
+function resolveTagOnItem(item: Zotero.Item, tag: string): string | null {
+  const want = tagKey(tag);
+  if (typeof item.hasTag === "function") {
+    if (item.hasTag(tag)) return tag;
+    const alt = tag.startsWith("#") ? tag.slice(1) : `#${tag}`;
+    if (item.hasTag(alt)) return alt;
+  }
+  for (const name of listTagNames(item)) {
+    if (tagKey(name) === want) return name;
+  }
+  return null;
+}
+
 async function tagItem(item: Zotero.Item, tag: string): Promise<void> {
   try {
-    const tags = (item.getTags() as { tag: string }[]) || [];
-    if (tags.some((entry) => entry.tag === tag)) return;
+    if (resolveTagOnItem(item, tag)) return;
     item.addTag(tag);
     await item.saveTx();
   } catch (e) {
@@ -737,10 +768,9 @@ async function removeAutomationTag(
   tag: string,
 ): Promise<void> {
   try {
-    if (typeof item.hasTag === "function" && !item.hasTag(tag)) return;
-    const tags = (item.getTags() as { tag: string }[]) || [];
-    if (!tags.some((entry) => entry.tag === tag)) return;
-    item.removeTag(tag);
+    const resolved = resolveTagOnItem(item, tag);
+    if (!resolved) return;
+    item.removeTag(resolved);
     await item.saveTx();
   } catch (e) {
     ztoolkit.log("removeAutomationTag failed", tag, e);
