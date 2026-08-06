@@ -64,7 +64,9 @@ async function persistMismatchReason(
 }
 
 /** Clear Extra reason when mismatch tags are removed after a good match. */
-export async function clearMismatchReasonExtra(item: Zotero.Item): Promise<void> {
+export async function clearMismatchReasonExtra(
+  item: Zotero.Item,
+): Promise<void> {
   try {
     if (typeof (item as any)?.getField !== "function") return;
     const prev = String(item.getField("extra") || "");

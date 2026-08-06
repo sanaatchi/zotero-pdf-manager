@@ -24,9 +24,7 @@ function loadSources() {
 
 function loadTags() {
   const result = esbuild.buildSync({
-    entryPoints: [
-      path.join(process.cwd(), "src/modules/pdfAutomationTags.ts"),
-    ],
+    entryPoints: [path.join(process.cwd(), "src/modules/pdfAutomationTags.ts")],
     bundle: true,
     platform: "node",
     format: "cjs",

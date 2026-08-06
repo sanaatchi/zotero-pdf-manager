@@ -553,10 +553,7 @@ export function formatContentValidationReason(input: {
     return `match: ${stats}`;
   }
   // mismatch
-  if (
-    input.bridgeForcedMismatch &&
-    (input.bridgeReason || input.bridgeVia)
-  ) {
+  if (input.bridgeForcedMismatch && (input.bridgeReason || input.bridgeVia)) {
     const via = input.bridgeVia || "bridge";
     const why = String(input.bridgeReason || "mismatch")
       .replace(/\s+/g, " ")
