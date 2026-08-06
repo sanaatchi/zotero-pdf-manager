@@ -423,14 +423,13 @@ function scoreText(item: Zotero.Item, rawText: string): number {
  *
  * - match: extractable text supports the item
  * - mismatch: extractable text conflicts — **keep** attachment; tag
- *   `#pdf-mismatch` + `#pdf-review` (auto-detach cancelled; manual audit
- *   can still detach with confirm)
+ *   `#pdf-mismatch` + `#pdf-review` (never auto-detach / erase)
  * - unverifiable: too little extractable text / PDFWorker failure — **keep**
  *   attachment and tag `#pdf-review`
  * - skipped: validation pref off
  *
  * Books: ISBN/DOI conflict → mismatch. Strong title/score or ISBN match → keep.
- * Manual content-audit menu can still scan already-linked wrong files.
+ * Manual content-audit menu tags already-linked wrong files (no detach).
  */
 export type ContentValidation =
   "match" | "mismatch" | "unverifiable" | "skipped";

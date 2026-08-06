@@ -41,7 +41,8 @@ test("validation verdicts: match clears tags; mismatch+unverifiable keep", () =>
   assert.doesNotMatch(source, /throw new AttachStoppedError\("review"/);
   assert.match(source, /finalizeLocalAttachment/);
   assert.doesNotMatch(source, /Yerel PDF künye ile uyuşmuyor/);
-  // Manual audit / cleanup may still erase via cleanupRejectedAttachment.
+  // cleanupRejectedAttachment still exists for non-audit reject paths;
+  // content-audit / mismatch validation never call it to detach.
   assert.match(source, /await opts\.attachment\.eraseTx\(\)/);
   assert.doesNotMatch(
     source,

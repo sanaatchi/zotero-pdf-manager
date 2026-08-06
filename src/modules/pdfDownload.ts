@@ -185,8 +185,8 @@ export function hasAcceptedPdfAttachment(item: Zotero.Item): boolean {
 }
 
 /**
- * No-op: auto-detach of mismatch PDFs cancelled. Kept for call-site
- * compatibility; manual content-audit can still detach with confirm.
+ * No-op: mismatch PDFs are never auto-detached (download or content-audit).
+ * Kept for call-site compatibility.
  */
 export async function detachMismatchPdfAttachments(
   _item: Zotero.Item,

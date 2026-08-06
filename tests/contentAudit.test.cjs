@@ -1,4 +1,4 @@
-// @ajan: cursor · @etiket: katman-2, tests, content-audit
+// @ajan: cursor · @etiket: katman-2, tests, content-audit, no-detach
 const assert = require("node:assert/strict");
 const fs = require("node:fs");
 const path = require("node:path");
@@ -31,7 +31,9 @@ function loadAuditPure() {
     if (id.includes("automationAudit")) return { appendAuditEvent: () => {} };
     if (id.includes("pdfSources")) {
       return {
-        cleanupRejectedAttachment: async () => "cleaned",
+        cleanupRejectedAttachment: async () => {
+          throw new Error("content-audit must not call cleanupRejectedAttachment");
+        },
         validateAttachmentContentDetailed: async () => ({
           verdict: "match",
           pdfText: "",
@@ -48,39 +50,31 @@ function loadAuditPure() {
   return module.exports;
 }
 
-test("decideContentAuditAction: match ok; mismatch tags or detaches; unverifiable review", () => {
+test("decideContentAuditAction: match ok; mismatch always tags; never detach", () => {
   const { decideContentAuditAction } = loadAuditPure();
+  assert.equal(decideContentAuditAction({ verdict: "match" }), "ok");
   assert.equal(
-    decideContentAuditAction({ verdict: "match", detachMismatch: false }),
-    "ok",
-  );
-  assert.equal(
-    decideContentAuditAction({ verdict: "mismatch", detachMismatch: false }),
+    decideContentAuditAction({ verdict: "mismatch" }),
     "tag-mismatch",
   );
   assert.equal(
-    decideContentAuditAction({ verdict: "mismatch", detachMismatch: true }),
-    "detach",
-  );
-  assert.equal(
-    decideContentAuditAction({
-      verdict: "unverifiable",
-      detachMismatch: true,
-    }),
+    decideContentAuditAction({ verdict: "unverifiable" }),
     "tag-review",
   );
-  assert.equal(
-    decideContentAuditAction({ verdict: "skipped", detachMismatch: false }),
-    "skip",
+  assert.equal(decideContentAuditAction({ verdict: "skipped" }), "skip");
+  assert.equal(decideContentAuditAction({ verdict: "error" }), "error");
+  assert.doesNotMatch(
+    String(decideContentAuditAction({ verdict: "mismatch" })),
+    /detach/,
   );
 });
 
-test("summarizeContentAudit counts verdicts and detached", () => {
+test("summarizeContentAudit counts verdicts (no detached field)", () => {
   const { summarizeContentAudit } = loadAuditPure();
   const sum = summarizeContentAudit([
     { verdict: "match", action: "ok" },
     { verdict: "mismatch", action: "tagged" },
-    { verdict: "mismatch", action: "detached" },
+    { verdict: "mismatch", action: "tagged" },
     { verdict: "unverifiable", action: "tagged" },
     { verdict: "no-pdf", action: "skipped" },
   ]);
@@ -88,10 +82,10 @@ test("summarizeContentAudit counts verdicts and detached", () => {
   assert.equal(sum.mismatch, 2);
   assert.equal(sum.unverifiable, 1);
   assert.equal(sum.noPdf, 1);
-  assert.equal(sum.detached, 1);
+  assert.equal(sum.detached, undefined);
 });
 
-test("content audit module + menu + locales wired", () => {
+test("content audit module + menu + locales: tag-only, no detach", () => {
   const root = process.cwd();
   const audit = fs.readFileSync(
     path.join(root, "src/modules/pdfContentAudit.ts"),
@@ -111,7 +105,11 @@ test("content audit module + menu + locales wired", () => {
   assert.match(audit, /validateAttachmentContentDetailed/);
   assert.match(audit, /force:\s*true/);
   assert.match(audit, /auditSelectedPdfContent/);
-  assert.match(audit, /cleanupRejectedAttachment/);
+  assert.doesNotMatch(audit, /cleanupRejectedAttachment/);
+  assert.doesNotMatch(audit, /detachMismatch/);
+  assert.doesNotMatch(audit, /eraseTx/);
+  assert.doesNotMatch(audit, /confirmDialog/);
+  assert.doesNotMatch(audit, /pdf-content-audit-detach/);
   assert.match(menu, /pdf-content-audit-menu/);
   assert.match(menu, /auditSelectedPdfContent/);
   assert.match(sources, /opts\.force/);
@@ -123,6 +121,9 @@ test("content audit module + menu + locales wired", () => {
       "utf8",
     );
     assert.match(ftl, /^pdf-content-audit-menu\s*=/m);
-    assert.match(ftl, /^pdf-content-audit-detach-confirm\s*=/m);
+    assert.match(ftl, /^pdf-content-audit-done\s*=/m);
+    assert.match(ftl, /#pdf-mismatch/);
+    assert.doesNotMatch(ftl, /pdf-content-audit-detach-confirm/);
+    assert.doesNotMatch(ftl, /pdf-content-audit-detached/);
   }
 });

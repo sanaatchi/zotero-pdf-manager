@@ -1,4 +1,4 @@
-# @ajan: cursor · @etiket: katman-2, locale, oa-search
+# @ajan: cursor · @etiket: katman-2, locale, content-audit, no-detach
 attachment-manager = Attachment Manager
 attach-new-file = Allega nuovo file
 rename-move-attachment = Rinomina e sposta allegato
@@ -121,9 +121,7 @@ pdf-content-metadata-menu = Cerca metadati dal contenuto del PDF
 pdf-content-audit-menu = Verifica contenuto PDF allegato rispetto ai metadati…
 pdf-content-audit-empty = Nessun elemento selezionato
 pdf-content-audit-start = Controllo contenuto PDF per { $count } elemento/i…
-pdf-content-audit-done = Controllo — { $match } ok, { $mismatch } non corrispondenti, { $review } da rivedere
-pdf-content-audit-detach-confirm = Scollegare { $count } allegato/i PDF non corrispondente/i? I file restano su disco.
-pdf-content-audit-detached = Scollegati { $count } allegato/i non corrispondenti
+pdf-content-audit-done = Controllo — { $match } ok, { $mismatch } non corrispondenti (tenuti + #pdf-mismatch), { $review } da rivedere
 scanner-scan-selected = Analizza gli elementi selezionati
 scanner-scan-library = Analizza l'intera libreria
 scanner-scan-orphans = Cerca file orfani nella cartella allegati

@@ -1,4 +1,4 @@
-# @ajan: cursor · @etiket: katman-2, locale, oa-search
+# @ajan: cursor · @etiket: katman-2, locale, content-audit, no-detach
 attachment-manager = Anhang-Manager
 attach-new-file = Neue Datei anhängen
 rename-move-attachment = Anhang umbenennen und verschieben
@@ -120,9 +120,7 @@ pdf-content-metadata-menu = Metadaten aus dem PDF-Inhalt recherchieren
 pdf-content-audit-menu = Angehängten PDF-Inhalt mit Metadaten prüfen…
 pdf-content-audit-empty = Keine Einträge ausgewählt
 pdf-content-audit-start = PDF-Inhalt für { $count } Eintrag/Einträge prüfen…
-pdf-content-audit-done = Inhaltsprüfung — { $match } OK, { $mismatch } Abweichung, { $review } Prüfung
-pdf-content-audit-detach-confirm = { $count } abweichende(n) PDF-Anhang/Anhänge trennen? Dateien bleiben auf der Festplatte.
-pdf-content-audit-detached = { $count } abweichende(r) Anhang/Anhänge getrennt
+pdf-content-audit-done = Inhaltsprüfung — { $match } OK, { $mismatch } Abweichung (behalten + #pdf-mismatch), { $review } Prüfung
 scanner-scan-selected = Ausgewählte Einträge auf Anhangprobleme prüfen
 scanner-scan-library = Gesamte Bibliothek auf Anhangprobleme prüfen
 scanner-scan-orphans = Anhangordner auf verwaiste Dateien prüfen

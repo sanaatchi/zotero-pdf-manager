@@ -1,8 +1,8 @@
-<!-- @ajan: cursor · @etiket: katman-2, eksik-raporu, watch-root-parent -->
+<!-- @ajan: cursor · @etiket: katman-2, eksik-raporu, content-audit-no-detach -->
 
 # Cursor — Katman 2 Eksikler Raporu
 
-**Tarih:** 2026-08-06 · **Sürüm:** PDF Manager **v1.0.104**  
+**Tarih:** 2026-08-06 · **Sürüm:** PDF Manager **v1.0.105**  
 **Analiz:** ürün ↔ `referanslar/katman-2/` ↔ GitHub (Attanger, Zotadata, Zoplicate,
 ZotAssets, File Utility, Attachment Scanner, ozefe/yoktez).
 
@@ -14,15 +14,16 @@ ZotAssets, File Utility, Attachment Scanner, ozefe/yoktez).
 | Gerçek açık iş?           | Checklist Bölüm B (kullanıcı) + isteğe bağlı P3 |
 | Yeni zorunlu XPI portu?   | **Yok** — GitHub taraması yeni P1 üretmedi      |
 
-### Son eklenen (v1.0.104)
+### Son eklenen (v1.0.105)
 
 | Madde                                           | Not                                                                                                        |
 | ----------------------------------------------- | ---------------------------------------------------------------------------------------------------------- |
-| Watch root = `1A_E_KAYNAKLARIM` (tüm altklasör) | Varsayılan + migrate parent; nested Dışı düşer; indeks recursive (`MAX_WALK_DEPTH` 8)                      |
+| Validate attached mismatch: ek kaldırma yok     | Content-audit yalnız `#pdf-mismatch`/`#pdf-review`; confirm-detach + eraseTx kaldırıldı                    |
+| Watch root = `1A_E_KAYNAKLARIM` (tüm altklasör) | Varsayılan + migrate parent; nested Dışı düşer; indeks recursive (`MAX_WALK_DEPTH` 8) (v1.0.104)           |
 | Seargeant alt başlık çekirdek trust (v1.0.103)  | LibGen kısa core + boş yazar; `titleCorePhrase` colon-before-fold; Devlet thrash korunur; köprü + XPI      |
 | LibGen başlık ISBN/edition/`b l` temizliği      | Adorno attach; `cleanLibgenTitle` + ISBN bypass (v1.0.102)                                                 |
 | 100’lük alan skoru + Şarkiyatçılık (v1.0.101)   | Federated Σ(puan/100×kalite); paren sameWork; LibGen ov&lt;0.7 ISBN/same-work; OA attach ISBN              |
-| Uyumsuz PDF otomatik silme iptal (v1.0.100)     | mismatch → ek kalır + `#pdf-mismatch`; auto-detach yok; manuel audit onaylı detach                         |
+| Uyumsuz PDF otomatik silme iptal (v1.0.100)     | mismatch → ek kalır + `#pdf-mismatch`; auto-detach yok; manuel audit de detach etmez (v1.0.105)            |
 | Doğru PDF false-positive / yeniden indir (99)   | Güçlü başlıkta yazarsız match; LLM ezemez; rejectedUrls                                                    |
 | Prefetch bar / thrash kapısı (v1.0.98)          | Kısa başlık yazar zorunlu; LibGen ov≥0.7; sibling MD5 skip; köprü restart + XPI                            |
 | LibGen agresif eşleştirme kapısı (v1.0.97)      | Sahte ov=1.0 / ISBN false-friend / kısa TR başlık / tek-token; köprü restart + XPI                         |

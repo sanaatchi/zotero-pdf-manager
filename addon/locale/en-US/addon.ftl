@@ -1,4 +1,4 @@
-# @ajan: cursor · @etiket: katman-2, locale, oa-search
+# @ajan: cursor · @etiket: katman-2, locale, content-audit, no-detach
 attachment-manager = Attachment Manager
 attach-new-file = Attach New File
 rename-move-attachment = Rename and Move Attachment
@@ -122,9 +122,7 @@ pdf-content-metadata-menu = Research Metadata from PDF Content
 pdf-content-audit-menu = Validate attached PDF content vs metadata…
 pdf-content-audit-empty = No items selected
 pdf-content-audit-start = Checking PDF content for { $count } item(s)…
-pdf-content-audit-done = Content check — { $match } match, { $mismatch } mismatch, { $review } review
-pdf-content-audit-detach-confirm = Detach { $count } mismatched PDF attachment(s)? Disk copies are kept (orphan-ready rename / downloads rescue).
-pdf-content-audit-detached = Detached { $count } mismatched attachment(s)
+pdf-content-audit-done = Content check — { $match } match, { $mismatch } mismatch (kept + #pdf-mismatch), { $review } review
 scanner-scan-selected = Scan selected items for attachment problems
 scanner-scan-library = Scan entire library for attachment problems
 scanner-scan-orphans = Scan attachment root for orphan files

@@ -1,16 +1,16 @@
-// @ajan: cursor · @etiket: katman-2, content-audit, pdf-mismatch
+// @ajan: cursor · @etiket: katman-2, content-audit, pdf-mismatch, no-detach
 /**
  * Scan already-attached PDFs against parent metadata (PDF text heuristics +
  * optional LLM). Detects wrong binds that slipped past download gates.
  *
- * Default: tag + report. Optional confirm detaches mismatches (disk kept).
+ * Mismatch/unverifiable: tag only (#pdf-mismatch / #pdf-review). Never
+ * detach or remove attachments or disk files.
  */
 import { config } from "../../package.json";
 import { getString } from "../utils/locale";
 import { getPref } from "../utils/prefs";
 import { appendAuditEvent } from "./automationAudit";
 import {
-  cleanupRejectedAttachment,
   type ContentValidation,
   validateAttachmentContentDetailed,
 } from "./pdfSources";
@@ -26,10 +26,8 @@ export type ContentAuditRow = {
   attachmentID: number;
   title: string;
   verdict: ContentValidation | "no-pdf" | "error";
-  action: "ok" | "tagged" | "detached" | "skipped" | "error";
+  action: "ok" | "tagged" | "skipped" | "error";
   note?: string;
-  /** Kept for optional detach after report. */
-  pdfText?: string;
 };
 
 export type ContentAuditSummary = {
@@ -40,18 +38,14 @@ export type ContentAuditSummary = {
   skipped: number;
   noPdf: number;
   errors: number;
-  detached: number;
 };
 
-/** Pure: decide tags / detach for one verdict. */
+/** Pure: decide tags for one verdict (never detach). */
 export function decideContentAuditAction(input: {
   verdict: ContentValidation | "no-pdf" | "error";
-  detachMismatch: boolean;
-}): "ok" | "tag-mismatch" | "detach" | "tag-review" | "skip" | "error" {
+}): "ok" | "tag-mismatch" | "tag-review" | "skip" | "error" {
   if (input.verdict === "match") return "ok";
-  if (input.verdict === "mismatch") {
-    return input.detachMismatch ? "detach" : "tag-mismatch";
-  }
+  if (input.verdict === "mismatch") return "tag-mismatch";
   if (input.verdict === "unverifiable") return "tag-review";
   if (input.verdict === "error") return "error";
   return "skip";
@@ -68,7 +62,6 @@ export function summarizeContentAudit(
     skipped: 0,
     noPdf: 0,
     errors: 0,
-    detached: 0,
   };
   for (const r of rows) {
     if (r.verdict === "match") s.match++;
@@ -77,7 +70,6 @@ export function summarizeContentAudit(
     else if (r.verdict === "no-pdf") s.noPdf++;
     else if (r.verdict === "error") s.errors++;
     else s.skipped++;
-    if (r.action === "detached") s.detached++;
   }
   return s;
 }
@@ -144,14 +136,12 @@ async function listPdfAttachments(item: Zotero.Item): Promise<Zotero.Item[]> {
 }
 
 /**
- * Validate one parent item's PDF attachments. When detachMismatch is false,
- * only tags (#pdf-mismatch / #pdf-review).
+ * Validate one parent item's PDF attachments. Tags mismatches
+ * (#pdf-mismatch / #pdf-review); never detaches.
  */
 export async function auditItemPdfContent(
   item: Zotero.Item,
-  opts: { detachMismatch?: boolean } = {},
 ): Promise<ContentAuditRow[]> {
-  const detachMismatch = !!opts.detachMismatch;
   const title = String(item.getField("title") || `#${item.id}`);
   const pdfs = await listPdfAttachments(item);
   if (!pdfs.length) {
@@ -170,12 +160,12 @@ export async function auditItemPdfContent(
   const rows: ContentAuditRow[] = [];
   for (const att of pdfs) {
     try {
-      const { verdict, pdfText } = await validateAttachmentContentDetailed(
+      const { verdict } = await validateAttachmentContentDetailed(
         item,
         att.id,
         { force: true },
       );
-      const plan = decideContentAuditAction({ verdict, detachMismatch });
+      const plan = decideContentAuditAction({ verdict });
       let action: ContentAuditRow["action"] = "skipped";
       let note = `verdict=${verdict}`;
 
@@ -187,20 +177,7 @@ export async function auditItemPdfContent(
         await tagItem(item, PDF_MISMATCH_TAG);
         await tagItem(item, PDF_REVIEW_TAG);
         action = "tagged";
-        note = "Content mismatch — tagged #pdf-mismatch";
-      } else if (plan === "detach") {
-        const cleaned = await cleanupRejectedAttachment({
-          attachment: att,
-          pdfText,
-          finalCreatedByThisRun: null,
-        });
-        await tagItem(item, PDF_MISMATCH_TAG);
-        await tagItem(item, PDF_REVIEW_TAG);
-        action = cleaned === "cleaned" ? "detached" : "error";
-        note =
-          cleaned === "cleaned"
-            ? "Mismatch — detached (disk copy kept)"
-            : "Mismatch — detach failed; tagged for review";
+        note = "Content mismatch — tagged #pdf-mismatch (attachment kept)";
       } else if (plan === "tag-review") {
         await tagItem(item, PDF_REVIEW_TAG);
         action = "tagged";
@@ -214,7 +191,6 @@ export async function auditItemPdfContent(
         verdict,
         action,
         note,
-        pdfText: plan === "tag-mismatch" ? pdfText : undefined,
       });
 
       void appendAuditEvent({
@@ -285,9 +261,9 @@ th,td{text-align:left;padding:8px;border-bottom:1px solid #8883}
 <div class="summary">
   ${sum.scanned} tarandı —
   <b class="ok">${sum.match} uyumlu</b>,
-  <b class="bad">${sum.mismatch} uyuşmazlık</b>,
+  <b class="bad">${sum.mismatch} uyuşmazlık</b> (ekler kalır + #pdf-mismatch),
   <b class="muted">${sum.unverifiable} doğrulanamaz</b>,
-  ${sum.noPdf} PDF yok, ${sum.detached} ayrıldı, ${sum.errors} hata
+  ${sum.noPdf} PDF yok, ${sum.errors} hata
 </div>
 <table><thead><tr><th>Sonuç</th><th>Öğe</th><th>İşlem</th><th>Not</th></tr></thead>
 <tbody>${body}</tbody></table>
@@ -322,12 +298,9 @@ async function openContentAuditReport(rows: ContentAuditRow[]): Promise<void> {
   }
 }
 
-function confirmDialog(message: string): boolean {
-  return Boolean(ztoolkit.getGlobal("confirm")(message));
-}
-
 /**
- * Menu entry: scan selection → tag mismatches → report → optional detach.
+ * Menu entry: scan selection → tag mismatches → report.
+ * Never detaches or erases attachments.
  */
 export async function auditSelectedPdfContent(): Promise<ContentAuditSummary> {
   const pane = Zotero.getActiveZoteroPane?.() ?? null;
@@ -363,7 +336,7 @@ export async function auditSelectedPdfContent(): Promise<ContentAuditSummary> {
       text: `[${i + 1}/${items.length}] ${String(item.getField("title") || item.id).slice(0, 60)}`,
       progress: Math.round(((i + 1) / items.length) * 100),
     });
-    const rows = await auditItemPdfContent(item, { detachMismatch: false });
+    const rows = await auditItemPdfContent(item);
     allRows.push(...rows);
   }
 
@@ -382,59 +355,6 @@ export async function auditSelectedPdfContent(): Promise<ContentAuditSummary> {
   popup.startCloseTimer(6000);
 
   await openContentAuditReport(allRows);
-
-  if (sum.mismatch > 0) {
-    const ok = confirmDialog(
-      getString("pdf-content-audit-detach-confirm", {
-        args: { count: sum.mismatch },
-      }),
-    );
-    if (ok) {
-      let detached = 0;
-      for (const row of allRows) {
-        if (row.verdict !== "mismatch" || !row.attachmentID) continue;
-        const item = await Zotero.Items.getAsync(row.itemID);
-        const att = await Zotero.Items.getAsync(row.attachmentID);
-        if (!item || !att) continue;
-        // Re-read text if we didn't keep it (shouldn't happen for mismatch).
-        let pdfText = row.pdfText || "";
-        if (!pdfText) {
-          try {
-            const again = await validateAttachmentContentDetailed(
-              item,
-              att.id,
-              { force: true },
-            );
-            pdfText = again.pdfText;
-          } catch {
-            /* best-effort */
-          }
-        }
-        const cleaned = await cleanupRejectedAttachment({
-          attachment: att,
-          pdfText,
-          finalCreatedByThisRun: null,
-        });
-        if (cleaned === "cleaned") {
-          detached++;
-          row.action = "detached";
-          row.note = "Mismatch — detached (disk copy kept)";
-        }
-        await tagItem(item, PDF_MISMATCH_TAG);
-        await tagItem(item, PDF_REVIEW_TAG);
-      }
-      sum.detached = detached;
-      new ztoolkit.ProgressWindow(config.addonName, { closeTime: 5000 })
-        .createLine({
-          text: getString("pdf-content-audit-detached", {
-            args: { count: detached },
-          }),
-          type: "success",
-        })
-        .show();
-      await openContentAuditReport(allRows);
-    }
-  }
 
   return sum;
 }
