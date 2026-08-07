@@ -210,6 +210,27 @@ test("new Zotero items enter the debounced automatic reconcile queue", () => {
   assert.match(preferences, /preference="[^"]+\.pdf\.autoAttachThreshold"/);
   assert.match(preferences, /preference="[^"]+\.pdf\.reviewThreshold"/);
   assert.match(preferences, /preference="[^"]+\.pdf\.addSettleMs"/);
+  // Float thresholds must not go through ensureNumberPref (Math.floor → 0).
+  const preferenceScript = fs.readFileSync(
+    path.join(root, "src/modules/preferenceScript.ts"),
+    "utf8",
+  );
+  assert.match(
+    preferenceScript,
+    /ensureUnitIntervalPref\("pdf\.autoAttachThreshold"/,
+  );
+  assert.match(
+    preferenceScript,
+    /ensureUnitIntervalPref\("pdf\.reviewThreshold"/,
+  );
+  assert.doesNotMatch(
+    preferenceScript,
+    /ensureNumberPref\("pdf\.autoAttachThreshold"/,
+  );
+  assert.doesNotMatch(
+    preferenceScript,
+    /ensureNumberPref\("pdf\.reviewThreshold"/,
+  );
   assert.match(reconciler, /Zotero\.Notifier\.registerObserver/);
   assert.match(reconciler, /event === "add"/);
   assert.match(reconciler, /event === "trash" \|\| event === "delete"/);

@@ -1,4 +1,4 @@
-// @ajan: cursor · @etiket: katman-2, prefs, watch-root-parent, disk-audit
+// @ajan: cursor · @etiket: katman-2, prefs, watch-root-parent, disk-audit, unit-interval-pref
 import { config } from "../../package.json";
 import { getString } from "../utils/locale";
 import { getPref, setPref } from "../utils/prefs";
@@ -97,8 +97,10 @@ export async function registerPrefsScripts(_window: Window) {
   ensureBooleanPref("autoRenameOnModifyDelayEnabled", false);
   ensureNumberPref("autoRenameOnModifyDelayMs", 0);
   ensureNumberPref("pdf.periodicMinutes", 30);
-  ensureNumberPref("pdf.autoAttachThreshold", 0.85);
-  ensureNumberPref("pdf.reviewThreshold", 0.6);
+  // 0–1 floats — never Math.floor via ensureNumberPref (0.85→0 corrupted
+  // every prefs open → "score X below auto-attach 0" / mass #pdf-candidate).
+  ensureUnitIntervalPref("pdf.autoAttachThreshold", 0.85);
+  ensureUnitIntervalPref("pdf.reviewThreshold", 0.6);
   ensureNumberPref("pdf.addSettleMs", 1000);
   ensureBooleanPref("pdf.saveOaToDownloads", true);
   ensureNumberPref("pdf.onlineMaxPerRun", 10);
@@ -224,6 +226,31 @@ function getNonNegativeIntegerPref(key: string, fallback: number) {
 
 function ensureNumberPref(key: string, fallback: number) {
   setPref(key, getNonNegativeIntegerPref(key, fallback));
+}
+
+/**
+ * Match thresholds are 0–1 floats. `ensureNumberPref` floors via
+ * Math.floor — opening prefs once turned 0.85/0.6 into 0/0.
+ * Also repair the corruption signature (stored 0 with non-zero default).
+ */
+export function normalizeUnitInterval(
+  value: unknown,
+  fallback: number,
+): number {
+  const parsed =
+    typeof value === "number" ? value : Number.parseFloat(`${value ?? ""}`);
+  if (!Number.isFinite(parsed) || parsed < 0 || parsed > 1) {
+    return fallback;
+  }
+  // Floor-corruption: defaults 0.85/0.6 became integer 0.
+  if (parsed === 0 && fallback > 0) {
+    return fallback;
+  }
+  return parsed;
+}
+
+function ensureUnitIntervalPref(key: string, fallback: number) {
+  setPref(key, normalizeUnitInterval(getPref(key), fallback));
 }
 
 function bindNumberPrefInput(

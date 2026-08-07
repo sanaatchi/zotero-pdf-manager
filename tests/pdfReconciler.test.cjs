@@ -95,6 +95,21 @@ test("match confidence thresholds classify attach / review / skip", () => {
   assert.equal(classifyMatchConfidence(1, 0.85, 0.6), "attach");
 });
 
+test("unit-interval prefs repair floor-corruption (0.85→0)", () => {
+  const { normalizeUnitInterval } = loadModule(
+    "src/modules/preferenceScript.ts",
+  );
+  assert.equal(normalizeUnitInterval(0.85, 0.85), 0.85);
+  assert.equal(normalizeUnitInterval(0.6, 0.6), 0.6);
+  assert.equal(normalizeUnitInterval(0, 0.85), 0.85);
+  assert.equal(normalizeUnitInterval(0, 0.6), 0.6);
+  assert.equal(normalizeUnitInterval("0.9", 0.85), 0.9);
+  assert.equal(normalizeUnitInterval(-1, 0.85), 0.85);
+  assert.equal(normalizeUnitInterval(1.5, 0.85), 0.85);
+  // Intentional zero only when fallback is also 0 (not used for match thresholds).
+  assert.equal(normalizeUnitInterval(0, 0), 0);
+});
+
 test("reconcile considers only regular items without a PDF", () => {
   global.Zotero = {
     Prefs: {

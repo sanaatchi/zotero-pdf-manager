@@ -1,4 +1,4 @@
-// @ajan: cursor · @etiket: katman-2, pdf-sources, bridge-guard, ocr-haystack, content-validate, nosource-sync, pdf-candidate-split, mismatch-reason, encoding-gate, re-ocr-validate, tr-i-fold, sentence-tr-override, author-line-gate, no-validate-subtitle-enrich, title-length-aware, isbn-conflict-soft, tr-pdf-encoding, medium-cov-soft, medium-author-noyear, field-weights-score, validated-pdf-lock, pdfkitap, dirzon
+// @ajan: cursor · @etiket: katman-2, pdf-sources, bridge-guard, ocr-haystack, content-validate, nosource-sync, pdf-candidate-split, mismatch-reason, encoding-gate, re-ocr-validate, tr-i-fold, sentence-tr-override, author-line-gate, no-validate-subtitle-enrich, title-length-aware, isbn-conflict-soft, tr-pdf-encoding, medium-cov-soft, medium-author-noyear, field-weights-score, validated-pdf-lock, pdfkitap, dirzon, review-reason-coverage
 import { getString } from "../utils/locale";
 import { getPref } from "../utils/prefs";
 import {
@@ -2412,7 +2412,8 @@ export class LocalFolderSource implements PDFSource {
       (titleBand === "long" &&
         distRatio >= TITLE_LENGTH.LONG_COVERAGE_SOFT &&
         (best.authorMatch || best.hit >= TITLE_LENGTH.LONG_TITLE_HIT_SOFT));
-    if (decision === "attach" && !distOk) {
+    const demotedForCoverage = decision === "attach" && !distOk;
+    if (demotedForCoverage) {
       decision = "review";
     }
     if (decision === "attach") {
@@ -2428,7 +2429,9 @@ export class LocalFolderSource implements PDFSource {
         status: "review",
         file: best.f,
         score: best.score,
-        reason: `score ${best.score.toFixed(2)} below auto-attach ${autoAttach}`,
+        reason: demotedForCoverage
+          ? `distinctive coverage ${(distRatio ?? 0).toFixed(2)} below auto-attach gate (score ${best.score.toFixed(2)})`
+          : `score ${best.score.toFixed(2)} below auto-attach ${autoAttach}`,
       };
     }
     return { status: "none" };
