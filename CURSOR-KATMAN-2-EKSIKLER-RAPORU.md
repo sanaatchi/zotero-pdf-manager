@@ -8,21 +8,21 @@ ZotAssets, File Utility, Attachment Scanner, ozefe/yoktez).
 
 ## Özet hüküm
 
-| Soru                      | Cevap                                                                  |
-| ------------------------- | ---------------------------------------------------------------------- |
-| Açık **P1** ürün boşluğu? | **Yok** — Yalnız kopyalar + clear sıkılaştırma (yanlış PDF riski)      |
-| Gerçek açık iş?           | Checklist Bölüm B (kullanıcı) + isteğe bağlı P3                        |
-| Yeni zorunlu XPI portu?   | **Yok** — GitHub taraması yeni P1 üretmedi                             |
-| İki uçlu denetim?         | **v1.0.156** MD özet + ayrık Çöz eşleşmeler / Yalnız kopyalar          |
+| Soru                      | Cevap                                                             |
+| ------------------------- | ----------------------------------------------------------------- |
+| Açık **P1** ürün boşluğu? | **Yok** — Yalnız kopyalar + clear sıkılaştırma (yanlış PDF riski) |
+| Gerçek açık iş?           | Checklist Bölüm B (kullanıcı) + isteğe bağlı P3                   |
+| Yeni zorunlu XPI portu?   | **Yok** — GitHub taraması yeni P1 üretmedi                        |
+| İki uçlu denetim?         | **v1.0.156** MD özet + ayrık Çöz eşleşmeler / Yalnız kopyalar     |
 
 ### Son eklenen (v1.0.156)
 
-| Madde                 | Not                                                                                         |
-| --------------------- | ------------------------------------------------------------------------------------------- |
-| Yalnız kopyalar       | Prefs `pdf-disk-audit-bidir-copies-apply` → `quarantineOnly` (eşleşme bağlama yok)          |
-| Çöz eşleşmeler        | Ayrı düğme; yalnız clear link; karantina yok; dry-run kapalıyken güçlü uyarı                |
-| Clear skor sıkı       | `_pdf_quarantine` asla clear; Roman I≠II; kısa başlıkta shared/score eşiği yükseltilir      |
-| MD Ne yapmalı         | Önce «Yalnız kopyalar» önerir                                                               |
+| Madde           | Not                                                                                    |
+| --------------- | -------------------------------------------------------------------------------------- |
+| Yalnız kopyalar | Prefs `pdf-disk-audit-bidir-copies-apply` → `quarantineOnly` (eşleşme bağlama yok)     |
+| Çöz eşleşmeler  | Ayrı düğme; yalnız clear link; karantina yok; dry-run kapalıyken güçlü uyarı           |
+| Clear skor sıkı | `_pdf_quarantine` asla clear; Roman I≠II; kısa başlıkta shared/score eşiği yükseltilir |
+| MD Ne yapmalı   | Önce «Yalnız kopyalar» önerir                                                          |
 
 ### Son eklenen (v1.0.155)
 

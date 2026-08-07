@@ -230,7 +230,9 @@ export function extractRomanVolumeToken(text: string): string | null {
     const roman = m[1].toUpperCase();
     // Reject non-roman lookalikes (e.g. "mix", "cid") — must be valid roman.
     if (!/^[IVXLCDM]+$/.test(roman)) continue;
-    if (!/^M{0,3}(CM|CD|D?C{0,3})(XC|XL|L?X{0,3})(IX|IV|V?I{0,3})$/.test(roman)) {
+    if (
+      !/^M{0,3}(CM|CD|D?C{0,3})(XC|XL|L?X{0,3})(IX|IV|V?I{0,3})$/.test(roman)
+    ) {
       continue;
     }
     return roman;
@@ -1303,9 +1305,7 @@ export async function applyBidirectionalSuggestions(opts?: {
 }> {
   const dryRun = isDiskAuditDryRun();
   const doMatches = opts?.quarantineOnly ? false : opts?.matches !== false;
-  const doQuarantine = opts?.quarantineOnly
-    ? true
-    : opts?.quarantine !== false;
+  const doQuarantine = opts?.quarantineOnly ? true : opts?.quarantine !== false;
   const dir = await resolveReportDir();
   const last = PathUtils.join(dir, "last-bidirectional.json");
   if (!(await IOUtils.exists(last).catch(() => false))) {
@@ -1340,9 +1340,7 @@ export async function applyBidirectionalSuggestions(opts?: {
     };
   }
   const rows = doMatches
-    ? (
-        (report?.matchSuggestions?.rows as BidirMatchSuggestion[]) || []
-      ).filter(
+    ? ((report?.matchSuggestions?.rows as BidirMatchSuggestion[]) || []).filter(
         (r) =>
           r &&
           (r.kind === "orphan_to_missing" ||
