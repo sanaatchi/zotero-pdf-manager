@@ -391,9 +391,16 @@ test("prefs wire bidirectional scan + open + apply + copies-only", () => {
     "utf8",
   );
   assert.match(xhtml, /pdf-disk-audit-bidir-heading/);
+  assert.match(xhtml, /pdf-disk-audit-options-heading/);
+  assert.match(xhtml, /pdf-disk-audit-detail-heading/);
   assert.match(xhtml, /id="pdf-disk-audit-bidir"/);
   assert.match(xhtml, /id="pdf-disk-audit-bidir-apply"/);
   assert.match(xhtml, /id="pdf-disk-audit-bidir-copies-apply"/);
+  // Compact secondary rows: no per-row help descriptions.
+  assert.doesNotMatch(
+    xhtml,
+    /pdf-disk-audit-orphan-help[\s\S]*?pdf-disk-audit-orphan"/,
+  );
   for (const loc of ["en-US", "de", "it-IT", "tr-TR"]) {
     const ftl = fs.readFileSync(
       path.join(root, "addon/locale", loc, "preferences.ftl"),
@@ -401,6 +408,9 @@ test("prefs wire bidirectional scan + open + apply + copies-only", () => {
     );
     assert.match(ftl, /pdf-disk-audit-bidir-heading/);
     assert.match(ftl, /pdf-disk-audit-bidir-help/);
+    assert.match(ftl, /pdf-disk-audit-options-heading/);
+    assert.match(ftl, /pdf-disk-audit-detail-heading/);
+    assert.match(ftl, /pdf-disk-audit-detail-help/);
     assert.match(ftl, /pdf-disk-audit-bidir\s*=/);
     assert.match(ftl, /pdf-disk-audit-bidir-apply\s*=/);
     assert.match(ftl, /pdf-disk-audit-bidir-copies-apply\s*=/);

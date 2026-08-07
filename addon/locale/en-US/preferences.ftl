@@ -1,3 +1,4 @@
+# @ajan: cursor · @etiket: katman-2, locale, en-US, prefs-layout
 directory = Root Directory:
 choose-dir = 
     .label = Choose…

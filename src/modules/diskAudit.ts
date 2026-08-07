@@ -1,4 +1,4 @@
-// @ajan: cursor · @etiket: katman-2, disk-audit, hash-verify-copies, pathutils-safe, orphan, name-content, multi-attach, apply, path-fold, rename-safe, cross-folder-dupe, bridge-unavailable, human-md-report
+// @ajan: cursor · @etiket: katman-2, disk-audit, hash-verify-copies, pathutils-safe, orphan, name-content, multi-attach, apply, path-fold, rename-safe, cross-folder-dupe, bridge-unavailable, human-md-report, quarantine-skip, dry-run-ux
 /**
  * Prefs «Disk / ek denetimi» — scan (report) + apply (quarantine / rename / ID create).
  * Copy audit also flags same basename+size across folders (cross-folder duplicates).
@@ -378,6 +378,11 @@ export function isUnderDisinda(path: string): boolean {
     path.replace(/\\/g, "/").toLowerCase().includes(`/${DISINDA_TOKEN}/`) ||
     path.replace(/\\/g, "/").toLowerCase().includes(`/${DISINDA_TOKEN}`)
   );
+}
+
+/** True when path is under `_pdf_quarantine` (never inventory / match / clear). */
+export function isUnderQuarantine(path: string): boolean {
+  return /_pdf_quarantine/i.test(String(path || ""));
 }
 
 export function proposeAttangerRename(
@@ -865,9 +870,11 @@ export async function runOrphanDiskAudit(opts?: {
     (path) => safePathKey(path),
     (path) => safeFilename(path),
   );
-  const filtered = includeDisinda
-    ? orphanFiles
-    : orphanFiles.filter((p) => !isUnderDisinda(p));
+  const filtered = orphanFiles.filter((p) => {
+    if (isUnderQuarantine(p)) return false;
+    if (!includeDisinda && isUnderDisinda(p)) return false;
+    return true;
+  });
   const payload = {
     kind: "orphan",
     dryRun: true as const,
@@ -1010,7 +1017,7 @@ export async function applyOrphanRemediation(opts?: {
   }
   showProgress(
     dryRun
-      ? `Plan: ${withId.length} kimlikli öğe, ${withoutId.length} karantina`
+      ? `Uygulanmadı — deneme açık: Plan ${withId.length} kimlikli, ${withoutId.length} karantina`
       : `Çözüldü: ${created} öğe oluşturuldu, ${quarantined} karantinaya, ${failed} hata`,
     8000,
   );
@@ -1048,6 +1055,7 @@ export async function runNameContentDiskAudit(opts?: {
     (path) => safeFilename(path),
   );
   let targets = orphanFiles.filter((p) => p.toLowerCase().endsWith(".pdf"));
+  targets = targets.filter((p) => !isUnderQuarantine(p));
   if (!includeDisinda) targets = targets.filter((p) => !isUnderDisinda(p));
   // Prefer Kaynaklar orphans when present under roots
   const kaynaklarPref = targets.filter((p) =>
@@ -1285,7 +1293,7 @@ export async function applyNameContentRenames(opts?: {
   }
   showProgress(
     dryRun
-      ? `Yeniden adlandırma planı: ${planned} dosya`
+      ? `Uygulanmadı — deneme açık: Plan ${planned} yeniden adlandırma`
       : `Yeniden adlandırıldı: ${renamed}, hata: ${failed}`,
     8000,
   );
@@ -1456,6 +1464,7 @@ export async function runCopyDiskAudit(opts?: {
   for (const root of roots) {
     const walk = async (dir: string, depth: number) => {
       if (depth > 8) return;
+      if (isUnderQuarantine(dir)) return;
       if (!includeDisindaPref() && isUnderDisinda(dir)) return;
       let children: string[] = [];
       try {
@@ -1472,10 +1481,12 @@ export async function runCopyDiskAudit(opts?: {
           continue;
         }
         if (st?.type === "directory") {
+          if (isUnderQuarantine(child)) continue;
           await walk(child, depth + 1);
           continue;
         }
         if (!String(child).toLowerCase().endsWith(".pdf")) continue;
+        if (isUnderQuarantine(child)) continue;
         pdfs.push(child);
         const size = Number(st?.size || 0);
         if (size > 0) {
@@ -1789,7 +1800,7 @@ export async function applyCopyQuarantine(opts?: {
   }
   showProgress(
     dryRun
-      ? `Karantina planı: ${total} işlem`
+      ? `Uygulanmadı — deneme açık: Plan ${total} karantina`
       : `Karantina: ${quarantined} taşındı, ${detached} ek kaldırıldı, ${failed} hata`,
     8000,
   );
@@ -1950,7 +1961,7 @@ function summarizeApply(r: DiskAuditApplyResult): string {
   if (r.detail === "cancelled") return "Çöz iptal edildi";
   if (r.detail === "no-report") return "Rapor yok — önce Tara";
   if (r.dryRun) {
-    return `Plan kaydedildi (deneme): öğe ${r.created ?? 0}, karantina ${r.quarantined ?? 0}, ad ${r.renamed ?? 0}, plan ${r.planned ?? 0}`;
+    return `Uygulanmadı — deneme açık: öğe ${r.created ?? 0}, karantina ${r.quarantined ?? 0}, ad ${r.renamed ?? 0}, plan ${r.planned ?? 0}`;
   }
   return `Bitti: öğe ${r.created ?? 0}, karantina ${r.quarantined ?? 0}, ad ${r.renamed ?? 0}, ek kaldırıldı ${r.detached ?? 0}, hata ${r.failed ?? 0}`;
 }

@@ -1,4 +1,4 @@
-// @ajan: cursor · @etiket: katman-2, p2, attachmentScanner, safe-regex, stale-mismatch-tag-fix, hash-prefix-normalize, library-scope-fix, path-fold
+// @ajan: cursor · @etiket: katman-2, p2, attachmentScanner, safe-regex, stale-mismatch-tag-fix, hash-prefix-normalize, library-scope-fix, path-fold, quarantine-skip
 import { config } from "../../package.json";
 import { getPref } from "../utils/prefs";
 import { compileUserRegex, safeRegexTest } from "../utils/safeRegex";
@@ -331,12 +331,20 @@ export async function classifyOrphanTree(
       const type = await lister.statType(child).catch(() => null);
       if (!type) continue;
       if (type === "directory") {
+        // Quarantine is intentional holding — never inventory as orphans / empties.
+        if (/_pdf_quarantine/i.test(child)) {
+          hasContent = true;
+          continue;
+        }
         if (await walk(child)) {
           hasContent = true;
         } else {
           emptyDirs.push(child);
         }
       } else if (isIgnorableFile(child)) {
+        continue;
+      } else if (/_pdf_quarantine/i.test(child)) {
+        hasContent = true;
         continue;
       } else if (referenced.has(normalizeKey(child))) {
         hasContent = true;

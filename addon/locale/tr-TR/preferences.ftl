@@ -1,4 +1,4 @@
-# @ajan: cursor · @etiket: katman-2, locale, tr-TR, teach-ui
+# @ajan: cursor · @etiket: katman-2, locale, tr-TR, teach-ui, prefs-layout
 directory = Kök dizin:
 choose-dir =
     .label = Seç…
