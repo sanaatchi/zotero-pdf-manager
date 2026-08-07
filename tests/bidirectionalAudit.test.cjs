@@ -53,10 +53,7 @@ test("title overlap rejects single-token false friends", () => {
   const bad = detail("Dünya tarihi", "Deliliğin tarihi");
   assert.equal(bad.shared, 1);
   assert.ok(bad.shared < 2);
-  const good = detail(
-    "Tiyatroda düşünsellik",
-    "Tiyatroda düşünsellik",
-  );
+  const good = detail("Tiyatroda düşünsellik", "Tiyatroda düşünsellik");
   assert.ok(good.shared >= 2);
   assert.equal(good.score, 1);
 });

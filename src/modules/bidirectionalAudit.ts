@@ -294,10 +294,7 @@ export function suggestOrphanToMissingMatches(
       }
       if (!typeOk) score *= 0.75;
       if (detail.shared < 1 || score < minScore) continue;
-      const clear =
-        typeOk &&
-        detail.shared >= minShared &&
-        score >= clearScore;
+      const clear = typeOk && detail.shared >= minShared && score >= clearScore;
       all.push({
         kind: "orphan_to_missing",
         score: Math.round(score * 1000) / 1000,
@@ -712,7 +709,6 @@ export async function openLastBidirectionalReport(): Promise<void> {
   }
 }
 
-
 export async function applyBidirectionalSuggestions(opts?: {
   onProgress?: (p: { text: string; progress?: number }) => void;
   skipConfirm?: boolean;
@@ -762,7 +758,8 @@ export async function applyBidirectionalSuggestions(opts?: {
   const rows = (
     (report?.matchSuggestions?.rows as BidirMatchSuggestion[]) || []
   ).filter((r) => r && r.kind === "orphan_to_missing");
-  const targets = (opts?.clearOnly !== false ? rows.filter((r) => r.clear) : rows);
+  const targets =
+    opts?.clearOnly !== false ? rows.filter((r) => r.clear) : rows;
   const losers: string[] = report?.crossFolderUnlinkedLosers || [];
 
   if (!targets.length && !losers.length) {
@@ -919,7 +916,6 @@ export async function runBidirectionalApplyWithProgress(): Promise<void> {
     progress.close();
   }
 }
-
 
 export async function runBidirectionalAuditWithProgress(): Promise<BidirAuditSummary> {
   const progress = new ztoolkit.ProgressWindow(config.addonName, {

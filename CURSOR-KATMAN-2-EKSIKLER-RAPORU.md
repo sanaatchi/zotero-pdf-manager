@@ -17,12 +17,12 @@ ZotAssets, File Utility, Attachment Scanner, ozefe/yoktez).
 
 ### Son eklenen (v1.0.152)
 
-| Madde                             | Not                                                                                          |
-| --------------------------------- | -------------------------------------------------------------------------------------------- |
-| Orphan↔missing eşleşme önerisi    | Başlık token örtüşmesi; clear ≥2 ortak token + skor≥0.75 (`matchSuggestions` rapor)          |
-| İki uçlu Çöz                      | Net eşleşmeleri `linkFromFile`; çapraz kopya losers → karantina; dry-run destekli            |
-| downloads çapraz tarama           | Kaynaklar kardeş `downloads/` envantere eklenir (orphan sayılmaz; copy peer tespiti)         |
-| Locale CRLF test                  | `projectSurface` help/label regex `\r?\n` (Windows checkout)                                 |
+| Madde                          | Not                                                                                  |
+| ------------------------------ | ------------------------------------------------------------------------------------ |
+| Orphan↔missing eşleşme önerisi | Başlık token örtüşmesi; clear ≥2 ortak token + skor≥0.75 (`matchSuggestions` rapor)  |
+| İki uçlu Çöz                   | Net eşleşmeleri `linkFromFile`; çapraz kopya losers → karantina; dry-run destekli    |
+| downloads çapraz tarama        | Kaynaklar kardeş `downloads/` envantere eklenir (orphan sayılmaz; copy peer tespiti) |
+| Locale CRLF test               | `projectSurface` help/label regex `\r?\n` (Windows checkout)                         |
 
 ### Son eklenen (v1.0.151)
 
