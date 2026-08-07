@@ -1,8 +1,8 @@
-<!-- @ajan: cursor · @etiket: katman-2, eksik-raporu, periodical, console-group-polyfill, author-line-gate, no-validate-subtitle-enrich, title-length-aware, isbn-prefer-any, tr-pdf-encoding, medium-cov-soft -->
+<!-- @ajan: cursor · @etiket: katman-2, eksik-raporu, periodical, console-group-polyfill, author-line-gate, no-validate-subtitle-enrich, title-length-aware, isbn-prefer-any, tr-pdf-encoding, medium-cov-soft, mismatch-note-clear, validated-pdf-lock, field-weights-score, medium-author-noyear -->
 
 # Cursor — Katman 2 Eksikler Raporu
 
-**Tarih:** 2026-08-06 · **Sürüm:** PDF Manager **v1.0.140** (yayınlanmadı)  
+**Tarih:** 2026-08-07 · **Sürüm:** PDF Manager **v1.0.143** (yayınlanmadı)  
 **Analiz:** ürün ↔ `referanslar/katman-2/` ↔ GitHub (Attanger, Zotadata, Zoplicate,
 ZotAssets, File Utility, Attachment Scanner, ozefe/yoktez).
 
@@ -13,6 +13,19 @@ ZotAssets, File Utility, Attachment Scanner, ozefe/yoktez).
 | Açık **P1** ürün boşluğu? | **Yok** — P2-1…P2-6 + B1–B5 + G0/G1 kapalı      |
 | Gerçek açık iş?           | Checklist Bölüm B (kullanıcı) + isteğe bağlı P3 |
 | Yeni zorunlu XPI portu?   | **Yok** — GitHub taraması yeni P1 üretmedi      |
+
+### Son eklenen (v1.0.143)
+
+| Madde                                 | Not                                                                              |
+| ------------------------------------- | -------------------------------------------------------------------------------- |
+| Content-validate = 100’lük alan skoru | `fieldWeights.ts` / `scoreText` → 0..1 `(N/100)`; eski additive ~1.8 kalktı      |
+| Medium bilingual noyear               | cov 0.2–0.5 + titleHit≥0.5 → year opsiyonel (Demir 713); cov≥0.5 hâlâ year ister |
+
+### Son eklenen (v1.0.141)
+
+| Madde                                      | Not                                                                                           |
+| ------------------------------------------ | --------------------------------------------------------------------------------------------- |
+| Successful match Extra: Note de temizlenir | `clearMismatchReasonExtra` → Reason **+** `ZPDF-Mismatch-Note:`; item 713 Extra clutter clear |
 
 ### Son eklenen (v1.0.140)
 

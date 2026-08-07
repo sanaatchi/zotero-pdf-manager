@@ -621,13 +621,13 @@ test("21-word long title softens distinctiveCoverage < 1", () => {
     }),
     "match",
   );
-  // Medium without year still demands coverage === 1.
+  // Medium cov≥0.5 without year → mismatch (missing distinctive stem FP).
   assert.equal(
     decideContentValidation({
       kind: "other",
       textChars: 800,
       titleHit: 0.9,
-      score: 0.8,
+      score: 0.55,
       hasIdConflict: false,
       hasIdMatch: false,
       authorExpected: true,
@@ -637,6 +637,27 @@ test("21-word long title softens distinctiveCoverage < 1", () => {
       yearFound: false,
     }),
     "mismatch",
+  );
+  // Medium bilingual without year needs stronger titleHit (≥0.5).
+  assert.equal(
+    articleDistinctiveCoverageOk({
+      titleLengthBand: "medium",
+      distinctiveCoverage: 0.4,
+      authorFound: true,
+      titleHit: 0.57,
+      yearFound: false,
+    }),
+    true,
+  );
+  assert.equal(
+    articleDistinctiveCoverageOk({
+      titleLengthBand: "medium",
+      distinctiveCoverage: 0.25,
+      authorFound: true,
+      titleHit: 0.38,
+      yearFound: false,
+    }),
+    false,
   );
   // Medium + author+year soft coverage (OCR/encoding false positives).
   assert.equal(
@@ -654,7 +675,7 @@ test("21-word long title softens distinctiveCoverage < 1", () => {
       kind: "other",
       textChars: 800,
       titleHit: 0.71,
-      score: 1.5,
+      score: 0.55,
       hasIdConflict: false,
       hasIdMatch: false,
       authorExpected: true,
@@ -662,6 +683,23 @@ test("21-word long title softens distinctiveCoverage < 1", () => {
       distinctiveCoverage: 0.5,
       titleLengthBand: "medium",
       yearFound: true,
+    }),
+    "match",
+  );
+  // Demir 2005: cov 0.40 + titleHit 0.57 + author, no year; weighted score ≈0.42.
+  assert.equal(
+    decideContentValidation({
+      kind: "other",
+      textChars: 12000,
+      titleHit: 0.57,
+      score: 0.42,
+      hasIdConflict: false,
+      hasIdMatch: false,
+      authorExpected: true,
+      authorFound: true,
+      distinctiveCoverage: 0.4,
+      titleLengthBand: "medium",
+      yearFound: false,
     }),
     "match",
   );

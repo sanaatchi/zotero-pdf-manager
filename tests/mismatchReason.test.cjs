@@ -1,4 +1,4 @@
-// @ajan: cursor · @etiket: katman-2, tests, pdf-mismatch, mismatch-reason
+// @ajan: cursor · @etiket: katman-2, tests, pdf-mismatch, mismatch-reason, mismatch-note-clear
 const assert = require("node:assert/strict");
 const path = require("node:path");
 const { test } = require("node:test");
@@ -147,4 +147,56 @@ test("Extra mismatch reason upsert/clear round-trip", () => {
   const cleared = clearExtraPrefixedLine(withReason, MISMATCH_REASON_PREFIX);
   assert.equal(cleared.includes("ZPDF-Mismatch-Reason:"), false);
   assert.match(cleared, /ZPDF-Source-Path:/);
+});
+
+test("clearMismatchExtraLines drops Reason and Note, keeps other Extra", () => {
+  const {
+    MISMATCH_REASON_PREFIX,
+    MISMATCH_NOTE_PREFIX,
+    clearMismatchExtraLines,
+    upsertExtraPrefixedLine,
+  } = loadTags();
+  let extra = "DOI: 10.1/x\nZPDF-Source-Path: D:\\a.pdf";
+  extra = upsertExtraPrefixedLine(
+    extra,
+    MISMATCH_REASON_PREFIX,
+    "article: incomplete distinctive title tokens (0.40)",
+  );
+  extra = upsertExtraPrefixedLine(
+    extra,
+    MISMATCH_NOTE_PREFIX,
+    "Cleared false #pdf-mismatch (batch3). FP: stale tag",
+  );
+  assert.match(extra, /ZPDF-Mismatch-Reason:/);
+  assert.match(extra, /ZPDF-Mismatch-Note:/);
+  const cleared = clearMismatchExtraLines(extra);
+  assert.equal(cleared.includes("ZPDF-Mismatch-Reason:"), false);
+  assert.equal(cleared.includes("ZPDF-Mismatch-Note:"), false);
+  assert.match(cleared, /DOI: 10\.1\/x/);
+  assert.match(cleared, /ZPDF-Source-Path:/);
+});
+
+test("clearMismatchReasonExtra clears Note as well as Reason", async () => {
+  const { clearMismatchReasonExtra } = loadTags();
+  let saved = "";
+  const item = {
+    getField(name) {
+      if (name === "extra") {
+        return (
+          "ZPDF-Mismatch-Note: Cleared false #pdf-mismatch (batch3)\n" +
+          "ZPDF-Mismatch-Reason: article: incomplete | titleHit=0.57\n" +
+          "DOI: 10.1/x"
+        );
+      }
+      return "";
+    },
+    setField(name, value) {
+      if (name === "extra") saved = value;
+    },
+    async saveTx() {},
+  };
+  await clearMismatchReasonExtra(item);
+  assert.equal(saved.includes("ZPDF-Mismatch-Reason:"), false);
+  assert.equal(saved.includes("ZPDF-Mismatch-Note:"), false);
+  assert.match(saved, /DOI: 10\.1\/x/);
 });

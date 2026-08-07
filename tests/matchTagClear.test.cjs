@@ -228,7 +228,8 @@ test("finalizeLocalAttachment wires shouldClearMatchTags + clearSuccessfulMatchT
     source,
     /if \(shouldClearMatchTags\(detailed\.verdict,\s*via\)\) \{[\s\S]*?await clearSuccessfulMatchTags\(item\)/,
   );
-  assert.match(source, /return relocateAfterSuccessfulMatch\(attachment\)/);
+  assert.match(source, /relocateAfterSuccessfulMatch\(attachment\)/);
+  assert.match(source, /persistValidatedPdfLock/);
   // No early return that skips tag clear when validate pref is off.
   assert.doesNotMatch(
     source,

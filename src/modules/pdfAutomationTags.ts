@@ -1,14 +1,21 @@
-// @ajan: cursor · @etiket: katman-2, pdf-mismatch, automation-audit, tag-guard, mismatch-reason
+// @ajan: cursor · @etiket: katman-2, pdf-mismatch, automation-audit, tag-guard, mismatch-reason, mismatch-note-clear, validated-pdf-lock
 import { appendAuditEvent } from "./automationAudit";
 import {
   type MismatchTagContext,
   shouldSuppressPassiveMismatchTag,
 } from "./pdfAutomationTagGuard";
+import { clearValidatedPdfLock } from "./pdfValidatedLock";
 
 export type TagItemFn = (item: Zotero.Item, tag: string) => Promise<void>;
 
 /** Extra line so the mismatch cause is visible on the item (not only in debug log). */
 export const MISMATCH_REASON_PREFIX = "ZPDF-Mismatch-Reason:";
+
+/**
+ * Manual / batch resolution note left on Extra (e.g. cleared FP history).
+ * Cleared together with Reason on a successful match so Extra stays clean.
+ */
+export const MISMATCH_NOTE_PREFIX = "ZPDF-Mismatch-Note:";
 
 export function upsertExtraPrefixedLine(
   extra: string,
@@ -39,6 +46,14 @@ export function clearExtraPrefixedLine(extra: string, prefix: string): string {
     .join("\n");
 }
 
+/** Drop Reason + Note Extra lines (successful match cleanup). */
+export function clearMismatchExtraLines(extra: string): string {
+  return clearExtraPrefixedLine(
+    clearExtraPrefixedLine(extra, MISMATCH_REASON_PREFIX),
+    MISMATCH_NOTE_PREFIX,
+  );
+}
+
 async function persistMismatchReason(
   item: Zotero.Item,
   reason: string | undefined,
@@ -63,14 +78,14 @@ async function persistMismatchReason(
   }
 }
 
-/** Clear Extra reason when mismatch tags are removed after a good match. */
+/** Clear Extra reason + note when mismatch tags are removed after a good match. */
 export async function clearMismatchReasonExtra(
   item: Zotero.Item,
 ): Promise<void> {
   try {
     if (typeof (item as any)?.getField !== "function") return;
     const prev = String(item.getField("extra") || "");
-    const next = clearExtraPrefixedLine(prev, MISMATCH_REASON_PREFIX);
+    const next = clearMismatchExtraLines(prev);
     if (next === prev) return;
     item.setField("extra", next);
     await item.saveTx();
@@ -112,6 +127,7 @@ export async function applyPdfMismatchTags(
   await tagItem(item, "#pdf-mismatch");
   await tagItem(item, "#pdf-review");
   await persistMismatchReason(item, ctx.reason);
+  await clearValidatedPdfLock(item);
   const reason = String(ctx.reason || "")
     .replace(/\s+/g, " ")
     .trim();

@@ -35,9 +35,10 @@ test("finalizeLocalAttachment relocates only after shouldClearMatchTags", () => 
   );
   assert.match(
     source,
-    /if \(shouldClearMatchTags\(detailed\.verdict,\s*via\)\) \{[\s\S]*?return relocateAfterSuccessfulMatch\(attachment\)/,
+    /if \(shouldClearMatchTags\(detailed\.verdict,\s*via\)\) \{[\s\S]*?relocateAfterSuccessfulMatch\(attachment\)/,
   );
   assert.match(source, /registerMatchedAttachmentRelocate/);
+  assert.match(source, /persistValidatedPdfLock/);
   // Mismatch / unverifiable must not call relocate.
   const mismatchBlock = source.slice(
     source.indexOf("Local PDF mismatch"),

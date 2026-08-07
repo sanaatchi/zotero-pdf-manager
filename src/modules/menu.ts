@@ -1,4 +1,4 @@
-/* @ajan: cursor · @etiket: katman-2, menu, match-rename-move, mismatch-rematch, isbn-phone-filter */
+/* @ajan: cursor · @etiket: katman-2, menu, match-rename-move, mismatch-rematch, isbn-phone-filter, validated-pdf-lock */
 /*eslint no-constant-condition: ["error", { "checkLoops": false }]*/
 import { getString } from "../utils/locale";
 import { config } from "../../package.json";
@@ -56,6 +56,12 @@ import {
   purgeMissingSiblingPdfAttachments,
   registerMatchedAttachmentRelocate,
 } from "./pdfSources";
+import {
+  collectAttachedPdfPathClaims,
+  isPathClaimedByOther,
+  normalizeClaimPath,
+  type PdfPathClaim,
+} from "./pdfValidatedLock";
 import { openOaSearchWindow } from "./oaSearchWindow";
 import {
   registerPdfManagerMenubar,
@@ -1327,6 +1333,35 @@ function getAttachmentItems(hasParent = true) {
   return attachmentItems;
 }
 
+async function rememberMatchedPathClaim(
+  claims: Map<string, PdfPathClaim>,
+  item: Zotero.Item,
+  attachment: Zotero.Item,
+  previousPath?: string,
+): Promise<void> {
+  if (previousPath) {
+    const oldKey = normalizeClaimPath(previousPath);
+    if (oldKey) claims.delete(oldKey);
+  }
+  let path = "";
+  try {
+    path = String(
+      (await attachment.getFilePathAsync?.()) || previousPath || "",
+    );
+  } catch {
+    path = previousPath || "";
+  }
+  const key = normalizeClaimPath(path);
+  if (!key) return;
+  claims.set(key, {
+    parentID: item.id,
+    parentKey: String(item.key || ""),
+    attachmentID: attachment.id,
+    path,
+    validated: false,
+  });
+}
+
 async function matchAttachment() {
   const parentItems = new Map<number, Zotero.Item>();
   const selectedAttachmentIDs = new Set<number>();
@@ -1393,6 +1428,8 @@ async function matchAttachment() {
       : "";
   const readPDFTitle = getPref("readPDFtitle") as string;
   ztoolkit.log("read PDF title: ", readPDFTitle);
+  // Paths already linked to another parent must not rematch onto a second item.
+  const pathClaims = await collectAttachedPdfPathClaims();
   for (const item of items) {
     const itemtitle = getPlainTitle(item);
     // `#pdf-mismatch` = wrong PDF kept (v1.0.105). Still search sourceDir /
@@ -1409,7 +1446,10 @@ async function matchAttachment() {
       continue;
     }
     ztoolkit.log("processing item: ", itemtitle);
-    const rankedFiles = files
+    const unlockedFiles = files.filter(
+      (file) => !isPathClaimedByOther(file.path, item.id, pathClaims),
+    );
+    const rankedFiles = unlockedFiles
       .map((file) => ({
         file,
         match: scoreAttachmentMetadata(item, file.name),
@@ -1537,6 +1577,12 @@ async function matchAttachment() {
           const relocated =
             await maybeRenameAndMoveMatchedAttachment(existingAttachment);
           const shown = relocated || existingAttachment;
+          await rememberMatchedPathClaim(
+            pathClaims,
+            item,
+            shown,
+            matchedFile.path,
+          );
           await maybeEmbedMetadata(item, shown);
           showAttachmentItem(shown);
           await ZoteroPane.selectItem(shown.id);
@@ -1589,6 +1635,12 @@ async function matchAttachment() {
         // always renames to künye and lands under destDir when configured.
         const relocated = await maybeRenameAndMoveMatchedAttachment(attItem);
         const shown = relocated || attItem;
+        await rememberMatchedPathClaim(
+          pathClaims,
+          item,
+          shown,
+          matchedFile.path,
+        );
         await maybeEmbedMetadata(item, shown);
         showAttachmentItem(shown);
         await ZoteroPane.selectItem(shown.id);

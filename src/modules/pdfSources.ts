@@ -1,6 +1,11 @@
-// @ajan: cursor · @etiket: katman-2, pdf-sources, bridge-guard, ocr-haystack, content-validate, nosource-sync, pdf-candidate-split, mismatch-reason, encoding-gate, re-ocr-validate, tr-i-fold, sentence-tr-override, author-line-gate, no-validate-subtitle-enrich, title-length-aware, isbn-conflict-soft, tr-pdf-encoding, medium-cov-soft
+// @ajan: cursor · @etiket: katman-2, pdf-sources, bridge-guard, ocr-haystack, content-validate, nosource-sync, pdf-candidate-split, mismatch-reason, encoding-gate, re-ocr-validate, tr-i-fold, sentence-tr-override, author-line-gate, no-validate-subtitle-enrich, title-length-aware, isbn-conflict-soft, tr-pdf-encoding, medium-cov-soft, medium-author-noyear, field-weights-score, validated-pdf-lock
 import { getString } from "../utils/locale";
 import { getPref } from "../utils/prefs";
+import {
+  CONTENT_SCORE,
+  contentScoreKind,
+  weightedKindScore,
+} from "./fieldWeights";
 import {
   buildIndex,
   getWatchRoots,
@@ -50,6 +55,11 @@ import {
   clearMismatchReasonExtra,
 } from "./pdfAutomationTags";
 import type { MismatchTagContext } from "./pdfAutomationTagGuard";
+import {
+  clearValidatedPdfLock,
+  lockValidatedAttachment,
+  persistValidatedPdfLock,
+} from "./pdfValidatedLock";
 
 /** Stops further URL/source cascade after quarantine or erase-failed keep. */
 export class AttachStoppedError extends Error {
@@ -398,12 +408,17 @@ export const TITLE_LENGTH = {
   LONG_COVERAGE_SOFT: 0.85,
   /** Long titles: titleHit floor for soft coverage without author. */
   LONG_TITLE_HIT_SOFT: 0.85,
-  /** Medium articles: soft floor when author+year corroborate (OCR/encoding). */
+  /** Medium articles: soft floor when author corroborates (OCR/encoding). */
   MEDIUM_COVERAGE_SOFT: 0.5,
-  /** Medium bilingual: lower cov + titleHit when author+year present. */
+  /** Medium bilingual: lower cov + titleHit when author (+ year|strong titleHit). */
   MEDIUM_BILINGUAL_COVERAGE_SOFT: 0.2,
   /** Medium bilingual: titleHit floor paired with bilingual coverage soft. */
   MEDIUM_BILINGUAL_TITLE_HIT_SOFT: 0.35,
+  /**
+   * Medium bilingual without year in PDF body: require stronger titleHit
+   * (TR journal PDFs often omit the künye year in extracted text).
+   */
+  MEDIUM_NOYEAR_TITLE_HIT_SOFT: 0.5,
 } as const;
 
 export type TitleLengthBand = "short" | "medium" | "long";
@@ -429,7 +444,11 @@ export function classifyTitleLength(title: string): TitleLengthBand {
 
 /**
  * Article distinctive-coverage gate — length-aware.
- * Medium: coverage 1.0, or soft when author+year (OCR/encoding / bilingual).
+ * Medium: coverage 1.0, or soft when author + (cov≥0.5 with year |
+ * bilingual band with year|strong titleHit).
+ * Year optional only in the bilingual band (cov 0.2–0.5): TR journal bodies
+ * often omit the künye year (Demir 2005). High coverage with a truly missing
+ * distinctive stem still needs year — otherwise wrong-PDF soft-matches.
  * Long: coverage ≥ LONG_COVERAGE_SOFT + (authorFound | titleHit ≥ soft).
  * Short: coverage still 1.0 when distinctive tokens exist (corroboration
  * is a separate gate).
@@ -450,13 +469,20 @@ export function articleDistinctiveCoverageOk(input: {
     );
   }
   if (input.titleLengthBand === "medium") {
-    // Author+year corroborate partial distinctive miss (Đ/Ġ encoding,
-    // hyphen glue, künye typo, bilingual EN body / TR künye).
-    if (!input.authorFound || !input.yearFound) return false;
-    if (cov >= TITLE_LENGTH.MEDIUM_COVERAGE_SOFT) return true;
+    if (!input.authorFound) return false;
+    if (cov >= TITLE_LENGTH.MEDIUM_COVERAGE_SOFT) {
+      // Half+ distinctive tokens still need year (or full cov==1 above).
+      return !!input.yearFound;
+    }
+    if (
+      cov < TITLE_LENGTH.MEDIUM_BILINGUAL_COVERAGE_SOFT ||
+      input.titleHit < TITLE_LENGTH.MEDIUM_BILINGUAL_TITLE_HIT_SOFT
+    ) {
+      return false;
+    }
     return (
-      cov >= TITLE_LENGTH.MEDIUM_BILINGUAL_COVERAGE_SOFT &&
-      input.titleHit >= TITLE_LENGTH.MEDIUM_BILINGUAL_TITLE_HIT_SOFT
+      !!input.yearFound ||
+      input.titleHit >= TITLE_LENGTH.MEDIUM_NOYEAR_TITLE_HIT_SOFT
     );
   }
   return false;
@@ -662,32 +688,63 @@ function itemPublisher(item: Zotero.Item): string {
 }
 
 /**
- * Score how well a blob of text matches the item's metadata.
- * Returns 0..~1.8 (title up to 1, author 0.5, year 0.3).
+ * Score PDF text vs item metadata with the standard 100-point field table
+ * (``fieldWeights`` / ``oa_pdf_search/field_weights.json``) as 0..1.
+ *
+ * Replaces additive titleHit+0.5+0.3 (~1.8 max) that ignored the OA kind table.
  */
-function scoreText(item: Zotero.Item, rawText: string): number {
-  // Normalize the haystack the SAME way as the tokens (NFKD + strip marks),
-  // otherwise accented/Turkish titles (çalışma vs calisma) never match and a
-  // correct PDF gets rejected by content validation.
+export function scoreText(
+  item: Zotero.Item,
+  rawText: string,
+  opts?: { kind?: string; bookLike?: boolean },
+): number {
   const text = normalizeOcrHaystack(rawText);
   if (!text) return 0;
-  let score = 0;
 
   const tokens = tokenize((item.getField("title") as string) || "");
   let titleHit = 0;
   if (tokens.length) {
     titleHit = tokens.filter((t) => text.includes(t)).length / tokens.length;
-    score += titleHit;
   }
-  const surname = firstAuthorSurname(item);
-  if (surname && text.includes(surname)) score += 0.5;
+
+  const qualities: Record<string, number> = {};
+  if (tokens.length) qualities.title = titleHit;
+
+  if (anyAuthorSurnameFound(item, rawText)) {
+    qualities.authors = 1;
+  } else {
+    const surname = firstAuthorSurname(item);
+    if (surname && text.includes(surname)) qualities.authors = 1;
+  }
+
   const year = itemYear(item);
   // Year alone is noisy (bibliographies); only credit with some title evidence.
-  if (year && text.includes(year) && titleHit >= 0.25) score += 0.3;
+  if (year && text.includes(year) && titleHit >= 0.25) {
+    qualities.year = 1;
+  }
+
   const publisher = itemPublisher(item);
-  if (publisher && publisher.length > 3 && text.includes(publisher))
-    score += 0.2;
-  return score;
+  if (publisher && publisher.length > 3 && text.includes(publisher)) {
+    qualities.publisher = 1;
+  }
+
+  const publication = String(
+    (item.getField("publicationTitle") as string) || "",
+  ).trim();
+  if (publication.length > 3) {
+    const pubToks = tokenize(publication);
+    if (pubToks.length) {
+      const hit =
+        pubToks.filter((t) => text.includes(t)).length / pubToks.length;
+      if (hit >= 0.5) qualities.publication = hit;
+    }
+  }
+
+  const kind = contentScoreKind({
+    itemType: opts?.kind || itemType(item),
+    bookLike: opts?.bookLike,
+  });
+  return weightedKindScore(kind, qualities);
 }
 
 /**
@@ -713,7 +770,7 @@ export function decideContentValidation(input: {
   textChars: number;
   /** 0–1 share of title tokens found in PDF text */
   titleHit: number;
-  /** Combined score from scoreText (title + author + year + publisher) */
+  /** Combined score from scoreText — 0..1 via field_weights table */
   score: number;
   hasIdConflict: boolean;
   hasIdMatch: boolean;
@@ -736,7 +793,9 @@ export function decideContentValidation(input: {
   // is cleared in metadataCheck; this soft gate is the safety net).
   if (input.hasIdConflict) {
     const softIdNoise =
-      input.titleHit >= 0.85 && input.authorFound && input.score >= 0.45;
+      input.titleHit >= 0.85 &&
+      input.authorFound &&
+      input.score >= CONTENT_SCORE.SOFT;
     if (!softIdNoise) return "mismatch";
   }
   if (input.hasIdMatch) return "match";
@@ -744,7 +803,8 @@ export function decideContentValidation(input: {
   // scans (surname OCR miss / translator listed first). Only kill when title
   // evidence in the PDF is also weak — strong titleHit+score keeps the file.
   if (input.kind === "book" && input.authorExpected && !input.authorFound) {
-    const strongTitle = input.titleHit >= 0.65 && input.score >= 0.55;
+    const strongTitle =
+      input.titleHit >= 0.65 && input.score >= CONTENT_SCORE.STRONG_PAIR;
     if (!strongTitle) {
       return "mismatch";
     }
@@ -770,14 +830,14 @@ export function decideContentValidation(input: {
     hasIdMatch: input.hasIdMatch,
   });
 
-  if (input.score >= 0.6) {
+  if (input.score >= CONTENT_SCORE.HIGH) {
     if (!articleDistinctiveOk || !shortOk) return "mismatch";
     return "match";
   }
 
   if (input.kind === "book") {
     // Solid title evidence → keep; short titles still need corroboration.
-    if (input.titleHit >= 0.5 && input.score >= 0.45 && shortOk) {
+    if (input.titleHit >= 0.5 && input.score >= CONTENT_SCORE.SOFT && shortOk) {
       return "match";
     }
     return "mismatch";
@@ -785,7 +845,8 @@ export function decideContentValidation(input: {
 
   // Articles / other: length-aware distinctive coverage + short corroboration.
   if (!articleDistinctiveOk || !shortOk) return "mismatch";
-  if (input.score >= 0.45 && input.titleHit >= 0.5) return "match";
+  if (input.score >= CONTENT_SCORE.SOFT && input.titleHit >= 0.5)
+    return "match";
   return "mismatch";
 }
 
@@ -814,9 +875,10 @@ export function formatContentValidationReason(input: {
   turkishCharNormalization?: boolean;
 }): string {
   const band = input.titleLengthBand ?? "medium";
-  const stats = `titleHit=${input.titleHit.toFixed(2)} score=${input.score.toFixed(2)} author=${
+  const pts = Math.round(Math.min(1, Math.max(0, input.score)) * 100);
+  const stats = `titleHit=${input.titleHit.toFixed(2)} score=${input.score.toFixed(2)} (${pts}/100) author=${
     input.authorFound ? "yes" : "no"
-  } band=${band}`;
+  } year=${input.yearFound ? "yes" : "no"} band=${band}`;
   if (input.verdict === "unverifiable") {
     if (input.textChars < 50) {
       return `unverifiable: too little PDF text (${input.textChars} chars)`;
@@ -877,7 +939,8 @@ export function formatContentValidationReason(input: {
     return `ISBN/DOI conflict in PDF | ${stats}`;
   }
   if (input.kind === "book" && input.authorExpected && !input.authorFound) {
-    const strongTitle = input.titleHit >= 0.65 && input.score >= 0.55;
+    const strongTitle =
+      input.titleHit >= 0.65 && input.score >= CONTENT_SCORE.STRONG_PAIR;
     if (!strongTitle) {
       return `book: author missing and title evidence weak | ${stats}`;
     }
@@ -922,10 +985,15 @@ export function isStrongHeuristicContentMatch(input: {
   hasIdMatch: boolean;
 }): boolean {
   if (input.hasIdMatch) return true;
-  if (input.titleHit >= 0.5 && input.authorFound && input.score >= 0.45) {
+  if (
+    input.titleHit >= 0.5 &&
+    input.authorFound &&
+    input.score >= CONTENT_SCORE.SOFT
+  ) {
     return true;
   }
-  if (input.titleHit >= 0.65 && input.score >= 0.55) return true;
+  if (input.titleHit >= 0.65 && input.score >= CONTENT_SCORE.STRONG_PAIR)
+    return true;
   return false;
 }
 
@@ -1391,6 +1459,7 @@ export async function validateAttachmentContentDetailed(
 
     if (heuristic === "match") {
       await clearSuccessfulMatchTags(item);
+      await lockValidatedAttachment(item, attachmentID);
     }
     return { verdict: heuristic, pdfText: text, reason };
   } catch (e) {
@@ -1852,6 +1921,7 @@ export async function downloadAndAttach(
       },
       tagItem,
     );
+    await clearValidatedPdfLock(item);
     void pdfText;
     void persistedPath;
     void finalCreatedByThisRun;
@@ -2152,7 +2222,11 @@ export class LocalFolderSource implements PDFSource {
       await purgeMissingSiblingPdfAttachments(item, attachment.id);
       // Yerinde link alone left files under downloads/ or inbox names —
       // relocate to künye filename + configured library dest when prefs allow.
-      return relocateAfterSuccessfulMatch(attachment);
+      const relocated = await relocateAfterSuccessfulMatch(attachment);
+      // Validate stamped the pre-move path; refresh Extra to the final path.
+      await clearValidatedPdfLock(item, diskPath);
+      await persistValidatedPdfLock(item, relocated || attachment);
+      return relocated;
     }
     if (detailed.verdict === "skipped") {
       // Title-only attach with validation disabled — leave existing tags.
@@ -2183,6 +2257,7 @@ export class LocalFolderSource implements PDFSource {
       },
       tagItem,
     );
+    await clearValidatedPdfLock(item, diskPath);
     // Keep the real (mismatch) file; only drop other missing-file ghosts.
     await purgeMissingSiblingPdfAttachments(item, attachment.id);
     return attachment;

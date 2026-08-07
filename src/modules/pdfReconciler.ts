@@ -1,4 +1,4 @@
-// @ajan: claude · @etiket: katman-2, p2, reconciler, mismatch-rematch, mismatch-tag-guard, abortcontroller-fix, hash-prefix-normalize, review-tag-guard, pdf-candidate-split
+// @ajan: cursor · @etiket: katman-2, p2, reconciler, mismatch-rematch, mismatch-tag-guard, abortcontroller-fix, hash-prefix-normalize, review-tag-guard, pdf-candidate-split, validated-pdf-lock
 import { getPref } from "../utils/prefs";
 import {
   shouldSuppressPassiveMismatchTag,
@@ -23,6 +23,12 @@ import {
   iterateLibraryItemBatches,
   normalizeLibraryBatchSize,
 } from "../utils/libraryIterate";
+import {
+  collectAttachedPdfPathClaims,
+  isPathClaimedByOther,
+  normalizeClaimPath,
+  type PdfPathClaim,
+} from "./pdfValidatedLock";
 
 declare const Components: any;
 
@@ -527,6 +533,7 @@ export class PDFReconciler {
           0,
           Math.min(100, Number(getPref("pdf.onlineMaxPerRun") ?? 10) || 10),
         );
+        const pathClaims = await collectAttachedPdfPathClaims();
         const shared: ItemBatchShared = {
           runID,
           reason,
@@ -535,6 +542,7 @@ export class PDFReconciler {
           index,
           allowOnline,
           usedPaths: new Set<string>(),
+          pathClaims,
           onlineBudget: onlineCap,
           signal: controller.signal,
           stats: { ...empty },
@@ -655,6 +663,7 @@ export class PDFReconciler {
       0,
       Math.min(100, Number(getPref("pdf.onlineMaxPerRun") ?? 10) || 10),
     );
+    const pathClaims = await collectAttachedPdfPathClaims();
     const shared: ItemBatchShared = {
       runID,
       reason,
@@ -663,6 +672,7 @@ export class PDFReconciler {
       index,
       allowOnline,
       usedPaths: new Set<string>(),
+      pathClaims,
       onlineBudget:
         reason === "add" ? Math.min(items.length, onlineCap) : onlineCap,
       signal,
@@ -720,6 +730,7 @@ export class PDFReconciler {
       index,
       allowOnline,
       usedPaths,
+      pathClaims,
       signal,
       stats,
     } = shared;
@@ -758,7 +769,16 @@ export class PDFReconciler {
         }
         if (match.status === "matched") {
           const filePath = match.file.path;
-          if (usedPaths.has(filePath)) {
+          const claimKey = normalizeClaimPath(filePath);
+          const claimedByOther = isPathClaimedByOther(
+            filePath,
+            item.id,
+            pathClaims,
+          );
+          const reservedInRun =
+            usedPaths.has(filePath) ||
+            (Boolean(claimKey) && usedPaths.has(claimKey));
+          if (claimedByOther || reservedInRun) {
             if (!dryRun) await addReconcileCandidateTag(item, reason);
             await appendAuditEvent({
               run: runID,
@@ -769,12 +789,15 @@ export class PDFReconciler {
               path: filePath,
               detail: dryRun
                 ? "Dry-run: file collides with another item's match"
-                : "File already matched to another item; tagged #pdf-candidate",
+                : claimedByOther
+                  ? "File already attached to another item; tagged #pdf-candidate"
+                  : "File already matched to another item; tagged #pdf-candidate",
             });
             stats.review++;
             continue;
           }
           usedPaths.add(filePath);
+          if (claimKey) usedPaths.add(claimKey);
 
           if (dryRun) {
             stats.planned++;
@@ -892,7 +915,10 @@ type ItemBatchShared = {
   source: LocalFolderSource;
   index: Awaited<ReturnType<typeof buildIndex>>;
   allowOnline: boolean;
+  /** In-run path reservations (this reconcile only). */
   usedPaths: Set<string>;
+  /** Live attachment paths already belonging to library parents. */
+  pathClaims: Map<string, PdfPathClaim>;
   onlineBudget: number;
   signal?: AbortSignal | null;
   stats: ReconcileStats;
