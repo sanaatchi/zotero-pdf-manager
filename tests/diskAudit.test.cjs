@@ -107,7 +107,7 @@ test("prefs + xhtml wire disk audit buttons and dirzon", () => {
   assert.match(script, /runDiskAuditWithProgress\("orphan"\)/);
   assert.match(script, /runDiskAuditWithProgress\("nameContent"\)/);
   assert.match(script, /runDiskAuditWithProgress\("copy"\)/);
-  for (const loc of ["en-US", "de", "it-IT"]) {
+  for (const loc of ["en-US", "de", "it-IT", "tr-TR"]) {
     const ftl = fs.readFileSync(
       path.join(root, "addon/locale", loc, "preferences.ftl"),
       "utf8",

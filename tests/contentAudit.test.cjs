@@ -264,7 +264,7 @@ test("content audit module + menu + locales: tag-only, no detach", () => {
   assert.match(sources, /export async function clearSuccessfulMatchTags/);
   assert.match(tags, /"#pdf-mismatch"/);
 
-  for (const locale of ["en-US", "de", "it-IT"]) {
+  for (const locale of ["en-US", "de", "it-IT", "tr-TR"]) {
     const ftl = fs.readFileSync(
       path.join(root, "addon/locale", locale, "addon.ftl"),
       "utf8",

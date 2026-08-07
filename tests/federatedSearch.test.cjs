@@ -79,7 +79,7 @@ test("federated search wired in menu + locales + bridge", () => {
   assert.match(bridge, /loadOaSearchSourceSelection/);
   assert.match(bridge, /source:\s*"all"/);
   assert.match(bridge, /Unknown source \['"\]\?all/);
-  for (const locale of ["en-US", "de", "it-IT"]) {
+  for (const locale of ["en-US", "de", "it-IT", "tr-TR"]) {
     const ftl = fs.readFileSync(
       path.join(root, "addon/locale", locale, "addon.ftl"),
       "utf8",

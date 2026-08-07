@@ -1,10 +1,17 @@
-// @ajan: cursor · @etiket: katman-2, tests, watch-root-parent
+// @ajan: cursor · @etiket: katman-2, tests, watch-root-parent, tr-TR
 const assert = require("node:assert/strict");
 const fs = require("node:fs");
 const path = require("node:path");
 const { test } = require("node:test");
 
 const root = process.cwd();
+const ALL_LOCALES = ["de", "en-US", "it-IT", "tr-TR"];
+
+function ftlMessageKeys(source) {
+  return new Set(
+    [...source.matchAll(/^[a-zA-Z][\w-]*(?=\s*=)/gm)].map((m) => m[0]),
+  );
+}
 
 test("auto-rename preferences have defaults and checkbox controls", () => {
   const prefs = fs.readFileSync(path.join(root, "addon/prefs.js"), "utf8");
@@ -57,8 +64,31 @@ test("auto-rename preferences have defaults and checkbox controls", () => {
   assert.doesNotMatch(preferenceScript, /checkbox\.disabled\s*=/);
 });
 
+test("tr-TR locale has full message-id parity with en-US", () => {
+  for (const file of ["addon.ftl", "preferences.ftl"]) {
+    const en = ftlMessageKeys(
+      fs.readFileSync(path.join(root, "addon/locale/en-US", file), "utf8"),
+    );
+    const tr = ftlMessageKeys(
+      fs.readFileSync(path.join(root, "addon/locale/tr-TR", file), "utf8"),
+    );
+    const missing = [...en].filter((k) => !tr.has(k));
+    const extra = [...tr].filter((k) => !en.has(k));
+    assert.deepEqual(missing, [], `${file} missing in tr-TR: ${missing}`);
+    assert.deepEqual(extra, [], `${file} extra in tr-TR: ${extra}`);
+    assert.ok(en.size > 0);
+  }
+  assert.match(
+    fs.readFileSync(
+      path.join(root, "addon/locale/tr-TR/preferences.ftl"),
+      "utf8",
+    ),
+    /Deneme modu|İzlenen PDF klasörleri|kayıtsız/i,
+  );
+});
+
 test("new automation locale keys exist in all supported locales", () => {
-  const locales = ["de", "en-US", "it-IT"];
+  const locales = ALL_LOCALES;
   const preferenceKeys = [
     "auto-rename-on-modify",
     "auto-rename-on-modify-debounce",
@@ -140,7 +170,7 @@ test("multi-root PDF indexing is exposed in preferences", () => {
     /addEventListener\("change", invalidateIndex\)/,
   );
 
-  for (const locale of ["de", "en-US", "it-IT"]) {
+  for (const locale of ALL_LOCALES) {
     const source = fs.readFileSync(
       path.join(root, `addon/locale/${locale}/preferences.ftl`),
       "utf8",
@@ -180,7 +210,7 @@ test("startup and periodic PDF reconciliation are wired into lifecycle", () => {
   assert.match(hooks, /function onShutdown[\s\S]*pdfReconciler\?\.dispose/);
   assert.match(hooks, /function onShutdown[\s\S]*unregisterAll/);
 
-  for (const locale of ["de", "en-US", "it-IT"]) {
+  for (const locale of ALL_LOCALES) {
     const source = fs.readFileSync(
       path.join(root, `addon/locale/${locale}/preferences.ftl`),
       "utf8",
@@ -242,7 +272,7 @@ test("new Zotero items enter the debounced automatic reconcile queue", () => {
   assert.match(reconciler, /unregisterNotifier/);
   assert.match(reconciler, /Zotero\.Notifier\.unregisterObserver/);
 
-  for (const locale of ["de", "en-US", "it-IT"]) {
+  for (const locale of ALL_LOCALES) {
     const source = fs.readFileSync(
       path.join(root, `addon/locale/${locale}/preferences.ftl`),
       "utf8",
@@ -279,7 +309,7 @@ test("OA downloads folder preference is exposed", () => {
     /AUTOMATIC_ONLINE_SOURCE_IDS = \[[\s\S]*?"doi"[\s\S]*?"dergipark"[\s\S]*?"pmc"[\s\S]*\]/,
   );
 
-  for (const locale of ["de", "en-US", "it-IT"]) {
+  for (const locale of ALL_LOCALES) {
     const source = fs.readFileSync(
       path.join(root, `addon/locale/${locale}/preferences.ftl`),
       "utf8",
@@ -315,7 +345,7 @@ test("automatic online fallback is configurable and bulk-limited", () => {
   assert.match(reconciler, /AbortController/);
   assert.match(reconciler, /runWithAbortSignal/);
 
-  for (const locale of ["de", "en-US", "it-IT"]) {
+  for (const locale of ALL_LOCALES) {
     const source = fs.readFileSync(
       path.join(root, `addon/locale/${locale}/preferences.ftl`),
       "utf8",
@@ -367,7 +397,7 @@ test("orphan PDF item creation respects orphanMode with safe autoCreate opt-in",
   assert.match(reconciler, /"automatic"/);
   assert.match(reconciler, /"manual"/);
 
-  for (const locale of ["de", "en-US", "it-IT"]) {
+  for (const locale of ALL_LOCALES) {
     const source = fs.readFileSync(
       path.join(root, `addon/locale/${locale}/preferences.ftl`),
       "utf8",
@@ -392,7 +422,7 @@ test("PDF filename metadata is available only as a manual context command", () =
   assert.match(module, /if \(!String\(\(item as any\)\.getField\(field\)/);
   assert.match(module, /parent\.addTag\("#filename-metadata"\)/);
 
-  for (const locale of ["de", "en-US", "it-IT"]) {
+  for (const locale of ALL_LOCALES) {
     const source = fs.readFileSync(
       path.join(root, `addon/locale/${locale}/addon.ftl`),
       "utf8",
@@ -413,7 +443,7 @@ test("annotation-safe duplicate PDF merging is exposed in every locale", () => {
   assert.match(merger, /attachmentHash/);
   assert.match(merger, /candidateContainsAnnotations/);
   assert.match(merger, /Zotero\.Items\.trashTx/);
-  for (const locale of ["en-US", "de", "it-IT"]) {
+  for (const locale of ALL_LOCALES) {
     const source = fs.readFileSync(
       path.join(root, "addon/locale", locale, "addon.ftl"),
       "utf8",
@@ -443,7 +473,7 @@ test("PDF-content metadata research is manual, identifier-first and confirmable"
   assert.match(module, /candidateFromPDFText/);
   assert.match(module, /window\.confirm/);
   assert.match(module, /attachment\.parentItemID = target\.id/);
-  for (const locale of ["en-US", "de", "it-IT"]) {
+  for (const locale of ALL_LOCALES) {
     const source = fs.readFileSync(
       path.join(root, "addon/locale", locale, "addon.ftl"),
       "utf8",
@@ -489,7 +519,7 @@ test("dry-run and persistent automation audit are exposed to the user", () => {
   assert.match(audit, /REVERSIBLE_AUTOMATION_TAGS/);
   assert.match(audit, /clearAuditEvents/);
 
-  for (const locale of ["de", "en-US", "it-IT"]) {
+  for (const locale of ALL_LOCALES) {
     const source = fs.readFileSync(
       path.join(root, `addon/locale/${locale}/preferences.ftl`),
       "utf8",

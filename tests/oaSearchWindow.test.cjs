@@ -277,7 +277,7 @@ test("OA search surface: xhtml + menubar + locales + menu wiring", () => {
     "oa-search-sources",
     "oa-search-need-sources",
   ];
-  for (const locale of ["en-US", "de", "it-IT"]) {
+  for (const locale of ["en-US", "de", "it-IT", "tr-TR"]) {
     const ftl = fs.readFileSync(
       path.join(root, "addon/locale", locale, "addon.ftl"),
       "utf8",
