@@ -8,8 +8,8 @@ ZotAssets, File Utility, Attachment Scanner, ozefe/yoktez).
 
 ## Özet hüküm
 
-| Soru                      | Cevap                                                                                 |
-| ------------------------- | -------------------------------------------------------------------------------------- |
+| Soru                      | Cevap                                                                                |
+| ------------------------- | ------------------------------------------------------------------------------------ |
 | Açık **P0** ürün boşluğu? | **Yok** — B1/B2 **v1.0.158** ile kapandı (apply rapor ayrımı + startup eşik onarımı) |
 | Açık **P1** ürün boşluğu? | **Var** — **B8** (`menu.ts` ham PathUtils); B3–B7 **v1.0.158** ile kapandı           |
 | Gerçek açık iş?           | B8 + Checklist Bölüm B (kullanıcı) + isteğe bağlı P3 (B9–B15 canvas backlog)         |
@@ -23,16 +23,16 @@ ZotAssets, File Utility, Attachment Scanner, ozefe/yoktez).
 handoff maddeleri) ile **aynı ID, farklı konu** — karıştırılmamalı.
 Kaynak: `pdf-manager-bug-hunt-157.canvas.tsx` (B1–B15); SSOT bu tablo.
 
-| ID     | Öncelik | Madde                                                                 | Durum                          |
-| ------ | ------- | --------------------------------------------------------------------- | ------------------------------- |
-| **B1** | **P0**  | Plan/Çöz → `last-bidirectional` Tara raporunu ezer                    | ✅ **1.0.158** (`*-apply.*`)   |
-| **B2** | **P0**  | Eşik 0 startup'ta mass-attach riski                                   | ✅ **1.0.158** (startup repair) |
-| **B3** | P1      | `broken_alt` zorla `clear:true` (soft basename)                       | ✅ **1.0.158** (clear gate)    |
-| **B4** | P1      | Hash fail-open: `hashSkipped` → ad+boyut «verified»                   | ✅ **1.0.158** (fail-closed)   |
-| **B5** | P1      | Hash fail-open: copy Çöz keeper yoksa `hashOk=true`                   | ✅ **1.0.158** (re-fingerprint) |
-| **B6** | P1      | Confirm diyalog fail-open (`window` yok → `true`)                     | ✅ **1.0.158** (fail-closed)   |
-| **B7** | P1      | `typeOk` +0.05 boost zayıf skoru clear eşiğinin üstüne iter           | ✅ **1.0.158** (ranking-only)  |
-| **B8** | P1      | `menu.ts` ham `PathUtils` (safe helper atlanmış)                      | **açık**                       |
+| ID     | Öncelik | Madde                                                       | Durum                           |
+| ------ | ------- | ----------------------------------------------------------- | ------------------------------- |
+| **B1** | **P0**  | Plan/Çöz → `last-bidirectional` Tara raporunu ezer          | ✅ **1.0.158** (`*-apply.*`)    |
+| **B2** | **P0**  | Eşik 0 startup'ta mass-attach riski                         | ✅ **1.0.158** (startup repair) |
+| **B3** | P1      | `broken_alt` zorla `clear:true` (soft basename)             | ✅ **1.0.158** (clear gate)     |
+| **B4** | P1      | Hash fail-open: `hashSkipped` → ad+boyut «verified»         | ✅ **1.0.158** (fail-closed)    |
+| **B5** | P1      | Hash fail-open: copy Çöz keeper yoksa `hashOk=true`         | ✅ **1.0.158** (re-fingerprint) |
+| **B6** | P1      | Confirm diyalog fail-open (`window` yok → `true`)           | ✅ **1.0.158** (fail-closed)    |
+| **B7** | P1      | `typeOk` +0.05 boost zayıf skoru clear eşiğinin üstüne iter | ✅ **1.0.158** (ranking-only)   |
+| **B8** | P1      | `menu.ts` ham `PathUtils` (safe helper atlanmış)            | **açık**                        |
 
 ### Son eklenen (v1.0.157)
 
@@ -212,15 +212,15 @@ Kaynak: `pdf-manager-bug-hunt-157.canvas.tsx` (B1–B15); SSOT bu tablo.
 
 ## Kapalı (doğrulandı)
 
-| Madde                                                   | v         | Not                                             |
-| ------------------------------------------------------- | --------- | ----------------------------------------------- |
-| Bug hunt **B1–B7** (rapor ezme, eşik-0, broken_alt, hash×2, confirm, typeOk boost) | **1.0.158** | canvas B1–B7; **B8** menu PathUtils açık |
-| P2-1…P2-6 otomasyon                                     | ≤1.0.27+  | indeks, reconcile, OA downloads/, orphan, audit |
-| OA bridge / DergiPark / LibGen / YÖK / Sci-Hub (manuel) | 1.0.43–46 | bridge `:8756`                                  |
-| **B1** linked ek silme *(eski handoff ID)*              | 1.0.47    | delitemwithatt behavior                         |
-| **B2–B3** port yolları / plan drift (kısmi) *(eski)*    | —         | `katman-2/` kuratör; kalan drift aşağıda        |
-| **B4a–c** selective lint *(eski)*                       | 1.0.48–49 | journal abbr **skip**                           |
-| **B5** Zoplicate yan XPI + DOI/ISBN/KP rapor *(eski)*   | 1.0.49    | merge port yok                                  |
+| Madde                                                                              | v           | Not                                             |
+| ---------------------------------------------------------------------------------- | ----------- | ----------------------------------------------- |
+| Bug hunt **B1–B7** (rapor ezme, eşik-0, broken_alt, hash×2, confirm, typeOk boost) | **1.0.158** | canvas B1–B7; **B8** menu PathUtils açık        |
+| P2-1…P2-6 otomasyon                                                                | ≤1.0.27+    | indeks, reconcile, OA downloads/, orphan, audit |
+| OA bridge / DergiPark / LibGen / YÖK / Sci-Hub (manuel)                            | 1.0.43–46   | bridge `:8756`                                  |
+| **B1** linked ek silme _(eski handoff ID)_                                         | 1.0.47      | delitemwithatt behavior                         |
+| **B2–B3** port yolları / plan drift (kısmi) _(eski)_                               | —           | `katman-2/` kuratör; kalan drift aşağıda        |
+| **B4a–c** selective lint _(eski)_                                                  | 1.0.48–49   | journal abbr **skip**                           |
+| **B5** Zoplicate yan XPI + DOI/ISBN/KP rapor _(eski)_                              | 1.0.49      | merge port yok                                  |
 
 ### Referans klasör → ürün
 
