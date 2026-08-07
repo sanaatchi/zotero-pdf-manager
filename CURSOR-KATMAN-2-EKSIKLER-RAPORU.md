@@ -16,8 +16,8 @@ ZotAssets, File Utility, Attachment Scanner, ozefe/yoktez).
 
 ### Son eklenen (v1.0.145)
 
-| Madde                         | Not                                                                                          |
-| ----------------------------- | -------------------------------------------------------------------------------------------- |
+| Madde                         | Not                                                                                                 |
+| ----------------------------- | --------------------------------------------------------------------------------------------------- |
 | OA Search `pdfkitap` checkbox | `ALL_SOURCES` + `FEDERATED_SOURCE_*` + prefs; popup Kaynaklar’da PDFKitap; bridge `source=pdfkitap` |
 
 ### Son eklenen (v1.0.144)
