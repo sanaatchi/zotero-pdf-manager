@@ -1,4 +1,4 @@
-// @ajan: cursor · @etiket: katman-2, bidirectional-audit, item-pdf-cross, type-mismatch, match-suggest, apply, hash-verify, broken-repair
+// @ajan: cursor · @etiket: katman-2, bidirectional-audit, item-pdf-cross, type-mismatch, match-suggest, apply, hash-verify, broken-repair, pathutils-safe
 /**
  * Unified two-ended PDF control report:
  *   item → PDF  (linked / broken / missing / type conflict / mismatch tags)
@@ -98,8 +98,56 @@ export interface BidirAuditSummary {
   };
 }
 
+/**
+ * PathUtils.filename/normalize throw NS_ERROR_FILE_UNRECOGNIZED_PATH on
+ * empty, relative, or ``attachments:…`` strings. Never call them raw.
+ */
+export function safeFilename(path: string): string {
+  const raw = String(path || "").trim();
+  if (!raw) return "";
+  try {
+    // Strip Zotero linked-attachment prefix before PathUtils.
+    const stripped = raw.replace(/^attachments:/i, "");
+    if (/^[a-zA-Z]:[\\/]/.test(stripped) || stripped.startsWith("\\\\")) {
+      return String(PathUtils.filename(stripped) || "");
+    }
+  } catch {
+    /* fall through */
+  }
+  const parts = raw.replace(/\\/g, "/").split("/");
+  return parts[parts.length - 1] || raw;
+}
+
+export function safePathKey(p: string): string {
+  const raw = String(p || "").trim();
+  if (!raw) return "";
+  try {
+    if (/^[a-zA-Z]:[\\/]/.test(raw) || raw.startsWith("\\\\")) {
+      return PathUtils.normalize(raw).normalize("NFC").toLowerCase();
+    }
+  } catch {
+    /* fall through */
+  }
+  return raw.normalize("NFC").toLowerCase().replace(/\\/g, "/");
+}
+
+export function safeParent(path: string): string | null {
+  const raw = String(path || "").trim();
+  if (!raw) return null;
+  try {
+    if (/^[a-zA-Z]:[\\/]/.test(raw) || raw.startsWith("\\\\")) {
+      return PathUtils.parent?.(raw) || null;
+    }
+  } catch {
+    /* fall through */
+  }
+  const norm = raw.replace(/\\/g, "/");
+  const i = norm.lastIndexOf("/");
+  return i > 0 ? norm.slice(0, i) : null;
+}
+
 function pathKey(p: string): string {
-  return PathUtils.normalize(p).normalize("NFC").toLowerCase();
+  return safePathKey(p);
 }
 
 function includeDisindaPref(): boolean {
@@ -139,13 +187,18 @@ async function writeBidirReport(payload: unknown): Promise<string> {
   const stamp = new Date().toISOString().replace(/[:.]/g, "-");
   const path = PathUtils.join(dir, `disk-audit-bidirectional-${stamp}.json`);
   await writeJsonAtomic(path, payload as any);
+  const last = PathUtils.join(dir, "last-bidirectional.json");
   try {
-    await writeJsonAtomic(
-      PathUtils.join(dir, "last-bidirectional.json"),
-      payload as any,
-    );
-  } catch {
-    /* ignore */
+    await writeJsonAtomic(last, payload as any);
+  } catch (e) {
+    ztoolkit.log("writeBidirReport last-bidirectional failed", last, e);
+    // Best-effort copy via UTF8 so openLast still works.
+    try {
+      const raw = await IOUtils.readUTF8(path);
+      await IOUtils.writeUTF8(last, raw);
+    } catch (e2) {
+      ztoolkit.log("writeBidirReport last fallback failed", e2);
+    }
   }
   return path;
 }
@@ -183,7 +236,7 @@ export async function walkPdfEntries(
       const size = Number(st?.size || 0);
       out.push({
         path: child,
-        basename: PathUtils.filename(child),
+        basename: safeFilename(child),
         size: size > 0 ? size : 0,
         dir,
       });
@@ -229,15 +282,27 @@ export function suggestAlternatePaths(
 }
 
 export function titleTokens(value: string): Set<string> {
-  return new Set(
-    (value || "")
-      .normalize("NFKD")
-      .replace(/\p{Mark}/gu, "")
-      .toLowerCase()
-      .replace(/[^\p{L}\p{N}\s]/gu, " ")
-      .split(/\s+/)
-      .filter((w) => w.length > 3),
-  );
+  const raw = value || "";
+  try {
+    return new Set(
+      raw
+        .normalize("NFKD")
+        .replace(/\p{Mark}/gu, "")
+        .toLowerCase()
+        .replace(/[^\p{L}\p{N}\s]/gu, " ")
+        .split(/\s+/)
+        .filter((w) => w.length > 3),
+    );
+  } catch {
+    // Some chrome contexts reject Unicode property escapes — ASCII/TR fallback.
+    return new Set(
+      raw
+        .toLowerCase()
+        .replace(/[^a-z0-9ğüşıöçâîûäëïöü\s]/gi, " ")
+        .split(/\s+/)
+        .filter((w) => w.length > 3),
+    );
+  }
 }
 
 /** Token overlap using min(|a|,|b|) denominator + shared count. */
@@ -297,35 +362,45 @@ export function suggestOrphanToMissingMatches(
   const all: Cand[] = [];
   for (const item of missing) {
     for (const pdf of orphans) {
-      const meta = parseFilenameMetadata(pdf.file);
-      const pdfTitle = String(meta.title || pdf.file.replace(/\.pdf$/i, ""));
-      const detail = titleOverlapDetail(item.title, pdfTitle);
-      let score = detail.score;
-      const typeOk =
-        !pdf.filenameType ||
-        !item.itemType ||
-        pdf.filenameType.toLowerCase() === item.itemType.toLowerCase();
-      if (typeOk && score >= 0.5 && detail.shared >= minShared) {
-        score = Math.min(1, score + 0.05);
+      try {
+        let pdfTitle = String(pdf.file || "").replace(/\.pdf$/i, "");
+        try {
+          const meta = parseFilenameMetadata(pdf.file);
+          pdfTitle = String(meta.title || pdfTitle);
+        } catch {
+          /* keep stem */
+        }
+        const detail = titleOverlapDetail(item.title, pdfTitle);
+        let score = detail.score;
+        const typeOk =
+          !pdf.filenameType ||
+          !item.itemType ||
+          pdf.filenameType.toLowerCase() === item.itemType.toLowerCase();
+        if (typeOk && score >= 0.5 && detail.shared >= minShared) {
+          score = Math.min(1, score + 0.05);
+        }
+        if (!typeOk) score *= 0.75;
+        if (detail.shared < 1 || score < minScore) continue;
+        const clear =
+          typeOk && detail.shared >= minShared && score >= clearScore;
+        all.push({
+          kind:
+            item.status === "broken" ? "orphan_to_broken" : "orphan_to_missing",
+          score: Math.round(score * 1000) / 1000,
+          clear,
+          itemID: item.itemID,
+          itemKey: item.key,
+          itemTitle: item.title,
+          itemType: item.itemType,
+          pdfPath: pdf.path,
+          pdfFile: pdf.file,
+          filenameType: pdf.filenameType,
+          typeOk,
+          itemStatus: item.status || "missing",
+        });
+      } catch {
+        /* skip bad pair */
       }
-      if (!typeOk) score *= 0.75;
-      if (detail.shared < 1 || score < minScore) continue;
-      const clear = typeOk && detail.shared >= minShared && score >= clearScore;
-      all.push({
-        kind:
-          item.status === "broken" ? "orphan_to_broken" : "orphan_to_missing",
-        score: Math.round(score * 1000) / 1000,
-        clear,
-        itemID: item.itemID,
-        itemKey: item.key,
-        itemTitle: item.title,
-        itemType: item.itemType,
-        pdfPath: pdf.path,
-        pdfFile: pdf.file,
-        filenameType: pdf.filenameType,
-        typeOk,
-        itemStatus: item.status || "missing",
-      });
     }
   }
   all.sort((a, b) => b.score - a.score);
@@ -348,7 +423,7 @@ export function siblingDownloadsRoots(primaryRoots: string[]): string[] {
   const extra: string[] = [];
   const seen = new Set(primaryRoots.map((r) => r.toLowerCase()));
   for (const root of primaryRoots) {
-    const parent = PathUtils.parent?.(root);
+    const parent = safeParent(root);
     if (!parent) continue;
     const downloads = PathUtils.join(parent, "downloads");
     const key = String(downloads).toLowerCase();
@@ -491,10 +566,7 @@ export async function runBidirectionalAudit(opts?: {
         accessible += 1;
         paths.push(resolved);
         referenced.add(pathKey(resolved));
-        const tm = filenameItemTypeMismatch(
-          itemType,
-          PathUtils.filename(resolved),
-        );
+        const tm = filenameItemTypeMismatch(itemType, safeFilename(resolved));
         if (tm.mismatch) {
           typeConflict = true;
           filenameType = tm.filenameType;
@@ -506,7 +578,7 @@ export async function runBidirectionalAudit(opts?: {
         broken += 1;
         const raw = String(att.attachmentPath || attPath || "");
         rawPaths.push(raw);
-        const base = PathUtils.filename(raw) || raw.split(/[\\/]/).pop() || "";
+        const base = safeFilename(raw) || raw.split(/[\\/]/).pop() || "";
         if (base) {
           const tm = filenameItemTypeMismatch(itemType, base);
           if (tm.mismatch) {
@@ -544,7 +616,7 @@ export async function runBidirectionalAudit(opts?: {
     const alternatePaths: string[] = [];
     if (status === "broken" || status === "missing") {
       for (const raw of rawPaths) {
-        const base = PathUtils.filename(raw) || raw.split(/[\\/]/).pop() || "";
+        const base = safeFilename(raw) || raw.split(/[\\/]/).pop() || "";
         for (const alt of suggestAlternatePaths(base, diskFiles)) {
           if (!alternatePaths.includes(alt)) alternatePaths.push(alt);
         }
@@ -621,60 +693,99 @@ export async function runBidirectionalAudit(opts?: {
       file: r.file,
       filenameType: r.filenameType,
     }));
-  const matchSuggestions = suggestOrphanToMissingMatches(
-    missingForMatch,
-    orphanForMatch,
-  );
-  // Exact basename (soft) alternate paths for broken → clear repairs
-  const usedItems = new Set(matchSuggestions.map((m) => m.itemID));
-  const usedPdfs = new Set(
-    matchSuggestions.map((m) => m.pdfPath.toLowerCase()),
-  );
-  for (const row of itemRows) {
-    if (row.status !== "broken" || !row.alternatePaths.length) continue;
-    if (usedItems.has(row.itemID)) continue;
-    const alt = row.alternatePaths[0];
-    if (!alt || usedPdfs.has(alt.toLowerCase())) continue;
-    usedItems.add(row.itemID);
-    usedPdfs.add(alt.toLowerCase());
-    matchSuggestions.push({
-      kind: "broken_alt_path",
-      score: 1,
-      clear: true,
-      itemID: row.itemID,
-      itemKey: row.key,
-      itemTitle: row.title,
-      itemType: row.itemType,
-      pdfPath: alt,
-      pdfFile: PathUtils.filename(alt),
-      filenameType: extractFilenameItemTypeTag(PathUtils.filename(alt)),
-      typeOk: true,
-      itemStatus: "broken",
-    });
-  }
-  matchSuggestions.sort((a, b) => b.score - a.score);
-  const clearMatches = matchSuggestions.filter((m) => m.clear);
 
-  opts?.onProgress?.({
-    text: "Çapraz kopyalar hash doğrulanıyor…",
-    progress: 90,
-  });
-  const keepersByLoser = new Map<string, string[]>();
-  for (const loser of unlinkedLosers) {
-    const keepers: string[] = [];
-    for (const g of crossGroups) {
-      if (!g.paths.some((p) => pathKey(p) === pathKey(loser))) continue;
-      for (const p of g.paths) {
-        if (referenced.has(pathKey(p))) keepers.push(p);
+  let matchSuggestions: BidirMatchSuggestion[] = [];
+  let clearMatches: BidirMatchSuggestion[] = [];
+  let verifiedLosers = unlinkedLosers.slice();
+  let hashRejectedLosers: string[] = [];
+  let hashSkipped = false;
+  let matchError = "";
+
+  try {
+    matchSuggestions = suggestOrphanToMissingMatches(
+      missingForMatch,
+      orphanForMatch,
+    );
+    const usedItems = new Set(matchSuggestions.map((m) => m.itemID));
+    const usedPdfs = new Set(
+      matchSuggestions.map((m) => m.pdfPath.toLowerCase()),
+    );
+    for (const row of itemRows) {
+      if (row.status !== "broken" || !row.alternatePaths.length) continue;
+      if (usedItems.has(row.itemID)) continue;
+      const alt = row.alternatePaths[0];
+      if (!alt || usedPdfs.has(alt.toLowerCase())) continue;
+      usedItems.add(row.itemID);
+      usedPdfs.add(alt.toLowerCase());
+      matchSuggestions.push({
+        kind: "broken_alt_path",
+        score: 1,
+        clear: true,
+        itemID: row.itemID,
+        itemKey: row.key,
+        itemTitle: row.title,
+        itemType: row.itemType,
+        pdfPath: alt,
+        pdfFile: safeFilename(alt),
+        filenameType: extractFilenameItemTypeTag(safeFilename(alt)),
+        typeOk: true,
+        itemStatus: "broken",
+      });
+    }
+    matchSuggestions.sort((a, b) => b.score - a.score);
+    clearMatches = matchSuggestions.filter((m) => m.clear);
+  } catch (e) {
+    matchError = String((e as Error)?.message || e).slice(0, 200);
+    ztoolkit.log("bidir matchSuggestions failed", e);
+  }
+
+  // Hash verify is best-effort and can be slow; never block the report.
+  try {
+    if (unlinkedLosers.length) {
+      opts?.onProgress?.({
+        text: "Çapraz kopyalar hash doğrulanıyor…",
+        progress: 90,
+      });
+      const keepersByLoser = new Map<string, string[]>();
+      for (const loser of unlinkedLosers) {
+        const keepers: string[] = [];
+        for (const g of crossGroups) {
+          if (!g.paths.some((p) => pathKey(p) === pathKey(loser))) continue;
+          for (const p of g.paths) {
+            if (referenced.has(pathKey(p))) keepers.push(p);
+          }
+        }
+        for (const k of await sameDirLinkedKeepers(
+          loser,
+          referenced,
+          pathKey,
+        )) {
+          if (!keepers.some((x) => pathKey(x) === pathKey(k))) keepers.push(k);
+        }
+        keepersByLoser.set(loser, keepers);
+      }
+      const filtered = await filterHashVerifiedLosers(
+        unlinkedLosers,
+        keepersByLoser,
+      );
+      verifiedLosers = filtered.verified;
+      hashRejectedLosers = filtered.rejected;
+      // If every fingerprint failed (crypto unavailable), keep name+size losers.
+      if (
+        !verifiedLosers.length &&
+        hashRejectedLosers.length === unlinkedLosers.length &&
+        unlinkedLosers.length > 0
+      ) {
+        hashSkipped = true;
+        verifiedLosers = unlinkedLosers.slice();
+        hashRejectedLosers = [];
       }
     }
-    for (const k of await sameDirLinkedKeepers(loser, referenced, pathKey)) {
-      if (!keepers.some((x) => pathKey(x) === pathKey(k))) keepers.push(k);
-    }
-    keepersByLoser.set(loser, keepers);
+  } catch (e) {
+    hashSkipped = true;
+    verifiedLosers = unlinkedLosers.slice();
+    ztoolkit.log("bidir hash verify failed — using name+size losers", e);
   }
-  const { verified: verifiedLosers, rejected: hashRejectedLosers } =
-    await filterHashVerifiedLosers(unlinkedLosers, keepersByLoser);
 
   const payload = {
     kind: "bidirectional" as const,
@@ -696,7 +807,9 @@ export async function runBidirectionalAudit(opts?: {
       candidates: unlinkedLosers.length,
       verified: verifiedLosers.length,
       rejected: hashRejectedLosers.length,
+      skipped: hashSkipped,
     },
+    matchError: matchError || undefined,
     matchSuggestions: {
       total: matchSuggestions.length,
       clear: clearMatches.length,
@@ -751,7 +864,7 @@ export async function runBidirectionalAudit(opts?: {
         ` · PDF orphan ${pdfOrphan}` +
         ` · eşleşme ${clearMatches.length}/${matchSuggestions.length}` +
         ` · çapraz ${crossGroups.length}` +
-        (reportPath ? ` → ${PathUtils.filename(reportPath)}` : ""),
+        (reportPath ? ` → ${safeFilename(reportPath)}` : ""),
       type: "success",
       progress: 100,
     })
@@ -761,21 +874,37 @@ export async function runBidirectionalAudit(opts?: {
 
 export async function openLastBidirectionalReport(): Promise<void> {
   const dir = await resolveReportDir();
-  const last = PathUtils.join(dir, "last-bidirectional.json");
-  if (!(await IOUtils.exists(last).catch(() => false))) {
-    new ztoolkit.ProgressWindow(config.addonName, { closeTime: 5000 })
+  let target = PathUtils.join(dir, "last-bidirectional.json");
+  if (!(await IOUtils.exists(target).catch(() => false))) {
+    // Fallback: newest stamped report if last- write failed.
+    try {
+      const kids: string[] = (await IOUtils.getChildren(dir)) || [];
+      const stamped = kids
+        .filter((p) =>
+          /disk-audit-bidirectional-.*\.json$/i.test(safeFilename(p)),
+        )
+        .sort();
+      if (stamped.length) target = stamped[stamped.length - 1];
+    } catch {
+      /* ignore */
+    }
+  }
+  if (!(await IOUtils.exists(target).catch(() => false))) {
+    new ztoolkit.ProgressWindow(config.addonName, { closeTime: 8000 })
       .createLine({
-        text: "Önce «İki uçlu denetim Tara» çalıştırın",
+        text:
+          "Önce «İki uçlu denetim Tara» çalıştırın" +
+          ` · beklenen: ${dir}\\last-bidirectional.json`,
         type: "fail",
       })
       .show();
     return;
   }
   try {
-    await Zotero.launchFile?.(last);
+    await Zotero.launchFile?.(target);
   } catch {
     try {
-      (Zotero as any).FileLauncher?.launch?.(last);
+      (Zotero as any).FileLauncher?.launch?.(target);
     } catch (e) {
       ztoolkit.log("openLastBidirectionalReport failed", e);
     }

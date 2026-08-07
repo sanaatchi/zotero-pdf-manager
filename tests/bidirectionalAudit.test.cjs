@@ -19,6 +19,9 @@ test("bidirectionalAudit module surface", () => {
   assert.match(src, /applyBidirectionalSuggestions/);
   assert.match(src, /openLastBidirectionalReport/);
   assert.match(src, /suggestAlternatePaths/);
+  assert.match(src, /safeFilename/);
+  assert.match(src, /safePathKey/);
+  assert.match(src, /NS_ERROR_FILE_UNRECOGNIZED_PATH|attachments:/);
   assert.match(src, /suggestOrphanToMissingMatches/);
   assert.match(src, /basenameSoftVariants/);
   assert.match(src, /orphan_to_broken/);
@@ -32,6 +35,23 @@ test("bidirectionalAudit module surface", () => {
   assert.match(src, /crossFolder/);
   assert.match(src, /matchSuggestions/);
   assert.match(src, /kind: \"bidirectional\"/);
+});
+
+test("safeFilename never throws on attachments: or empty", () => {
+  function safeFilename(path) {
+    const raw = String(path || "").trim();
+    if (!raw) return "";
+    const stripped = raw.replace(/^attachments:/i, "");
+    const parts = stripped.replace(/\\/g, "/").split("/");
+    return parts[parts.length - 1] || raw;
+  }
+  assert.equal(safeFilename(""), "");
+  assert.equal(safeFilename("attachments:foo/bar.pdf"), "bar.pdf");
+  assert.equal(safeFilename("D:/a/b.pdf"), "b.pdf");
+  assert.equal(
+    safeFilename("attachments:Emrali (2010) x.pdf"),
+    "Emrali (2010) x.pdf",
+  );
 });
 
 test("basenameSoftVariants strips trailing copy numbers", () => {

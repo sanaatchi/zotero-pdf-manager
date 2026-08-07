@@ -26,6 +26,9 @@ function loadDiskAudit() {
   assert.match(src, /applyNameContentRenames/);
   assert.match(src, /applyCopyQuarantine/);
   assert.match(src, /fileContentFingerprint/);
+  assert.match(src, /safeFilename/);
+  assert.match(src, /safePathKey/);
+  assert.match(src, /safeParent/);
   assert.match(src, /filesAreIdenticalCopies/);
   assert.match(src, /filterHashVerifiedLosers/);
   assert.match(src, /hashVerify/);

@@ -1,4 +1,4 @@
-// @ajan: cursor · @etiket: katman-2, disk-audit, hash-verify-copies, orphan, name-content, multi-attach, apply, path-fold, rename-safe, cross-folder-dupe, bridge-unavailable
+// @ajan: cursor · @etiket: katman-2, disk-audit, hash-verify-copies, pathutils-safe, orphan, name-content, multi-attach, apply, path-fold, rename-safe, cross-folder-dupe, bridge-unavailable
 /**
  * Prefs «Disk / ek denetimi» — scan (report) + apply (quarantine / rename / ID create).
  * Copy audit also flags same basename+size across folders (cross-folder duplicates).
@@ -68,6 +68,51 @@ export type CrossFolderDupeGroup = {
   paths: string[];
   dirs: string[];
 };
+
+/** Safe basename — never throw on attachments:/relative/empty paths. */
+export function safeFilename(path: string): string {
+  const raw = String(path || "").trim();
+  if (!raw) return "";
+  try {
+    const stripped = raw.replace(/^attachments:/i, "");
+    if (/^[a-zA-Z]:[\\/]/.test(stripped) || stripped.startsWith("\\\\")) {
+      return String(PathUtils.filename(stripped) || "");
+    }
+  } catch {
+    /* fall through */
+  }
+  const parts = raw.replace(/\\/g, "/").split("/");
+  return parts[parts.length - 1] || raw;
+}
+
+export function safePathKey(p: string): string {
+  const raw = String(p || "").trim();
+  if (!raw) return "";
+  try {
+    if (/^[a-zA-Z]:[\\/]/.test(raw) || raw.startsWith("\\\\")) {
+      return PathUtils.normalize(raw).normalize("NFC").toLowerCase();
+    }
+  } catch {
+    /* fall through */
+  }
+  return raw.normalize("NFC").toLowerCase().replace(/\\/g, "/");
+}
+
+/** Safe parent dir — never throw on attachments:/relative/empty paths. */
+export function safeParent(path: string): string | null {
+  const raw = String(path || "").trim();
+  if (!raw) return null;
+  try {
+    if (/^[a-zA-Z]:[\\/]/.test(raw) || raw.startsWith("\\\\")) {
+      return PathUtils.parent?.(raw) || null;
+    }
+  } catch {
+    /* fall through */
+  }
+  const norm = raw.replace(/\\/g, "/");
+  const i = norm.lastIndexOf("/");
+  return i > 0 ? norm.slice(0, i) : null;
+}
 
 const FILENAME_ITEM_TYPE_RE =
   /\[(book|journalArticle|thesis|bookSection|conferencePaper|report|document|webpage|newspaperArticle|magazineArticle|preprint|manuscript)\]/i;
@@ -216,7 +261,7 @@ export async function sameDirLinkedKeepers(
 ): Promise<string[]> {
   const out: string[] = [];
   try {
-    const dir = PathUtils.parent(loser);
+    const dir = safeParent(loser) || "";
     const size = Number((await IOUtils.stat(loser))?.size || 0);
     if (!(size > 0) || !dir) return out;
     const children = await IOUtils.getChildren(dir);
@@ -528,7 +573,7 @@ export async function movePathToQuarantine(
       return { ok: false, error: "missing" };
     }
     const dir = await resolveQuarantineDir(sub);
-    const dest = await uniqueDest(dir, PathUtils.filename(src));
+    const dest = await uniqueDest(dir, safeFilename(src));
     if (dryRun) return { ok: true, dest, planned: true };
     await IOUtils.move(src, dest);
     return { ok: true, dest };
@@ -538,7 +583,7 @@ export async function movePathToQuarantine(
 }
 
 function toIndexedFile(path: string): IndexedFile {
-  const filename = PathUtils.filename(path);
+  const filename = safeFilename(path);
   const name = filename.replace(/\.pdf$/i, "");
   const norm = name
     .normalize("NFKD")
@@ -553,7 +598,7 @@ async function peekAnchors(path: string): Promise<{
   isbn: string;
   thesisNumber: string;
 }> {
-  const name = PathUtils.filename(path);
+  const name = safeFilename(path);
   const thesisNumber = yokThesisNumber(name) || "";
   const meta = parseFilenameMetadata(name);
   let doi = String(meta.doi || "");
@@ -595,9 +640,7 @@ async function collectReferencedPaths(): Promise<Set<string>> {
       if (!attachment?.isFileAttachment()) continue;
       const path = await attachment.getFilePathAsync().catch(() => "");
       if (path) {
-        referenced.add(
-          PathUtils.normalize(path).normalize("NFC").toLowerCase(),
-        );
+        referenced.add(safePathKey(path));
       }
     }
   } catch (e) {
@@ -633,8 +676,8 @@ export async function runOrphanDiskAudit(opts?: {
         return stat?.type ?? null;
       },
     },
-    (path) => PathUtils.normalize(path).normalize("NFC").toLowerCase(),
-    (path) => PathUtils.filename(path),
+    (path) => safePathKey(path),
+    (path) => safeFilename(path),
   );
   const filtered = includeDisinda
     ? orphanFiles
@@ -663,7 +706,7 @@ export async function runOrphanDiskAudit(opts?: {
   };
   showProgress(
     `Kayıtsız PDF raporu: ${filtered.length} dosya` +
-      (reportPath ? ` → ${PathUtils.filename(reportPath)}` : ""),
+      (reportPath ? ` → ${safeFilename(reportPath)}` : ""),
   );
   return summary;
 }
@@ -815,8 +858,8 @@ export async function runNameContentDiskAudit(opts?: {
         return stat?.type ?? null;
       },
     },
-    (path) => PathUtils.normalize(path).normalize("NFC").toLowerCase(),
-    (path) => PathUtils.filename(path),
+    (path) => safePathKey(path),
+    (path) => safeFilename(path),
   );
   let targets = orphanFiles.filter((p) => p.toLowerCase().endsWith(".pdf"));
   if (!includeDisinda) targets = targets.filter((p) => !isUnderDisinda(p));
@@ -844,7 +887,7 @@ export async function runNameContentDiskAudit(opts?: {
 
   for (let i = 0; i < targets.length; i++) {
     const path = targets[i];
-    const name = PathUtils.filename(path);
+    const name = safeFilename(path);
     opts?.onProgress?.({
       text: `Ad↔içerik ${i + 1}/${targets.length}`,
       progress: Math.round(10 + (80 * i) / Math.max(1, targets.length)),
@@ -941,7 +984,7 @@ export async function runNameContentDiskAudit(opts?: {
   showProgress(
     `Ad↔içerik: ${counts.clearMismatch} net uyumsuz / ${counts.scanned} tarandı` +
       (truncated ? ` (üst sınır ${maxFiles}; aday ${totalCandidates})` : "") +
-      (reportPath ? ` → ${PathUtils.filename(reportPath)}` : ""),
+      (reportPath ? ` → ${safeFilename(reportPath)}` : ""),
     8000,
   );
   return summary;
@@ -999,7 +1042,11 @@ export async function applyNameContentRenames(opts?: {
         failed += 1;
         continue;
       }
-      const parent = PathUtils.parent(src);
+      const parent = safeParent(src);
+      if (!parent) {
+        failed += 1;
+        continue;
+      }
       const dest = PathUtils.join(parent, newName);
       if (
         (await IOUtils.exists(dest)) &&
@@ -1062,7 +1109,7 @@ export async function applyNameContentRenames(opts?: {
 async function findAttachmentByAbsolutePath(
   absolutePath: string,
 ): Promise<Zotero.Item | null> {
-  const want = PathUtils.normalize(absolutePath).normalize("NFC").toLowerCase();
+  const want = safePathKey(absolutePath);
   try {
     const rows =
       (await Zotero.DB.queryAsync(
@@ -1074,7 +1121,7 @@ async function findAttachmentByAbsolutePath(
       if (!attachment?.isFileAttachment?.()) continue;
       const path = await attachment.getFilePathAsync().catch(() => "");
       if (!path) continue;
-      const key = PathUtils.normalize(path).normalize("NFC").toLowerCase();
+      const key = safePathKey(path);
       if (key === want) return attachment;
     }
   } catch (e) {
@@ -1209,8 +1256,7 @@ export async function runCopyDiskAudit(opts?: {
   opts?.onProgress?.({ text: "Klasör kopyaları taranıyor…", progress: 45 });
   const roots = normalizeDiskAuditRoots();
   const referenced = await collectReferencedPaths();
-  const pathKey = (p: string) =>
-    PathUtils.normalize(p).normalize("NFC").toLowerCase();
+  const pathKey = (p: string) => safePathKey(p);
   const siblingFolders: Array<{
     dir: string;
     pdfCount: number;
@@ -1249,7 +1295,7 @@ export async function runCopyDiskAudit(opts?: {
         if (size > 0) {
           allPdfEntries.push({
             path: child,
-            basename: PathUtils.filename(child),
+            basename: safeFilename(child),
             size,
             dir,
           });
@@ -1392,7 +1438,7 @@ export async function runCopyDiskAudit(opts?: {
   showProgress(
     `Yinelenen: ${multi.count} çoklu ek, ${siblingFolders.length} klasör, ` +
       `${crossFolderGroups.length} çapraz · hash ${verifiedLosers.length}/${allSiblingUnlinked.length}` +
-      (reportPath ? ` → ${PathUtils.filename(reportPath)}` : ""),
+      (reportPath ? ` → ${safeFilename(reportPath)}` : ""),
     8000,
   );
   return summary;
@@ -1480,8 +1526,7 @@ export async function applyCopyQuarantine(opts?: {
   const moveDisk = getPref("pdf.diskAudit.copyMoveDiskLoser") !== false;
 
   const referencedNow = await collectReferencedPaths();
-  const pathKeyNow = (p: string) =>
-    PathUtils.normalize(p).normalize("NFC").toLowerCase();
+  const pathKeyNow = (p: string) => safePathKey(p);
   for (let i = 0; i < siblingLosers.length; i++) {
     const path = siblingLosers[i];
     opts?.onProgress?.({
