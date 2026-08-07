@@ -1,4 +1,4 @@
-// @ajan: cursor · @etiket: katman-2, tests, oa-search, multi-source
+// @ajan: cursor · @etiket: katman-2, tests, oa-search, multi-source, pdfkitap
 const assert = require("node:assert/strict");
 const fs = require("node:fs");
 const path = require("node:path");
@@ -258,6 +258,8 @@ test("OA search surface: xhtml + menubar + locales + menu wiring", () => {
   assert.match(bridge, /loadOaSearchSourceSelection/);
   assert.match(bridge, /saveOaSearchSourceSelection/);
   assert.match(bridge, /allFederatedSourceIds/);
+  assert.match(bridge, /pdfkitap:\s*"pdf\.pdfkitapEnabled"/);
+  assert.match(bridge, /pdfkitap:\s*"PDFKitap"/);
   assert.doesNotMatch(bridge, /arxiv:\s*"pdf\.arxivEnabled"/);
   assert.doesNotMatch(bridge, /arxiv:\s*"arXiv"/);
 

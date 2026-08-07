@@ -1,4 +1,4 @@
-// @ajan: cursor · @etiket: katman-2, source-priority, article-db-core-zenodo
+// @ajan: cursor · @etiket: katman-2, source-priority, article-db-core-zenodo, pdfkitap
 /**
  * Item-aware PDF source priority.
  *
@@ -11,6 +11,7 @@
  * - Foreign articles → article DBs (doi/Unpaywall, pmc, …); LibGen late fallback.
  * - DOI (non-TR articles) → Unpaywall (`doi`) early; Sci-Hub only if in cascade.
  * - Non-Turkish books → LibGen early.
+ * - Turkish books → PDFKitap early (TR meta-search), then remaining cascade.
  */
 import { getDOI, isArticle, isBook, isThesis } from "./pdfSources";
 
@@ -135,7 +136,9 @@ export function prioritizeSourcesForItem(
   }
 
   if (book) {
-    if (!turkish && ids.includes("libgen")) {
+    if (turkish && ids.includes("pdfkitap")) {
+      ids = moveToFrontAfterLocal(ids, "pdfkitap");
+    } else if (!turkish && ids.includes("libgen")) {
       ids = moveToFrontAfterLocal(ids, "libgen");
     }
     return ids;

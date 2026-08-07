@@ -1,4 +1,4 @@
-// @ajan: cursor · @etiket: katman-2, oa-search, actions, periodical
+// @ajan: cursor · @etiket: katman-2, oa-search, actions, periodical, pdfkitap
 /**
  * OA Search popup actions: attach hit PDF, create item from hit, Related Items.
  * Pure field mapping is unit-tested; Zotero I/O stays async.
@@ -50,7 +50,12 @@ export function guessItemTypeFromHit(hit: OaPdfHit): string {
   }
   if (hitIsbn(hit)) return "book";
   if (String(hit.doi || "").trim()) return "journalArticle";
-  if (source === "libgen" || source === "book" || source.includes("isbn")) {
+  if (
+    source === "libgen" ||
+    source === "pdfkitap" ||
+    source === "book" ||
+    source.includes("isbn")
+  ) {
     return "book";
   }
   return "journalArticle";

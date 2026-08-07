@@ -1,4 +1,4 @@
-// @ajan: cursor · @etiket: katman-2, pdf-sources, bridge-guard, ocr-haystack, content-validate, nosource-sync, pdf-candidate-split, mismatch-reason, encoding-gate, re-ocr-validate, tr-i-fold, sentence-tr-override, author-line-gate, no-validate-subtitle-enrich, title-length-aware, isbn-conflict-soft, tr-pdf-encoding, medium-cov-soft, medium-author-noyear, field-weights-score, validated-pdf-lock
+// @ajan: cursor · @etiket: katman-2, pdf-sources, bridge-guard, ocr-haystack, content-validate, nosource-sync, pdf-candidate-split, mismatch-reason, encoding-gate, re-ocr-validate, tr-i-fold, sentence-tr-override, author-line-gate, no-validate-subtitle-enrich, title-length-aware, isbn-conflict-soft, tr-pdf-encoding, medium-cov-soft, medium-author-noyear, field-weights-score, validated-pdf-lock, pdfkitap
 import { getString } from "../utils/locale";
 import { getPref } from "../utils/prefs";
 import {
@@ -19,6 +19,7 @@ import {
   InternetArchiveSource,
   LibGenSource,
   OpenAireSource,
+  PdfKitapSource,
   PMCSource,
   ProxySource,
   SciHubSource,
@@ -2448,6 +2449,7 @@ export const ALL_SOURCES: Record<string, PDFSource> = {
   dergipark: DergiParkSource,
   scihub: SciHubSource,
   libgen: LibGenSource,
+  pdfkitap: PdfKitapSource,
   yoktez: YokTezSource,
   proxy: new ProxySource(),
   zenodo: ZenodoSource,

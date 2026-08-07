@@ -1,3 +1,4 @@
+// @ajan: cursor · @etiket: katman-2, yoktez, pdfkitap, test
 const assert = require("node:assert/strict");
 const { test } = require("node:test");
 const path = require("node:path");
@@ -226,5 +227,21 @@ test("LibGen supports books and articles (TR articles filtered by priority)", ()
   assert.equal(ALL_SOURCES.libgen.supportsItem({ itemTypeID: 2 }), true);
   assert.equal(ALL_SOURCES.libgen.supportsItem({ itemTypeID: 1 }), true);
   assert.equal(ALL_SOURCES.libgen.supportsItem({ itemTypeID: 5 }), false);
+  delete global.Zotero;
+});
+
+test("PDFKitap is registered and supports books and articles", () => {
+  global.Zotero = {
+    ItemTypes: {
+      getName: (id) =>
+        ({ 1: "journalArticle", 2: "book", 5: "thesis" })[id] || "book",
+    },
+  };
+  const { ALL_SOURCES } = loadPdfSources();
+  assert.ok(ALL_SOURCES.pdfkitap);
+  assert.equal(ALL_SOURCES.pdfkitap.id, "pdfkitap");
+  assert.equal(ALL_SOURCES.pdfkitap.supportsItem({ itemTypeID: 2 }), true);
+  assert.equal(ALL_SOURCES.pdfkitap.supportsItem({ itemTypeID: 1 }), true);
+  assert.equal(ALL_SOURCES.pdfkitap.supportsItem({ itemTypeID: 5 }), false);
   delete global.Zotero;
 });

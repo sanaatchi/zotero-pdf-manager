@@ -1,4 +1,4 @@
-// @ajan: cursor · @etiket: katman-2, prefs, watch-root-parent
+// @ajan: cursor · @etiket: katman-2, prefs, watch-root-parent, pdfkitap
 /* eslint-disable no-undef */
 pref("extensions.zotero.__addonRef__.enable", true);
 pref("extensions.zotero.__addonRef__.attachType", "linking");
@@ -82,7 +82,7 @@ pref("extensions.zotero.__addonRef__.scanner.tagDuplicate", "#duplicate");
 pref("extensions.zotero.__addonRef__.scanner.tagNonfile", "#nonfile");
 pref(
   "extensions.zotero.__addonRef__.pdf.sourceOrder",
-  "local,doi,dergipark,pmc,core,libgen,zenodo,openaire,scihub,yoktez,archive,proxy",
+  "local,doi,dergipark,pmc,core,libgen,pdfkitap,zenodo,openaire,scihub,yoktez,archive,proxy",
 );
 pref("extensions.zotero.__addonRef__.pdf.localEnabled", true);
 pref(
@@ -115,6 +115,7 @@ pref(
   "extensions.zotero.__addonRef__.pdf.libgenURL",
   "https://libgen.li/;https://libgen.vg/;https://libgen.la/;https://libgen.bz/;https://libgen.gl/",
 );
+pref("extensions.zotero.__addonRef__.pdf.pdfkitapEnabled", true);
 pref("extensions.zotero.__addonRef__.pdf.yoktezEnabled", true);
 pref("extensions.zotero.__addonRef__.pdf.proquestEnabled", false);
 // zenodo/archive/openaire: open APIs, no key. core: needs a free API key
