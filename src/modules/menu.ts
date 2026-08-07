@@ -1,4 +1,4 @@
-/* @ajan: cursor · @etiket: katman-2, menu, match-rename-move, mismatch-rematch, isbn-phone-filter, validated-pdf-lock */
+/* @ajan: cursor · @etiket: katman-2, menu, match-rename-move, mismatch-rematch, isbn-phone-filter, validated-pdf-lock, openusing-finally */
 /*eslint no-constant-condition: ["error", { "checkLoops": false }]*/
 import { getString } from "../utils/locale";
 import { config } from "../../package.json";
@@ -2153,9 +2153,12 @@ async function openUsing(fileHandler: string, fileType = "pdf") {
     await ZoteroPane.viewAttachment(ids);
   } catch {
     ztoolkit.log("error when ZoteroPane.viewAttachment(ids)");
+  } finally {
+    // Always restore — hung viewAttachment used to leave fileHandler.pdf on
+    // an external path so double-click no longer opened a Zotero reader tab
+    // until restart.
+    Zotero.Prefs.set(`fileHandler.${fileType}`, _fileHandler);
   }
-
-  Zotero.Prefs.set(`fileHandler.${fileType}`, _fileHandler);
 }
 
 /**
