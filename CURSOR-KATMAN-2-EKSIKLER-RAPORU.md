@@ -16,11 +16,11 @@ ZotAssets, File Utility, Attachment Scanner, ozefe/yoktez).
 
 ### Son eklenen (v1.0.150)
 
-| Madde                         | Not                                                                                          |
-| ----------------------------- | -------------------------------------------------------------------------------------------- |
-| Kaynaklar izleme kökü         | Default + migrate; legacy `1A_E_KAYNAKLARIM` üst kök silinir                                 |
-| Path-fold tr-TR               | Dosya yolu karşılaştırmalarında `toLowerCase` (`I`→`ı` yok)                                  |
-| Disk denetimi Çöz güvenliği   | `renameAttachmentFile`; kopya `applyTargets` tam liste; orphan tam liste; ad↔içerik max 5000 |
+| Madde                       | Not                                                                                          |
+| --------------------------- | -------------------------------------------------------------------------------------------- |
+| Kaynaklar izleme kökü       | Default + migrate; legacy `1A_E_KAYNAKLARIM` üst kök silinir                                 |
+| Path-fold tr-TR             | Dosya yolu karşılaştırmalarında `toLowerCase` (`I`→`ı` yok)                                  |
+| Disk denetimi Çöz güvenliği | `renameAttachmentFile`; kopya `applyTargets` tam liste; orphan tam liste; ad↔içerik max 5000 |
 
 ### Son eklenen (v1.0.149)
 

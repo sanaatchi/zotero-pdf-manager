@@ -572,7 +572,9 @@ export async function runNameContentDiskAudit(opts?: {
   const roots = normalizeDiskAuditRoots();
   const maxFiles = Math.max(
     1,
-    Number(opts?.maxFiles || getPref("pdf.diskAudit.nameContentMaxFiles") || 5000),
+    Number(
+      opts?.maxFiles || getPref("pdf.diskAudit.nameContentMaxFiles") || 5000,
+    ),
   );
   opts?.onProgress?.({
     text: "Ad↔içerik için kayıtsız PDF toplanıyor…",
@@ -862,8 +864,7 @@ async function renameAttachmentFileSafe(
 ): Promise<boolean> {
   try {
     const renameAttachment = (attItem as any).renameAttachmentFile as
-      | ((...args: any[]) => Promise<boolean>)
-      | undefined;
+      ((...args: any[]) => Promise<boolean>) | undefined;
     if (typeof renameAttachment !== "function") return false;
     if (renameAttachment.length <= 1) {
       return !!(await renameAttachment.call(attItem, newName, {

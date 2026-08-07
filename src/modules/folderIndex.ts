@@ -498,8 +498,7 @@ async function buildIndexLocked(
   }
 
   const index: IndexedFile[] = Array.from(unique.values()).map((d) => {
-    const prev =
-      persisted.get(d.path) || persisted.get(d.path.toLowerCase());
+    const prev = persisted.get(d.path) || persisted.get(d.path.toLowerCase());
     return indexEntryFromDiscovery(d.path, d.mtime, prev, d.size);
   });
 
