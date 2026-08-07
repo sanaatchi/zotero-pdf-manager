@@ -9,7 +9,11 @@ import {
   normalizePeriodicMinutes,
 } from "./pdfReconciler";
 import { clearAuditEvents, openAutomationAuditReport } from "./automationAudit";
-import { runDiskAuditWithProgress } from "./diskAudit";
+import {
+  openLastDiskAuditReport,
+  runDiskAuditApplyWithProgress,
+  runDiskAuditWithProgress,
+} from "./diskAudit";
 
 async function runManualReconcileWithProgress() {
   const reconciler = addon.data.pdfReconciler;
@@ -450,6 +454,36 @@ function bindPrefEvents(_window: Window) {
   doc.querySelector("#pdf-disk-audit-copy")?.addEventListener("command", () => {
     void runDiskAuditWithProgress("copy");
   });
+  doc
+    .querySelector("#pdf-disk-audit-orphan-open")
+    ?.addEventListener("command", () => {
+      void openLastDiskAuditReport("orphan");
+    });
+  doc
+    .querySelector("#pdf-disk-audit-name-open")
+    ?.addEventListener("command", () => {
+      void openLastDiskAuditReport("nameContent");
+    });
+  doc
+    .querySelector("#pdf-disk-audit-copy-open")
+    ?.addEventListener("command", () => {
+      void openLastDiskAuditReport("copy");
+    });
+  doc
+    .querySelector("#pdf-disk-audit-orphan-apply")
+    ?.addEventListener("command", () => {
+      void runDiskAuditApplyWithProgress("orphan");
+    });
+  doc
+    .querySelector("#pdf-disk-audit-name-apply")
+    ?.addEventListener("command", () => {
+      void runDiskAuditApplyWithProgress("nameContent");
+    });
+  doc
+    .querySelector("#pdf-disk-audit-copy-apply")
+    ?.addEventListener("command", () => {
+      void runDiskAuditApplyWithProgress("copy");
+    });
   doc
     .querySelector('[preference$=".moveWithoutDeleting"]')
     ?.addEventListener("command", () => {

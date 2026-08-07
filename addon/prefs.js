@@ -137,7 +137,7 @@ pref("extensions.zotero.__addonRef__.pdf.oaSearchFieldActive", "");
 pref("extensions.zotero.__addonRef__.pdf.oaSearchFieldByField", false);
 // Optional Ollama content check via bridge (/pdf-validate-content).
 pref("extensions.zotero.__addonRef__.pdf.validateContentLlm", true);
-// Disk / ek denetimi (P0 report-only; apply/quarantine disabled).
+// Disk / ek denetimi (scan + apply; dry-run default true).
 pref("extensions.zotero.__addonRef__.pdf.diskAudit.useWatchRoots", true);
 pref(
   "extensions.zotero.__addonRef__.pdf.diskAudit.roots",
@@ -150,7 +150,7 @@ pref(
   "extensions.zotero.__addonRef__.pdf.diskAudit.nameContentScope",
   "orphans_only",
 );
-pref("extensions.zotero.__addonRef__.pdf.diskAudit.renameOnApply", false);
+pref("extensions.zotero.__addonRef__.pdf.diskAudit.renameOnApply", true);
 pref("extensions.zotero.__addonRef__.pdf.diskAudit.clearMismatchOnly", true);
 pref("extensions.zotero.__addonRef__.pdf.diskAudit.copyScanMultiAttach", true);
 pref("extensions.zotero.__addonRef__.pdf.diskAudit.copyScanDiskSibling", true);
@@ -158,7 +158,7 @@ pref(
   "extensions.zotero.__addonRef__.pdf.diskAudit.copyKeepRule",
   "validated_then_size",
 );
-pref("extensions.zotero.__addonRef__.pdf.diskAudit.copyAction", "report");
+pref("extensions.zotero.__addonRef__.pdf.diskAudit.copyAction", "quarantine");
 pref("extensions.zotero.__addonRef__.pdf.diskAudit.quarantineDir", "");
 pref("extensions.zotero.__addonRef__.pdf.diskAudit.copyDetachLoser", true);
 pref("extensions.zotero.__addonRef__.pdf.diskAudit.copyMoveDiskLoser", true);

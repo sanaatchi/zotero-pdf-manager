@@ -1,4 +1,4 @@
-// @ajan: cursor · @etiket: katman-2, disk-audit, test
+// @ajan: cursor · @etiket: katman-2, disk-audit, test, apply
 "use strict";
 
 const { test } = require("node:test");
@@ -17,18 +17,23 @@ function loadDiskAudit() {
   assert.match(src, /runNameContentDiskAudit/);
   assert.match(src, /runCopyDiskAudit/);
   assert.match(src, /listMultiAttachParents/);
-  assert.match(src, /dryRun:\s*true/);
+  assert.match(src, /applyOrphanRemediation/);
+  assert.match(src, /applyNameContentRenames/);
+  assert.match(src, /applyCopyQuarantine/);
+  assert.match(src, /openLastDiskAuditReport/);
+  assert.match(src, /movePathToQuarantine/);
+  assert.match(src, /isDiskAuditDryRun/);
   return src;
 }
 
-test("diskAudit module exports report-only runners", () => {
+test("diskAudit module exports scan + apply surface", () => {
   const src = loadDiskAudit();
-  assert.doesNotMatch(src, /copyAction\s*===\s*"quarantine"/);
-  assert.match(src, /dryRun:\s*true/);
+  assert.match(src, /applyOrphanRemediation/);
+  assert.match(src, /_pdf_quarantine/);
+  assert.match(src, /runDiskAuditApplyWithProgress/);
 });
 
 test("proposeAttangerRename + classify helpers (inline)", () => {
-  // Mirror the pure logic for unit certainty without full Zotero bundle.
   function proposeAttangerRename(
     currentName,
     contentTitle,
@@ -88,31 +93,54 @@ test("proposeAttangerRename + classify helpers (inline)", () => {
   assert.equal(classifyNameContentFromBridge({ verdict: "match" }).class, "ok");
 });
 
-test("prefs + xhtml wire disk audit buttons and dirzon", () => {
+test("clear_mismatch rename filter keeps only proposed rows", () => {
+  const rows = [
+    { path: "a.pdf", proposed_rename: "A.pdf", clear_mismatch: true },
+    { path: "b.pdf", proposed_rename: null, clear_mismatch: true },
+    { path: "c.pdf", proposed_rename: "C.pdf", clear_mismatch: false },
+  ].filter((r) => r?.path && r?.proposed_rename && r.clear_mismatch !== false);
+  assert.equal(rows.length, 1);
+  assert.equal(rows[0].path, "a.pdf");
+});
+
+test("prefs + xhtml wire disk audit scan/open/apply + automation split", () => {
   const prefs = fs.readFileSync(path.join(root, "addon/prefs.js"), "utf8");
   assert.match(prefs, /pdf\.diskAudit\.dryRun/);
+  assert.match(prefs, /pdf\.diskAudit\.copyAction", "quarantine"/);
   assert.match(prefs, /pdf\.dirzonEnabled/);
   const xhtml = fs.readFileSync(
     path.join(root, "addon/chrome/content/preferences.xhtml"),
     "utf8",
   );
   assert.match(xhtml, /pdf-disk-audit-orphan/);
-  assert.match(xhtml, /pdf-disk-audit-name-content/);
-  assert.match(xhtml, /pdf-disk-audit-copy/);
-  assert.match(xhtml, /pdf-dirzon-enabled/);
+  assert.match(xhtml, /pdf-disk-audit-orphan-apply/);
+  assert.match(xhtml, /pdf-disk-audit-name-apply/);
+  assert.match(xhtml, /pdf-disk-audit-copy-apply/);
+  assert.match(xhtml, /pdf-disk-audit-orphan-open/);
+  assert.match(xhtml, /pdf-automation-title/);
+  assert.doesNotMatch(xhtml, /pdf-disk-audit-apply-disabled/);
+  assert.doesNotMatch(
+    xhtml,
+    /id="pdf-disk-audit-dry-run"[\s\S]*?disabled="true"/,
+  );
   const script = fs.readFileSync(
     path.join(root, "src/modules/preferenceScript.ts"),
     "utf8",
   );
   assert.match(script, /runDiskAuditWithProgress\("orphan"\)/);
-  assert.match(script, /runDiskAuditWithProgress\("nameContent"\)/);
-  assert.match(script, /runDiskAuditWithProgress\("copy"\)/);
+  assert.match(script, /runDiskAuditApplyWithProgress\("orphan"\)/);
+  assert.match(script, /openLastDiskAuditReport\("nameContent"\)/);
   for (const loc of ["en-US", "de", "it-IT", "tr-TR"]) {
     const ftl = fs.readFileSync(
       path.join(root, "addon/locale", loc, "preferences.ftl"),
       "utf8",
     );
     assert.match(ftl, /pdf-disk-audit-title/);
-    assert.match(ftl, /pdf-dirzon-enabled/);
+    assert.match(ftl, /pdf-disk-audit-orphan-apply/);
+    assert.match(ftl, /pdf-disk-audit-name-apply/);
+    assert.match(ftl, /pdf-disk-audit-copy-apply/);
+    assert.match(ftl, /pdf-automation-title/);
+    assert.match(ftl, /pdf-disk-audit-flow-help/);
+    assert.doesNotMatch(ftl, /pdf-disk-audit-apply-disabled/);
   }
 });

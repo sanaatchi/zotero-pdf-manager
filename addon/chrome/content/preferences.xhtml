@@ -700,6 +700,7 @@
         <html:h3 data-l10n-id="pdf-disk-audit-title"></html:h3>
       </label>
       <description data-l10n-id="pdf-disk-audit-help"></description>
+      <description data-l10n-id="pdf-disk-audit-flow-help"></description>
       <checkbox
         native="true"
         data-l10n-id="pdf-disk-audit-use-watch-roots"
@@ -711,27 +712,75 @@
         preference="extensions.zotero.__addonRef__.pdf.diskAudit.includeDisinda"
       />
       <checkbox
+        id="pdf-disk-audit-dry-run"
         native="true"
         data-l10n-id="pdf-disk-audit-dry-run"
         preference="extensions.zotero.__addonRef__.pdf.diskAudit.dryRun"
-        disabled="true"
       />
       <description data-l10n-id="pdf-disk-audit-dry-run-help"></description>
+
+      <label>
+        <html:h4 data-l10n-id="pdf-disk-audit-orphan-heading"></html:h4>
+      </label>
+      <description data-l10n-id="pdf-disk-audit-orphan-help"></description>
       <hbox align="center">
         <button
           id="pdf-disk-audit-orphan"
           data-l10n-id="pdf-disk-audit-orphan"
         ></button>
         <button
+          id="pdf-disk-audit-orphan-open"
+          data-l10n-id="pdf-disk-audit-open-report"
+        ></button>
+        <button
+          id="pdf-disk-audit-orphan-apply"
+          data-l10n-id="pdf-disk-audit-orphan-apply"
+        ></button>
+      </hbox>
+
+      <label>
+        <html:h4 data-l10n-id="pdf-disk-audit-name-heading"></html:h4>
+      </label>
+      <description data-l10n-id="pdf-disk-audit-name-help"></description>
+      <hbox align="center">
+        <button
           id="pdf-disk-audit-name-content"
           data-l10n-id="pdf-disk-audit-name-content"
         ></button>
         <button
+          id="pdf-disk-audit-name-open"
+          data-l10n-id="pdf-disk-audit-open-report"
+        ></button>
+        <button
+          id="pdf-disk-audit-name-apply"
+          data-l10n-id="pdf-disk-audit-name-apply"
+        ></button>
+      </hbox>
+
+      <label>
+        <html:h4 data-l10n-id="pdf-disk-audit-copy-heading"></html:h4>
+      </label>
+      <description data-l10n-id="pdf-disk-audit-copy-help"></description>
+      <hbox align="center">
+        <button
           id="pdf-disk-audit-copy"
           data-l10n-id="pdf-disk-audit-copy"
         ></button>
+        <button
+          id="pdf-disk-audit-copy-open"
+          data-l10n-id="pdf-disk-audit-open-report"
+        ></button>
+        <button
+          id="pdf-disk-audit-copy-apply"
+          data-l10n-id="pdf-disk-audit-copy-apply"
+        ></button>
       </hbox>
-      <description data-l10n-id="pdf-disk-audit-apply-disabled"></description>
+
+      <separator class="thin" />
+      <label>
+        <html:h3 data-l10n-id="pdf-automation-title"></html:h3>
+      </label>
+      <description data-l10n-id="pdf-automation-help"></description>
       <checkbox
         native="true"
         data-l10n-id="pdf-dry-run"
