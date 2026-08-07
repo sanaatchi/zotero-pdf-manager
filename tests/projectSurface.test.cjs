@@ -1,4 +1,4 @@
-// @ajan: cursor · @etiket: katman-2, tests, watch-root-parent, tr-TR
+// @ajan: cursor · @etiket: katman-2, tests, watch-root-parent, tr-TR, crlf-locale
 const assert = require("node:assert/strict");
 const fs = require("node:fs");
 const path = require("node:path");
@@ -117,14 +117,15 @@ test("new automation locale keys exist in all supported locales", () => {
     for (const key of preferenceKeys) {
       assert.match(
         preferences,
-        new RegExp(`^${key}\\s*=\\s*\\n\\s+\\.label\\s*=`, "m"),
+        // Windows checkout may use CRLF; `.` does not match `\r`.
+        new RegExp(`^${key}\\s*=\\s*\\r?\\n\\s+\\.label\\s*=`, "m"),
       );
     }
     for (const key of helpKeys) {
       assert.match(
         preferences,
         new RegExp(
-          `^${key}\\s*=\\s*\\n\\s+\\.tooltiptext\\s*=.+\\n\\s+\\.aria-label\\s*=`,
+          `^${key}\\s*=\\s*\\r?\\n\\s+\\.tooltiptext\\s*=.+\\r?\\n\\s+\\.aria-label\\s*=`,
           "m",
         ),
       );

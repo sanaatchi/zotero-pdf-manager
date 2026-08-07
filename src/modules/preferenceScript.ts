@@ -1,4 +1,4 @@
-// @ajan: cursor · @etiket: katman-2, prefs, watch-root-parent, disk-audit, unit-interval-pref, bidirectional-audit
+// @ajan: cursor · @etiket: katman-2, prefs, watch-root-parent, disk-audit, unit-interval-pref, bidirectional-audit, bidir-apply
 import { config } from "../../package.json";
 import { getString } from "../utils/locale";
 import { getPref, setPref } from "../utils/prefs";
@@ -16,6 +16,7 @@ import {
 } from "./diskAudit";
 import {
   openLastBidirectionalReport,
+  runBidirectionalApplyWithProgress,
   runBidirectionalAuditWithProgress,
 } from "./bidirectionalAudit";
 
@@ -453,6 +454,11 @@ function bindPrefEvents(_window: Window) {
     .querySelector("#pdf-disk-audit-bidir-open")
     ?.addEventListener("command", () => {
       void openLastBidirectionalReport();
+    });
+  doc
+    .querySelector("#pdf-disk-audit-bidir-apply")
+    ?.addEventListener("command", () => {
+      void runBidirectionalApplyWithProgress();
     });
   doc
     .querySelector("#pdf-disk-audit-orphan")

@@ -1,4 +1,4 @@
-// @ajan: cursor · @etiket: katman-2, bidirectional-audit, test
+// @ajan: cursor · @etiket: katman-2, bidirectional-audit, match-suggest, test
 "use strict";
 
 const { test } = require("node:test");
@@ -15,14 +15,50 @@ test("bidirectionalAudit module surface", () => {
   );
   assert.match(src, /runBidirectionalAudit/);
   assert.match(src, /runBidirectionalAuditWithProgress/);
+  assert.match(src, /runBidirectionalApplyWithProgress/);
+  assert.match(src, /applyBidirectionalSuggestions/);
   assert.match(src, /openLastBidirectionalReport/);
   assert.match(src, /suggestAlternatePaths/);
+  assert.match(src, /suggestOrphanToMissingMatches/);
+  assert.match(src, /siblingDownloadsRoots/);
   assert.match(src, /walkPdfEntries/);
   assert.match(src, /filenameItemTypeMismatch/);
   assert.match(src, /groupCrossFolderDuplicates/);
   assert.match(src, /typeConflict/);
   assert.match(src, /crossFolder/);
+  assert.match(src, /matchSuggestions/);
   assert.match(src, /kind: \"bidirectional\"/);
+});
+
+test("title overlap rejects single-token false friends", () => {
+  function titleTokens(value) {
+    return new Set(
+      (value || "")
+        .normalize("NFKD")
+        .replace(/\p{Mark}/gu, "")
+        .toLowerCase()
+        .replace(/[^\p{L}\p{N}\s]/gu, " ")
+        .split(/\s+/)
+        .filter((w) => w.length > 3),
+    );
+  }
+  function detail(a, b) {
+    const ta = titleTokens(a);
+    const tb = titleTokens(b);
+    if (!ta.size || !tb.size) return { score: 0, shared: 0 };
+    let shared = 0;
+    for (const t of ta) if (tb.has(t)) shared += 1;
+    return { score: shared / Math.min(ta.size, tb.size), shared };
+  }
+  const bad = detail("Dünya tarihi", "Deliliğin tarihi");
+  assert.equal(bad.shared, 1);
+  assert.ok(bad.shared < 2);
+  const good = detail(
+    "Tiyatroda düşünsellik",
+    "Tiyatroda düşünsellik",
+  );
+  assert.ok(good.shared >= 2);
+  assert.equal(good.score, 1);
 });
 
 test("suggestAlternatePaths prefers exact basename", () => {
@@ -84,20 +120,23 @@ test("filenameItemTypeMismatch detects [book] vs journalArticle", () => {
   );
 });
 
-test("prefs wire bidirectional scan + open", () => {
+test("prefs wire bidirectional scan + open + apply", () => {
   const script = fs.readFileSync(
     path.join(root, "src/modules/preferenceScript.ts"),
     "utf8",
   );
   assert.match(script, /runBidirectionalAuditWithProgress/);
+  assert.match(script, /runBidirectionalApplyWithProgress/);
   assert.match(script, /openLastBidirectionalReport/);
   assert.match(script, /pdf-disk-audit-bidir/);
+  assert.match(script, /pdf-disk-audit-bidir-apply/);
   const xhtml = fs.readFileSync(
     path.join(root, "addon/chrome/content/preferences.xhtml"),
     "utf8",
   );
   assert.match(xhtml, /pdf-disk-audit-bidir-heading/);
   assert.match(xhtml, /id="pdf-disk-audit-bidir"/);
+  assert.match(xhtml, /id="pdf-disk-audit-bidir-apply"/);
   for (const loc of ["en-US", "de", "it-IT", "tr-TR"]) {
     const ftl = fs.readFileSync(
       path.join(root, "addon/locale", loc, "preferences.ftl"),
@@ -106,5 +145,6 @@ test("prefs wire bidirectional scan + open", () => {
     assert.match(ftl, /pdf-disk-audit-bidir-heading/);
     assert.match(ftl, /pdf-disk-audit-bidir-help/);
     assert.match(ftl, /pdf-disk-audit-bidir\s*=/);
+    assert.match(ftl, /pdf-disk-audit-bidir-apply\s*=/);
   }
 });

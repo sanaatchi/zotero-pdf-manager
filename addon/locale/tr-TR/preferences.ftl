@@ -212,9 +212,11 @@ pdf-disk-audit-dry-run =
     .label = Deneme / yalnız plan (önerilen)
 pdf-disk-audit-dry-run-help = Açıkken Çöz düğmeleri taşıma veya yeniden adlandırma yapmaz; yalnızca plan yazar. Kapalıyken onay sonrası uygular.
 pdf-disk-audit-bidir-heading = 0) İki uçlu denetim (yayın ↔ PDF)
-pdf-disk-audit-bidir-help = Tek tarama: Zotero öğesinden PDF’e (eksik/kırık/tür uyumsuzluğu) ve disk PDF’inden öğeye (kayıtsız / başka klasörde aynı dosya). Önce bunu çalıştırın; aşağıdaki üç satır ayrıntılı çözüm içindir.
+pdf-disk-audit-bidir-help = Tek tarama: Zotero öğesinden PDF’e (eksik/kırık/tür uyumsuzluğu) ve disk PDF’inden öğeye (kayıtsız / başka klasörde aynı dosya). Başlık örtüşmesiyle net eşleşmeleri önerir; Çöz net eşleşmeleri bağlar ve çapraz kopyaları karantinaya alır. Önce Tara; aşağıdaki üç satır ayrıntılı çözüm içindir.
 pdf-disk-audit-bidir =
     .label = Tara
+pdf-disk-audit-bidir-apply =
+    .label = Çöz
 
 pdf-disk-audit-orphan-heading = 1) Kayıtsız PDF
 pdf-disk-audit-orphan-help = Diskte var, Zotero’da yok. Çöz: DOI, ISBN veya YÖK numarası olanlardan kaynak oluşturur; kalanları karantina klasörüne taşır (silmez).

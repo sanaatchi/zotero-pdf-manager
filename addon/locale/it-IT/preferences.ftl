@@ -213,6 +213,8 @@ pdf-disk-audit-bidir-heading = 0) Controllo bidirezionale (voce ↔ PDF)
 pdf-disk-audit-bidir-help = Un’unica scansione: dalle voci Zotero ai PDF (mancante/rotto/tipo) e dai PDF su disco alle voci (orfani / stesso file in altra cartella). Esegui prima questo; le tre righe sotto sono correzioni dettagliate.
 pdf-disk-audit-bidir =
     .label = Scansiona
+pdf-disk-audit-bidir-apply =
+    .label = Risolvi
 
 pdf-disk-audit-orphan-heading = 1) PDF orfani
 pdf-disk-audit-orphan-help = Su disco ma non in Zotero. Risolvi: crea voci per DOI/ISBN/YÖK; sposta il resto in _pdf_quarantine/orphans.

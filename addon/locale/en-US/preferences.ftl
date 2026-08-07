@@ -211,9 +211,11 @@ pdf-disk-audit-dry-run =
     .label = Plan only — do not change files yet (recommended)
 pdf-disk-audit-dry-run-help = When on, Fix only writes a plan into the report. When off, Fix applies after you confirm.
 pdf-disk-audit-bidir-heading = 0) Two-way audit (item ↔ PDF)
-pdf-disk-audit-bidir-help = One scan: from Zotero items to PDFs (missing/broken/type mismatch) and from disk PDFs to items (orphans / same file in another folder). Run this first; the three rows below are detailed fixes.
+pdf-disk-audit-bidir-help = One scan: from Zotero items to PDFs (missing/broken/type mismatch) and from disk PDFs to items (orphans / same file in another folder). Suggests title-overlap matches; Fix links clear matches and quarantines cross-folder losers. Run Scan first; the three rows below are detailed fixes.
 pdf-disk-audit-bidir =
     .label = Scan
+pdf-disk-audit-bidir-apply =
+    .label = Fix
 
 pdf-disk-audit-orphan-heading = 1) Orphan PDFs
 pdf-disk-audit-orphan-help = On disk but not in Zotero. Fix: create items for DOI/ISBN/YÖK hits; move the rest to a quarantine folder under your PDF root.
