@@ -1,4 +1,4 @@
-// @ajan: cursor · @etiket: katman-2, python-pdf-sources, thrash-url-skip, keep-mismatch, pdfkitap
+// @ajan: cursor · @etiket: katman-2, python-pdf-sources, thrash-url-skip, keep-mismatch, pdfkitap, dirzon
 /**
  * Online PDF sources backed by Kutuphane `oa_pdf_search` (8756 bridge).
  * Old in-plugin scrape/mirror logic was removed — discovery is Python-only.
@@ -301,6 +301,12 @@ export const InternetArchiveSource = new OaPdfPythonSource(
 export const PdfKitapSource = new OaPdfPythonSource(
   "pdfkitap",
   "pdf.pdfkitapEnabled",
+  (item) => isBook(item) || isArticle(item),
+);
+/** Dirzon — shadow-library meta-search (books & articles); bridge-backed. */
+export const DirzonSource = new OaPdfPythonSource(
+  "dirzon",
+  "pdf.dirzonEnabled",
   (item) => isBook(item) || isArticle(item),
 );
 /** OpenAIRE: broad EU OA aggregator, like DOI/CORE. */

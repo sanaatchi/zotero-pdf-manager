@@ -1,4 +1,4 @@
-// @ajan: cursor · @etiket: katman-2, prefs, watch-root-parent, pdfkitap
+// @ajan: cursor · @etiket: katman-2, prefs, watch-root-parent, pdfkitap, dirzon
 /* eslint-disable no-undef */
 pref("extensions.zotero.__addonRef__.enable", true);
 pref("extensions.zotero.__addonRef__.attachType", "linking");
@@ -82,7 +82,7 @@ pref("extensions.zotero.__addonRef__.scanner.tagDuplicate", "#duplicate");
 pref("extensions.zotero.__addonRef__.scanner.tagNonfile", "#nonfile");
 pref(
   "extensions.zotero.__addonRef__.pdf.sourceOrder",
-  "local,doi,dergipark,pmc,core,libgen,pdfkitap,zenodo,openaire,scihub,yoktez,archive,proxy",
+  "local,doi,dergipark,pmc,core,libgen,pdfkitap,dirzon,zenodo,openaire,scihub,yoktez,archive,proxy",
 );
 pref("extensions.zotero.__addonRef__.pdf.localEnabled", true);
 pref(
@@ -116,6 +116,7 @@ pref(
   "https://libgen.li/;https://libgen.vg/;https://libgen.la/;https://libgen.bz/;https://libgen.gl/",
 );
 pref("extensions.zotero.__addonRef__.pdf.pdfkitapEnabled", true);
+pref("extensions.zotero.__addonRef__.pdf.dirzonEnabled", true);
 pref("extensions.zotero.__addonRef__.pdf.yoktezEnabled", true);
 pref("extensions.zotero.__addonRef__.pdf.proquestEnabled", false);
 // zenodo/archive/openaire: open APIs, no key. core: needs a free API key
@@ -136,5 +137,31 @@ pref("extensions.zotero.__addonRef__.pdf.oaSearchFieldActive", "");
 pref("extensions.zotero.__addonRef__.pdf.oaSearchFieldByField", false);
 // Optional Ollama content check via bridge (/pdf-validate-content).
 pref("extensions.zotero.__addonRef__.pdf.validateContentLlm", true);
+// Disk / ek denetimi (P0 report-only; apply/quarantine disabled).
+pref("extensions.zotero.__addonRef__.pdf.diskAudit.useWatchRoots", true);
+pref(
+  "extensions.zotero.__addonRef__.pdf.diskAudit.roots",
+  "D:\\OneDrive\\1A_E_KAYNAKLARIM\\Zotero Kaynaklar",
+);
+pref("extensions.zotero.__addonRef__.pdf.diskAudit.includeDisinda", false);
+pref("extensions.zotero.__addonRef__.pdf.diskAudit.dryRun", true);
+pref("extensions.zotero.__addonRef__.pdf.diskAudit.reportDir", "");
+pref(
+  "extensions.zotero.__addonRef__.pdf.diskAudit.nameContentScope",
+  "orphans_only",
+);
+pref("extensions.zotero.__addonRef__.pdf.diskAudit.renameOnApply", false);
+pref("extensions.zotero.__addonRef__.pdf.diskAudit.clearMismatchOnly", true);
+pref("extensions.zotero.__addonRef__.pdf.diskAudit.copyScanMultiAttach", true);
+pref("extensions.zotero.__addonRef__.pdf.diskAudit.copyScanDiskSibling", true);
+pref(
+  "extensions.zotero.__addonRef__.pdf.diskAudit.copyKeepRule",
+  "validated_then_size",
+);
+pref("extensions.zotero.__addonRef__.pdf.diskAudit.copyAction", "report");
+pref("extensions.zotero.__addonRef__.pdf.diskAudit.quarantineDir", "");
+pref("extensions.zotero.__addonRef__.pdf.diskAudit.copyDetachLoser", true);
+pref("extensions.zotero.__addonRef__.pdf.diskAudit.copyMoveDiskLoser", true);
+pref("extensions.zotero.__addonRef__.pdf.diskAudit.bridgeBatch", true);
 pref("extensions.zotero.__addonRef__.pdf.metadataOnlySourcesMigratedV1", false);
 pref("extensions.zotero.__addonRef__.pdf.doiUnpaywallAutoMigratedV1", false);

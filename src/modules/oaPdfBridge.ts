@@ -1,4 +1,4 @@
-// @ajan: cursor · @etiket: katman-2, oa-pdf-bridge, subtitle-enrich, address-gate, author-line-gate, no-validate-subtitle-enrich, pdfkitap
+// @ajan: cursor · @etiket: katman-2, oa-pdf-bridge, subtitle-enrich, address-gate, author-line-gate, no-validate-subtitle-enrich, pdfkitap, dirzon
 /**
  * Katman-2 → Kutuphane köprü (8756) `oa_pdf_search` client.
  * Online PDF discovery runs in Python; this module only POSTs queries.
@@ -334,6 +334,7 @@ export const FEDERATED_SOURCE_PREF: Record<string, string> = {
   scihub: "pdf.scihubEnabled",
   libgen: "pdf.libgenEnabled",
   pdfkitap: "pdf.pdfkitapEnabled",
+  dirzon: "pdf.dirzonEnabled",
   zenodo: "pdf.zenodoEnabled",
   archive: "pdf.archiveEnabled",
   openaire: "pdf.openaireEnabled",
@@ -350,6 +351,7 @@ export const FEDERATED_SOURCE_LABEL: Record<string, string> = {
   scihub: "Sci-Hub",
   libgen: "LibGen",
   pdfkitap: "PDFKitap",
+  dirzon: "Dirzon",
   zenodo: "Zenodo",
   archive: "Internet Archive",
   openaire: "OpenAIRE",

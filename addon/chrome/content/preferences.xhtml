@@ -695,6 +695,43 @@
         id="pdf-create-orphans"
         data-l10n-id="pdf-create-orphans"
       ></button>
+      <separator class="thin" />
+      <label>
+        <html:h3 data-l10n-id="pdf-disk-audit-title"></html:h3>
+      </label>
+      <description data-l10n-id="pdf-disk-audit-help"></description>
+      <checkbox
+        native="true"
+        data-l10n-id="pdf-disk-audit-use-watch-roots"
+        preference="extensions.zotero.__addonRef__.pdf.diskAudit.useWatchRoots"
+      />
+      <checkbox
+        native="true"
+        data-l10n-id="pdf-disk-audit-include-disinda"
+        preference="extensions.zotero.__addonRef__.pdf.diskAudit.includeDisinda"
+      />
+      <checkbox
+        native="true"
+        data-l10n-id="pdf-disk-audit-dry-run"
+        preference="extensions.zotero.__addonRef__.pdf.diskAudit.dryRun"
+        disabled="true"
+      />
+      <description data-l10n-id="pdf-disk-audit-dry-run-help"></description>
+      <hbox align="center">
+        <button
+          id="pdf-disk-audit-orphan"
+          data-l10n-id="pdf-disk-audit-orphan"
+        ></button>
+        <button
+          id="pdf-disk-audit-name-content"
+          data-l10n-id="pdf-disk-audit-name-content"
+        ></button>
+        <button
+          id="pdf-disk-audit-copy"
+          data-l10n-id="pdf-disk-audit-copy"
+        ></button>
+      </hbox>
+      <description data-l10n-id="pdf-disk-audit-apply-disabled"></description>
       <checkbox
         native="true"
         data-l10n-id="pdf-dry-run"
@@ -802,6 +839,11 @@
         native="true"
         data-l10n-id="pdf-pdfkitap-enabled"
         preference="extensions.zotero.__addonRef__.pdf.pdfkitapEnabled"
+      />
+      <checkbox
+        native="true"
+        data-l10n-id="pdf-dirzon-enabled"
+        preference="extensions.zotero.__addonRef__.pdf.dirzonEnabled"
       />
       <checkbox
         native="true"

@@ -1,4 +1,4 @@
-// @ajan: cursor · @etiket: katman-2, yoktez, pdfkitap, test
+// @ajan: cursor · @etiket: katman-2, yoktez, pdfkitap, dirzon, test
 const assert = require("node:assert/strict");
 const { test } = require("node:test");
 const path = require("node:path");
@@ -243,5 +243,21 @@ test("PDFKitap is registered and supports books and articles", () => {
   assert.equal(ALL_SOURCES.pdfkitap.supportsItem({ itemTypeID: 2 }), true);
   assert.equal(ALL_SOURCES.pdfkitap.supportsItem({ itemTypeID: 1 }), true);
   assert.equal(ALL_SOURCES.pdfkitap.supportsItem({ itemTypeID: 5 }), false);
+  delete global.Zotero;
+});
+
+test("Dirzon is registered and supports books and articles", () => {
+  global.Zotero = {
+    ItemTypes: {
+      getName: (id) =>
+        ({ 1: "journalArticle", 2: "book", 5: "thesis" })[id] || "book",
+    },
+  };
+  const { ALL_SOURCES } = loadPdfSources();
+  assert.ok(ALL_SOURCES.dirzon);
+  assert.equal(ALL_SOURCES.dirzon.id, "dirzon");
+  assert.equal(ALL_SOURCES.dirzon.supportsItem({ itemTypeID: 2 }), true);
+  assert.equal(ALL_SOURCES.dirzon.supportsItem({ itemTypeID: 1 }), true);
+  assert.equal(ALL_SOURCES.dirzon.supportsItem({ itemTypeID: 5 }), false);
   delete global.Zotero;
 });

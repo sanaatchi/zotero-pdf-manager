@@ -1,4 +1,4 @@
-// @ajan: cursor · @etiket: katman-2, prefs, watch-root-parent
+// @ajan: cursor · @etiket: katman-2, prefs, watch-root-parent, disk-audit
 import { config } from "../../package.json";
 import { getString } from "../utils/locale";
 import { getPref, setPref } from "../utils/prefs";
@@ -9,6 +9,7 @@ import {
   normalizePeriodicMinutes,
 } from "./pdfReconciler";
 import { clearAuditEvents, openAutomationAuditReport } from "./automationAudit";
+import { runDiskAuditWithProgress } from "./diskAudit";
 
 async function runManualReconcileWithProgress() {
   const reconciler = addon.data.pdfReconciler;
@@ -408,6 +409,19 @@ function bindPrefEvents(_window: Window) {
   });
   doc.querySelector("#pdf-create-orphans")?.addEventListener("command", () => {
     void addon.data.pdfReconciler?.processOrphansNow();
+  });
+  doc
+    .querySelector("#pdf-disk-audit-orphan")
+    ?.addEventListener("command", () => {
+      void runDiskAuditWithProgress("orphan");
+    });
+  doc
+    .querySelector("#pdf-disk-audit-name-content")
+    ?.addEventListener("command", () => {
+      void runDiskAuditWithProgress("nameContent");
+    });
+  doc.querySelector("#pdf-disk-audit-copy")?.addEventListener("command", () => {
+    void runDiskAuditWithProgress("copy");
   });
   doc
     .querySelector('[preference$=".moveWithoutDeleting"]')
