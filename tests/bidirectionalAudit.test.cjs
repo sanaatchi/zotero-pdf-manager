@@ -1,4 +1,4 @@
-// @ajan: cursor · @etiket: katman-2, bidirectional-audit, match-suggest, human-md-report, quarantine-only, clear-score-tighten, test
+// @ajan: cursor · @etiket: katman-2, bidirectional-audit, match-suggest, human-md-report, quarantine-only, clear-score-tighten, soft-neg, dry-run-ux, test
 "use strict";
 
 const { test } = require("node:test");
@@ -28,6 +28,8 @@ test("bidirectionalAudit module surface", () => {
   assert.match(src, /extractRomanVolumeToken/);
   assert.match(src, /romanVolumesConflict/);
   assert.match(src, /isClearMatchCandidate/);
+  assert.match(src, /Uygulanmadı — deneme açık/);
+  assert.match(src, /isUnderQuarantine/);
   assert.match(src, /softEditionMarkersConflict/);
   assert.match(src, /suggestAlternatePaths/);
   assert.match(src, /safeFilename/);
@@ -418,6 +420,8 @@ test("prefs wire bidirectional scan + open + apply + copies-only", () => {
   assert.match(script, /runBidirectionalApplyWithProgress/);
   assert.match(script, /runBidirectionalCopiesApplyWithProgress/);
   assert.match(script, /openLastBidirectionalReport/);
+  assert.match(script, /syncDiskAuditApplyButtonLabels/);
+  assert.match(script, /pdf-disk-audit-plan-write/);
   assert.match(script, /pdf-disk-audit-bidir/);
   assert.match(script, /pdf-disk-audit-bidir-apply/);
   assert.match(script, /pdf-disk-audit-bidir-copies-apply/);
@@ -449,5 +453,8 @@ test("prefs wire bidirectional scan + open + apply + copies-only", () => {
     assert.match(ftl, /pdf-disk-audit-bidir\s*=/);
     assert.match(ftl, /pdf-disk-audit-bidir-apply\s*=/);
     assert.match(ftl, /pdf-disk-audit-bidir-copies-apply\s*=/);
+    assert.match(ftl, /pdf-disk-audit-plan-write\s*=/);
+    assert.match(ftl, /pdf-disk-audit-plan-write-matches\s*=/);
+    assert.match(ftl, /pdf-disk-audit-plan-write-copies\s*=/);
   }
 });

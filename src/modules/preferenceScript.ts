@@ -1,4 +1,4 @@
-// @ajan: cursor · @etiket: katman-2, prefs, watch-root-parent, disk-audit, unit-interval-pref, bidirectional-audit, bidir-apply, quarantine-only, prefs-layout
+// @ajan: cursor · @etiket: katman-2, prefs, watch-root-parent, disk-audit, unit-interval-pref, bidirectional-audit, bidir-apply, quarantine-only, prefs-layout, dry-run-ux
 import { config } from "../../package.json";
 import { getString } from "../utils/locale";
 import { getPref, setPref } from "../utils/prefs";
@@ -10,6 +10,7 @@ import {
 } from "./pdfReconciler";
 import { clearAuditEvents, openAutomationAuditReport } from "./automationAudit";
 import {
+  isDiskAuditDryRun,
   openLastDiskAuditReport,
   runDiskAuditApplyWithProgress,
   runDiskAuditWithProgress,
@@ -20,6 +21,67 @@ import {
   runBidirectionalAuditWithProgress,
   runBidirectionalCopiesApplyWithProgress,
 } from "./bidirectionalAudit";
+
+/** Swap Çöz ↔ Plan yaz labels when dry-run checkbox toggles. */
+function syncDiskAuditApplyButtonLabels(doc: Document) {
+  const dryEl = doc.querySelector("#pdf-disk-audit-dry-run") as
+    | HTMLInputElement
+    | null;
+  const dry =
+    typeof dryEl?.checked === "boolean" ? dryEl.checked : isDiskAuditDryRun();
+  const pairs: Array<{ id: string; applyL10n: string; planL10n: string }> = [
+    {
+      id: "pdf-disk-audit-bidir-apply",
+      applyL10n: "pdf-disk-audit-bidir-apply",
+      planL10n: "pdf-disk-audit-plan-write-matches",
+    },
+    {
+      id: "pdf-disk-audit-bidir-copies-apply",
+      applyL10n: "pdf-disk-audit-bidir-copies-apply",
+      planL10n: "pdf-disk-audit-plan-write-copies",
+    },
+    {
+      id: "pdf-disk-audit-orphan-apply",
+      applyL10n: "pdf-disk-audit-orphan-apply",
+      planL10n: "pdf-disk-audit-plan-write",
+    },
+    {
+      id: "pdf-disk-audit-name-apply",
+      applyL10n: "pdf-disk-audit-name-apply",
+      planL10n: "pdf-disk-audit-plan-write",
+    },
+    {
+      id: "pdf-disk-audit-copy-apply",
+      applyL10n: "pdf-disk-audit-copy-apply",
+      planL10n: "pdf-disk-audit-plan-write",
+    },
+  ];
+  const els: Element[] = [];
+  for (const p of pairs) {
+    const el = doc.querySelector(`#${p.id}`);
+    if (!el) continue;
+    const key = dry ? p.planL10n : p.applyL10n;
+    try {
+      const l10n = (doc as any).l10n;
+      if (l10n?.setAttributes) {
+        l10n.setAttributes(el, key);
+      } else {
+        el.setAttribute("data-l10n-id", key);
+      }
+    } catch {
+      el.setAttribute("data-l10n-id", key);
+    }
+    els.push(el);
+  }
+  try {
+    const l10n = (doc as any).l10n;
+    if (l10n?.translateElements && els.length) {
+      void l10n.translateElements(els);
+    }
+  } catch {
+    /* Fluent optional in tests */
+  }
+}
 
 async function runManualReconcileWithProgress() {
   const reconciler = addon.data.pdfReconciler;
@@ -466,6 +528,17 @@ function bindPrefEvents(_window: Window) {
     ?.addEventListener("command", () => {
       void runBidirectionalCopiesApplyWithProgress();
     });
+  doc
+    .querySelector("#pdf-disk-audit-dry-run")
+    ?.addEventListener("command", () => {
+      syncDiskAuditApplyButtonLabels(doc);
+    });
+  doc
+    .querySelector("#pdf-disk-audit-dry-run")
+    ?.addEventListener("change", () => {
+      syncDiskAuditApplyButtonLabels(doc);
+    });
+  syncDiskAuditApplyButtonLabels(doc);
   doc
     .querySelector("#pdf-disk-audit-orphan")
     ?.addEventListener("command", () => {

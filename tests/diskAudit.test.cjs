@@ -1,4 +1,4 @@
-// @ajan: cursor · @etiket: katman-2, disk-audit, test, apply, cross-folder-dupe, bridge-unavailable
+// @ajan: cursor · @etiket: katman-2, disk-audit, test, apply, cross-folder-dupe, bridge-unavailable, dry-run-ux
 "use strict";
 
 const { test } = require("node:test");
@@ -264,6 +264,7 @@ test("prefs + xhtml wire disk audit scan/open/apply + automation split", () => {
   assert.match(script, /runDiskAuditWithProgress\("orphan"\)/);
   assert.match(script, /runDiskAuditApplyWithProgress\("orphan"\)/);
   assert.match(script, /openLastDiskAuditReport\("nameContent"\)/);
+  assert.match(script, /syncDiskAuditApplyButtonLabels/);
   for (const loc of ["en-US", "de", "it-IT", "tr-TR"]) {
     const ftl = fs.readFileSync(
       path.join(root, "addon/locale", loc, "preferences.ftl"),
@@ -273,6 +274,7 @@ test("prefs + xhtml wire disk audit scan/open/apply + automation split", () => {
     assert.match(ftl, /pdf-disk-audit-orphan-apply/);
     assert.match(ftl, /pdf-disk-audit-name-apply/);
     assert.match(ftl, /pdf-disk-audit-copy-apply/);
+    assert.match(ftl, /pdf-disk-audit-plan-write/);
     assert.match(ftl, /pdf-automation-title/);
     assert.match(ftl, /pdf-disk-audit-flow-help/);
     assert.doesNotMatch(ftl, /pdf-disk-audit-apply-disabled/);

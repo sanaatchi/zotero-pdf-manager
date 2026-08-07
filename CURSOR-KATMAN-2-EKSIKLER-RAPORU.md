@@ -1,19 +1,28 @@
-<!-- @ajan: cursor · @etiket: katman-2, eksik-raporu, periodical, console-group-polyfill, author-line-gate, no-validate-subtitle-enrich, title-length-aware, isbn-prefer-any, tr-pdf-encoding, medium-cov-soft, mismatch-note-clear, validated-pdf-lock, field-weights-score, medium-author-noyear, openusing-finally, pdfkitap, dirzon, disk-audit, unit-interval-pref, tr-TR, disk-audit-apply, watch-root-kaynaklar, path-fold, bidirectional-audit, cross-folder-dupe, match-suggest, bidir-apply, hash-verify, broken-repair, pathutils-safe, human-md-report, quarantine-only, clear-score-tighten -->
+<!-- @ajan: cursor · @etiket: katman-2, eksik-raporu, periodical, console-group-polyfill, author-line-gate, no-validate-subtitle-enrich, title-length-aware, isbn-prefer-any, tr-pdf-encoding, medium-cov-soft, mismatch-note-clear, validated-pdf-lock, field-weights-score, medium-author-noyear, openusing-finally, pdfkitap, dirzon, disk-audit, unit-interval-pref, tr-TR, disk-audit-apply, watch-root-kaynaklar, path-fold, bidirectional-audit, cross-folder-dupe, match-suggest, bidir-apply, hash-verify, broken-repair, pathutils-safe, human-md-report, quarantine-only, clear-score-tighten, prefs-layout, soft-edition-gate -->
 
 # Cursor — Katman 2 Eksikler Raporu
 
-**Tarih:** 2026-08-07 · **Sürüm:** PDF Manager **v1.0.156**  
+**Tarih:** 2026-08-07 · **Sürüm:** PDF Manager **v1.0.157**  
 **Analiz:** ürün ↔ `referanslar/katman-2/` ↔ GitHub (Attanger, Zotadata, Zoplicate,
 ZotAssets, File Utility, Attachment Scanner, ozefe/yoktez).
 
 ## Özet hüküm
 
-| Soru                      | Cevap                                                             |
-| ------------------------- | ----------------------------------------------------------------- |
-| Açık **P1** ürün boşluğu? | **Yok** — Yalnız kopyalar + clear sıkılaştırma (yanlış PDF riski) |
-| Gerçek açık iş?           | Checklist Bölüm B (kullanıcı) + isteğe bağlı P3                   |
-| Yeni zorunlu XPI portu?   | **Yok** — GitHub taraması yeni P1 üretmedi                        |
-| İki uçlu denetim?         | **v1.0.156** MD özet + ayrık Çöz eşleşmeler / Yalnız kopyalar     |
+| Soru                      | Cevap                                                              |
+| ------------------------- | ------------------------------------------------------------------ |
+| Açık **P1** ürün boşluğu? | **Yok** — prefs düzeni + soft-edition clear kapısı                 |
+| Gerçek açık iş?           | Checklist Bölüm B (kullanıcı) + isteğe bağlı P3                    |
+| Yeni zorunlu XPI portu?   | **Yok** — GitHub taraması yeni P1 üretmedi                         |
+| İki uçlu denetim?         | **v1.0.157** düzenli prefs + Yalnız kopyalar / Çöz eşleşmeler      |
+
+### Son eklenen (v1.0.157)
+
+| Madde                   | Not                                                                                   |
+| ----------------------- | ------------------------------------------------------------------------------------- |
+| Prefs hiyerarşi         | Kapsam → İki uçlu (Tara/Rapor/Çöz eşleşmeler/Yalnız kopyalar) → kompakt 1–3 satırlar |
+| Kısa yardım             | Tek intro + detail-help; satır başına tekrarlayan açıklama yok                        |
+| Soft-edition clear gate | Solutions Manual / instructor / çözüm vs ana kitap → asla clear                       |
+| Clear skor              | Varsayılan ≥3 shared + ≥0.85 (kısa ≥0.95); karantina walk’tan hariç                   |
 
 ### Son eklenen (v1.0.156)
 
