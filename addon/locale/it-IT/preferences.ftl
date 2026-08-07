@@ -210,11 +210,13 @@ pdf-disk-audit-dry-run =
     .label = Dry-run / solo piano (consigliato)
 pdf-disk-audit-dry-run-help = Se attivo, Risolvi non sposta/rinomina; scrive un piano nel report. Se spento, applica dopo conferma.
 pdf-disk-audit-bidir-heading = 0) Controllo bidirezionale (voce ↔ PDF)
-pdf-disk-audit-bidir-help = Un’unica scansione: dalle voci Zotero ai PDF (mancante/rotto/tipo) e dai PDF su disco alle voci (orfani / stesso file in altra cartella). Esegui prima questo; le tre righe sotto sono correzioni dettagliate.
+pdf-disk-audit-bidir-help = Una scansione: matrice voce↔PDF, suggerimenti per sovrapposizione titolo e copie verificate hash. Percorso sicuro: Scansiona → «Solo copie» (nessun collegamento). «Risolvi corrispondenze» può allegare PDF sbagliati — controlla il report. Le tre righe sotto sono correzioni dettagliate.
 pdf-disk-audit-bidir =
     .label = Scansiona
 pdf-disk-audit-bidir-apply =
-    .label = Risolvi
+    .label = Risolvi corrispondenze
+pdf-disk-audit-bidir-copies-apply =
+    .label = Solo copie
 
 pdf-disk-audit-orphan-heading = 1) PDF orfani
 pdf-disk-audit-orphan-help = Su disco ma non in Zotero. Risolvi: crea voci per DOI/ISBN/YÖK; sposta il resto in _pdf_quarantine/orphans.

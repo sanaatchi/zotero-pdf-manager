@@ -1,4 +1,4 @@
-// @ajan: cursor · @etiket: katman-2, prefs, watch-root-parent, disk-audit, unit-interval-pref, bidirectional-audit, bidir-apply
+// @ajan: cursor · @etiket: katman-2, prefs, watch-root-parent, disk-audit, unit-interval-pref, bidirectional-audit, bidir-apply, quarantine-only
 import { config } from "../../package.json";
 import { getString } from "../utils/locale";
 import { getPref, setPref } from "../utils/prefs";
@@ -18,6 +18,7 @@ import {
   openLastBidirectionalReport,
   runBidirectionalApplyWithProgress,
   runBidirectionalAuditWithProgress,
+  runBidirectionalCopiesApplyWithProgress,
 } from "./bidirectionalAudit";
 
 async function runManualReconcileWithProgress() {
@@ -459,6 +460,11 @@ function bindPrefEvents(_window: Window) {
     .querySelector("#pdf-disk-audit-bidir-apply")
     ?.addEventListener("command", () => {
       void runBidirectionalApplyWithProgress();
+    });
+  doc
+    .querySelector("#pdf-disk-audit-bidir-copies-apply")
+    ?.addEventListener("command", () => {
+      void runBidirectionalCopiesApplyWithProgress();
     });
   doc
     .querySelector("#pdf-disk-audit-orphan")

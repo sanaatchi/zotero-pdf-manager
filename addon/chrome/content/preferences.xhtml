@@ -696,11 +696,15 @@
         data-l10n-id="pdf-create-orphans"
       ></button>
       <separator class="thin" />
+      <!-- @ajan: cursor · @etiket: prefs-layout, disk-audit, bidir-copies-only -->
       <label>
         <html:h3 data-l10n-id="pdf-disk-audit-title"></html:h3>
       </label>
       <description data-l10n-id="pdf-disk-audit-help"></description>
-      <description data-l10n-id="pdf-disk-audit-flow-help"></description>
+
+      <label>
+        <html:h4 data-l10n-id="pdf-disk-audit-options-heading"></html:h4>
+      </label>
       <checkbox
         native="true"
         data-l10n-id="pdf-disk-audit-use-watch-roots"
@@ -719,6 +723,7 @@
       />
       <description data-l10n-id="pdf-disk-audit-dry-run-help"></description>
 
+      <separator class="thin" />
       <label>
         <html:h4 data-l10n-id="pdf-disk-audit-bidir-heading"></html:h4>
       </label>
@@ -736,13 +741,20 @@
           id="pdf-disk-audit-bidir-apply"
           data-l10n-id="pdf-disk-audit-bidir-apply"
         ></button>
+        <button
+          id="pdf-disk-audit-bidir-copies-apply"
+          data-l10n-id="pdf-disk-audit-bidir-copies-apply"
+        ></button>
       </hbox>
 
+      <separator class="thin" />
       <label>
-        <html:h4 data-l10n-id="pdf-disk-audit-orphan-heading"></html:h4>
+        <html:h4 data-l10n-id="pdf-disk-audit-detail-heading"></html:h4>
       </label>
-      <description data-l10n-id="pdf-disk-audit-orphan-help"></description>
+      <description data-l10n-id="pdf-disk-audit-detail-help"></description>
+
       <hbox align="center">
+        <label flex="1" data-l10n-id="pdf-disk-audit-orphan-heading"></label>
         <button
           id="pdf-disk-audit-orphan"
           data-l10n-id="pdf-disk-audit-orphan"
@@ -757,11 +769,8 @@
         ></button>
       </hbox>
 
-      <label>
-        <html:h4 data-l10n-id="pdf-disk-audit-name-heading"></html:h4>
-      </label>
-      <description data-l10n-id="pdf-disk-audit-name-help"></description>
       <hbox align="center">
+        <label flex="1" data-l10n-id="pdf-disk-audit-name-heading"></label>
         <button
           id="pdf-disk-audit-name-content"
           data-l10n-id="pdf-disk-audit-name-content"
@@ -776,11 +785,8 @@
         ></button>
       </hbox>
 
-      <label>
-        <html:h4 data-l10n-id="pdf-disk-audit-copy-heading"></html:h4>
-      </label>
-      <description data-l10n-id="pdf-disk-audit-copy-help"></description>
       <hbox align="center">
+        <label flex="1" data-l10n-id="pdf-disk-audit-copy-heading"></label>
         <button
           id="pdf-disk-audit-copy"
           data-l10n-id="pdf-disk-audit-copy"

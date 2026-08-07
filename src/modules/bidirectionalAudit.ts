@@ -1,4 +1,4 @@
-// @ajan: cursor · @etiket: katman-2, bidirectional-audit, item-pdf-cross, type-mismatch, match-suggest, apply, hash-verify, broken-repair, pathutils-safe, human-md-report
+// @ajan: cursor · @etiket: katman-2, bidirectional-audit, item-pdf-cross, type-mismatch, match-suggest, apply, hash-verify, broken-repair, pathutils-safe, human-md-report, quarantine-only, clear-score-tighten
 /**
  * Unified two-ended PDF control report:
  *   item → PDF  (linked / broken / missing / type conflict / mismatch tags)
@@ -183,9 +183,73 @@ async function resolveReportDir(): Promise<string> {
   return dir;
 }
 
-/** True when path sits under quarantine (warn in human summary). */
+/** True when path sits under quarantine (warn / never clear-match). */
 export function pathLooksQuarantined(p: string): boolean {
   return /_pdf_quarantine/i.test(String(p || ""));
+}
+
+/**
+ * Trailing / marked Roman volume (I, II, III, IV…) — length≤3 tokens skip
+ * titleTokens, so Lügatı I vs II must be compared explicitly.
+ */
+export function extractRomanVolumeToken(text: string): string | null {
+  const s = String(text || "")
+    .replace(/\.pdf$/i, "")
+    .trim();
+  if (!s) return null;
+  const patterns = [
+    /(?:^|[\s\[(\-–—])(?:cilt|vol\.?|volume|kitap)\s*([ivxlcdm]{1,6})\s*$/i,
+    /(?:^|[\s\[(\-–—])([ivxlcdm]{1,6})\s*$/i,
+  ];
+  for (const re of patterns) {
+    const m = s.match(re);
+    if (!m?.[1]) continue;
+    const roman = m[1].toUpperCase();
+    // Reject non-roman lookalikes (e.g. "mix", "cid") — must be valid roman.
+    if (!/^[IVXLCDM]+$/.test(roman)) continue;
+    if (!/^M{0,3}(CM|CD|D?C{0,3})(XC|XL|L?X{0,3})(IX|IV|V?I{0,3})$/.test(roman)) {
+      continue;
+    }
+    return roman;
+  }
+  return null;
+}
+
+/** True when both sides declare a Roman volume and they disagree (I≠II). */
+export function romanVolumesConflict(a: string, b: string): boolean {
+  const ra = extractRomanVolumeToken(a);
+  const rb = extractRomanVolumeToken(b);
+  if (!ra || !rb) return false;
+  return ra !== rb;
+}
+
+/**
+ * Whether a title-overlap candidate may be marked clear for auto-link.
+ * Never clear quarantine paths or Roman I vs II mismatches; short titles
+ * need full short-side coverage at a higher score floor.
+ */
+export function isClearMatchCandidate(opts: {
+  typeOk: boolean;
+  score: number;
+  shared: number;
+  shortSize: number;
+  pdfPath: string;
+  itemTitle: string;
+  pdfTitle: string;
+  clearScore?: number;
+  minShared?: number;
+}): boolean {
+  const clearScore = opts.clearScore ?? 0.75;
+  const minShared = opts.minShared ?? 2;
+  if (!opts.typeOk) return false;
+  if (pathLooksQuarantined(opts.pdfPath)) return false;
+  if (romanVolumesConflict(opts.itemTitle, opts.pdfTitle)) return false;
+  const shortTitle = opts.shortSize > 0 && opts.shortSize <= 2;
+  const needShared = shortTitle
+    ? Math.max(minShared, opts.shortSize)
+    : minShared;
+  const needScore = shortTitle ? Math.max(clearScore, 0.9) : clearScore;
+  return opts.shared >= needShared && opts.score >= needScore;
 }
 
 function mdEsc(s: string): string {
@@ -340,14 +404,14 @@ export function formatBidirectionalMarkdown(payload: any): string {
   lines.push("## Ne yapmalı");
   lines.push("");
   const actions: string[] = [];
-  if (clearCount > 0) {
-    actions.push(
-      "Tercihler → **İki uçlu denetim → Çöz**: net eşleşmeleri bağla (gerekirse dry-run açık bırak).",
-    );
-  }
   if ((Number(pdfs.crossFolderUnlinkedLosers) || 0) > 0) {
     actions.push(
-      "Çöz ayrıca hash-doğrulanmış çapraz kopyaları `_pdf_quarantine/copies` altına taşır.",
+      "Tercihler → **İki uçlu denetim → Yalnız kopyalar**: hash-doğrulanmış çapraz kopyaları `_pdf_quarantine/copies` altına taşır (eşleşme bağlama yok — güvenli).",
+    );
+  }
+  if (clearCount > 0) {
+    actions.push(
+      "Net eşleşmeler için **Çöz eşleşmeler** (ayrı); quarantine yolu / cilt I≠II artık net sayılmaz — yine de dry-run veya satır satır kontrol önerilir.",
     );
   }
   if ((Number(items.broken) || 0) > 0 && clearCount === 0) {
@@ -612,9 +676,20 @@ export function suggestOrphanToMissingMatches(
           score = Math.min(1, score + 0.05);
         }
         if (!typeOk) score *= 0.75;
+        if (romanVolumesConflict(item.title, pdfTitle)) score *= 0.5;
+        if (pathLooksQuarantined(pdf.path)) score *= 0.4;
         if (detail.shared < 1 || score < minScore) continue;
-        const clear =
-          typeOk && detail.shared >= minShared && score >= clearScore;
+        const clear = isClearMatchCandidate({
+          typeOk,
+          score,
+          shared: detail.shared,
+          shortSize: detail.shortSize,
+          pdfPath: pdf.path,
+          itemTitle: item.title,
+          pdfTitle,
+          clearScore,
+          minShared,
+        });
         all.push({
           kind:
             item.status === "broken" ? "orphan_to_broken" : "orphan_to_missing",
@@ -1172,7 +1247,21 @@ export async function openLastBidirectionalReport(): Promise<void> {
 export async function applyBidirectionalSuggestions(opts?: {
   onProgress?: (p: { text: string; progress?: number }) => void;
   skipConfirm?: boolean;
+  /** When true (default), only rows with clear=true are linked. */
   clearOnly?: boolean;
+  /**
+   * When false, skip all matchSuggestions (link none).
+   * Use with quarantineOnly / copies-safe path.
+   */
+  matches?: boolean;
+  /**
+   * When false, skip crossFolderUnlinkedLosers quarantine.
+   * Default true unless matches-only mode is requested via matches=true
+   * and quarantine explicitly false.
+   */
+  quarantine?: boolean;
+  /** Shortcut: matches=false, quarantine=true — only hash-verified copies. */
+  quarantineOnly?: boolean;
 }): Promise<{
   dryRun: boolean;
   linked: number;
@@ -1182,6 +1271,10 @@ export async function applyBidirectionalSuggestions(opts?: {
   detail?: string;
 }> {
   const dryRun = isDiskAuditDryRun();
+  const doMatches = opts?.quarantineOnly ? false : opts?.matches !== false;
+  const doQuarantine = opts?.quarantineOnly
+    ? true
+    : opts?.quarantine !== false;
   const dir = await resolveReportDir();
   const last = PathUtils.join(dir, "last-bidirectional.json");
   if (!(await IOUtils.exists(last).catch(() => false))) {
@@ -1215,23 +1308,35 @@ export async function applyBidirectionalSuggestions(opts?: {
       detail: "bad-report",
     };
   }
-  const rows = (
-    (report?.matchSuggestions?.rows as BidirMatchSuggestion[]) || []
-  ).filter(
-    (r) =>
-      r &&
-      (r.kind === "orphan_to_missing" ||
-        r.kind === "orphan_to_broken" ||
-        r.kind === "broken_alt_path"),
-  );
-  const targets =
-    opts?.clearOnly !== false ? rows.filter((r) => r.clear) : rows;
-  const losers: string[] = report?.crossFolderUnlinkedLosers || [];
+  const rows = doMatches
+    ? (
+        (report?.matchSuggestions?.rows as BidirMatchSuggestion[]) || []
+      ).filter(
+        (r) =>
+          r &&
+          (r.kind === "orphan_to_missing" ||
+            r.kind === "orphan_to_broken" ||
+            r.kind === "broken_alt_path") &&
+          // Defense in depth: never auto-link quarantine even if old report.
+          !pathLooksQuarantined(r.pdfPath) &&
+          !romanVolumesConflict(r.itemTitle, r.pdfFile || r.pdfPath),
+      )
+    : [];
+  const targets = !doMatches
+    ? []
+    : opts?.clearOnly !== false
+      ? rows.filter((r) => r.clear)
+      : rows;
+  const losers: string[] = doQuarantine
+    ? report?.crossFolderUnlinkedLosers || []
+    : [];
 
   if (!targets.length && !losers.length) {
     new ztoolkit.ProgressWindow(config.addonName, { closeTime: 5000 })
       .createLine({
-        text: "Uygulanacak net eşleşme / çapraz kopya yok",
+        text: doMatches
+          ? "Uygulanacak net eşleşme / çapraz kopya yok"
+          : "Uygulanacak çapraz kopya (hash) yok",
         type: "default",
       })
       .show();
@@ -1245,9 +1350,20 @@ export async function applyBidirectionalSuggestions(opts?: {
     };
   }
 
-  const msg = dryRun
-    ? `${targets.length} net eşleşme + ${losers.length} çapraz kopya için PLAN yazılsın mı?`
-    : `${targets.length} kayıtsız PDF ilgili öğeye bağlansın ve ${losers.length} çapraz kopya karantinaya alınsın mı?`;
+  let msg: string;
+  if (opts?.quarantineOnly || (!doMatches && doQuarantine)) {
+    msg = dryRun
+      ? `${losers.length} hash-doğrulanmış çapraz kopya için PLAN yazılsın mı? (eşleşme bağlama yok)`
+      : `${losers.length} hash-doğrulanmış çapraz kopya karantinaya alınsın mı?\n\nEşleşme bağlama yapılmaz — güvenli yol.`;
+  } else if (doMatches && !doQuarantine) {
+    msg = dryRun
+      ? `${targets.length} net eşleşme için PLAN yazılsın mı? (kopya karantina yok)`
+      : `UYARI: ${targets.length} net eşleşme ilgili öğeye bağlanacak.\n\nYanlış eşleşmeler yanlış PDF bağlayabilir. Raporu kontrol ettiniz mi?\n\n(Çapraz kopya karantina bu düğmede yok — «Yalnız kopyalar» kullanın.)`;
+  } else {
+    msg = dryRun
+      ? `${targets.length} net eşleşme + ${losers.length} çapraz kopya için PLAN yazılsın mı?`
+      : `UYARI: ${targets.length} eşleşme bağlanacak VE ${losers.length} çapraz kopya karantinaya alınacak.\n\nŞüpheli eşleşmeler yanlış PDF bağlayabilir.\nGüvenli yol: iptal → «Yalnız kopyalar».\nDevam etmek istiyor musunuz?`;
+  }
   if (!opts?.skipConfirm) {
     const ok =
       typeof Services !== "undefined"
@@ -1355,6 +1471,11 @@ export async function applyBidirectionalSuggestions(opts?: {
       quarantined,
       planned,
       failed,
+      mode: opts?.quarantineOnly
+        ? "quarantineOnly"
+        : doMatches && !doQuarantine
+          ? "matchesOnly"
+          : "full",
       targets,
       losers,
     });
@@ -1373,20 +1494,29 @@ export async function applyBidirectionalSuggestions(opts?: {
   return { dryRun, linked, quarantined, planned, failed };
 }
 
-export async function runBidirectionalApplyWithProgress(): Promise<void> {
+async function runBidirApplyProgress(
+  label: string,
+  applyOpts: {
+    quarantineOnly?: boolean;
+    matches?: boolean;
+    quarantine?: boolean;
+    clearOnly?: boolean;
+  },
+): Promise<void> {
   const progress = new ztoolkit.ProgressWindow(config.addonName, {
     closeOnClick: true,
     closeTime: -1,
   });
   progress
     .createLine({
-      text: "İki uçlu öneriler uygulanıyor…",
+      text: label,
       type: "default",
       progress: 5,
     })
     .show();
   try {
     await applyBidirectionalSuggestions({
+      ...applyOpts,
       onProgress: (p) => {
         try {
           progress.changeLine({ text: p.text, progress: p.progress ?? 50 });
@@ -1398,6 +1528,22 @@ export async function runBidirectionalApplyWithProgress(): Promise<void> {
   } finally {
     progress.close();
   }
+}
+
+/** Prefs «Çöz eşleşmeler» — links clear matches only (no copy quarantine). */
+export async function runBidirectionalApplyWithProgress(): Promise<void> {
+  await runBidirApplyProgress("İki uçlu eşleşmeler uygulanıyor…", {
+    matches: true,
+    quarantine: false,
+    clearOnly: true,
+  });
+}
+
+/** Prefs «Yalnız kopyalar» — hash-verified cross-folder losers only. */
+export async function runBidirectionalCopiesApplyWithProgress(): Promise<void> {
+  await runBidirApplyProgress("Çapraz kopyalar karantinaya…", {
+    quarantineOnly: true,
+  });
 }
 
 export async function runBidirectionalAuditWithProgress(): Promise<BidirAuditSummary> {

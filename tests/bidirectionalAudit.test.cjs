@@ -1,4 +1,4 @@
-// @ajan: cursor · @etiket: katman-2, bidirectional-audit, match-suggest, human-md-report, test
+// @ajan: cursor · @etiket: katman-2, bidirectional-audit, match-suggest, human-md-report, quarantine-only, clear-score-tighten, test
 "use strict";
 
 const { test } = require("node:test");
@@ -16,12 +16,18 @@ test("bidirectionalAudit module surface", () => {
   assert.match(src, /runBidirectionalAudit/);
   assert.match(src, /runBidirectionalAuditWithProgress/);
   assert.match(src, /runBidirectionalApplyWithProgress/);
+  assert.match(src, /runBidirectionalCopiesApplyWithProgress/);
   assert.match(src, /applyBidirectionalSuggestions/);
+  assert.match(src, /quarantineOnly/);
+  assert.match(src, /matches:\s*false|matches\?/);
   assert.match(src, /openLastBidirectionalReport/);
   assert.match(src, /formatBidirectionalMarkdown/);
   assert.match(src, /last-bidirectional\.md/);
   assert.match(src, /özet: last-bidirectional\.md/);
   assert.match(src, /pathLooksQuarantined/);
+  assert.match(src, /extractRomanVolumeToken/);
+  assert.match(src, /romanVolumesConflict/);
+  assert.match(src, /isClearMatchCandidate/);
   assert.match(src, /suggestAlternatePaths/);
   assert.match(src, /safeFilename/);
   assert.match(src, /safePathKey/);
@@ -39,6 +45,7 @@ test("bidirectionalAudit module surface", () => {
   assert.match(src, /crossFolder/);
   assert.match(src, /matchSuggestions/);
   assert.match(src, /kind: \"bidirectional\"/);
+  assert.match(src, /Yalnız kopyalar/);
 });
 
 test("formatBidirectionalMarkdown includes Turkish sections + quarantine warn", () => {
@@ -92,7 +99,7 @@ test("formatBidirectionalMarkdown includes Turkish sections + quarantine warn", 
     }
     lines.push("## Kırık / missing örnekleri");
     lines.push("## Ne yapmalı");
-    lines.push("- Tercihler → **İki uçlu denetim → Çöz**");
+    lines.push("- Tercihler → **İki uçlu denetim → Yalnız kopyalar**");
     return lines.join("\n");
   }
 
@@ -131,8 +138,120 @@ test("formatBidirectionalMarkdown includes Turkish sections + quarantine warn", 
   assert.match(md, /_pdf_quarantine/);
   assert.match(md, /WEAK0001/);
   assert.match(md, /Ne yapmalı/);
+  assert.match(md, /Yalnız kopyalar/);
   assert.equal(pathLooksQuarantined("D:/a/_pdf_quarantine/x.pdf"), true);
   assert.equal(pathLooksQuarantined("D:/a/ok.pdf"), false);
+});
+
+test("roman volume I vs II and quarantine never clear", () => {
+  function pathLooksQuarantined(p) {
+    return /_pdf_quarantine/i.test(String(p || ""));
+  }
+  function extractRomanVolumeToken(text) {
+    const s = String(text || "")
+      .replace(/\.pdf$/i, "")
+      .trim();
+    if (!s) return null;
+    const patterns = [
+      /(?:^|[\s\[(\-–—])(?:cilt|vol\.?|volume|kitap)\s*([ivxlcdm]{1,6})\s*$/i,
+      /(?:^|[\s\[(\-–—])([ivxlcdm]{1,6})\s*$/i,
+    ];
+    for (const re of patterns) {
+      const m = s.match(re);
+      if (!m?.[1]) continue;
+      const roman = m[1].toUpperCase();
+      if (!/^[IVXLCDM]+$/.test(roman)) continue;
+      if (
+        !/^M{0,3}(CM|CD|D?C{0,3})(XC|XL|L?X{0,3})(IX|IV|V?I{0,3})$/.test(roman)
+      ) {
+        continue;
+      }
+      return roman;
+    }
+    return null;
+  }
+  function romanVolumesConflict(a, b) {
+    const ra = extractRomanVolumeToken(a);
+    const rb = extractRomanVolumeToken(b);
+    if (!ra || !rb) return false;
+    return ra !== rb;
+  }
+  function isClearMatchCandidate(opts) {
+    const clearScore = opts.clearScore ?? 0.75;
+    const minShared = opts.minShared ?? 2;
+    if (!opts.typeOk) return false;
+    if (pathLooksQuarantined(opts.pdfPath)) return false;
+    if (romanVolumesConflict(opts.itemTitle, opts.pdfTitle)) return false;
+    const shortTitle = opts.shortSize > 0 && opts.shortSize <= 2;
+    const needShared = shortTitle
+      ? Math.max(minShared, opts.shortSize)
+      : minShared;
+    const needScore = shortTitle ? Math.max(clearScore, 0.9) : clearScore;
+    return opts.shared >= needShared && opts.score >= needScore;
+  }
+
+  assert.equal(extractRomanVolumeToken("Lügatı I"), "I");
+  assert.equal(extractRomanVolumeToken("Lügatı II"), "II");
+  assert.equal(
+    romanVolumesConflict(
+      "Osmanlıca Türkçe Ansiklopedik Lügatı I",
+      "Osmanlıca Türkçe Ansiklopedik Lügatı II",
+    ),
+    true,
+  );
+  assert.equal(
+    romanVolumesConflict("Same Title I", "Same Title I"),
+    false,
+  );
+  assert.equal(
+    isClearMatchCandidate({
+      typeOk: true,
+      score: 0.95,
+      shared: 4,
+      shortSize: 4,
+      pdfPath: "D:/ok/Lugati II.pdf",
+      itemTitle: "Osmanlıca Türkçe Ansiklopedik Lügatı I",
+      pdfTitle: "Osmanlıca Türkçe Ansiklopedik Lügatı II",
+    }),
+    false,
+  );
+  assert.equal(
+    isClearMatchCandidate({
+      typeOk: true,
+      score: 0.95,
+      shared: 4,
+      shortSize: 4,
+      pdfPath: "D:/Zotero/_pdf_quarantine/copies/x.pdf",
+      itemTitle: "Long Enough Shared Title Words Here",
+      pdfTitle: "Long Enough Shared Title Words Here",
+    }),
+    false,
+  );
+  // Short title: need shared >= 2 even when shortSize is 1.
+  assert.equal(
+    isClearMatchCandidate({
+      typeOk: true,
+      score: 1,
+      shared: 1,
+      shortSize: 1,
+      pdfPath: "D:/ok/x.pdf",
+      itemTitle: "Tarihi",
+      pdfTitle: "Tarihi",
+    }),
+    false,
+  );
+  assert.equal(
+    isClearMatchCandidate({
+      typeOk: true,
+      score: 0.95,
+      shared: 3,
+      shortSize: 3,
+      pdfPath: "D:/ok/good.pdf",
+      itemTitle: "Tiyatroda düşünsellik üzerine",
+      pdfTitle: "Tiyatroda düşünsellik üzerine",
+    }),
+    true,
+  );
 });
 
 test("safeFilename never throws on attachments: or empty", () => {
@@ -255,16 +374,18 @@ test("filenameItemTypeMismatch detects [book] vs journalArticle", () => {
   );
 });
 
-test("prefs wire bidirectional scan + open + apply", () => {
+test("prefs wire bidirectional scan + open + apply + copies-only", () => {
   const script = fs.readFileSync(
     path.join(root, "src/modules/preferenceScript.ts"),
     "utf8",
   );
   assert.match(script, /runBidirectionalAuditWithProgress/);
   assert.match(script, /runBidirectionalApplyWithProgress/);
+  assert.match(script, /runBidirectionalCopiesApplyWithProgress/);
   assert.match(script, /openLastBidirectionalReport/);
   assert.match(script, /pdf-disk-audit-bidir/);
   assert.match(script, /pdf-disk-audit-bidir-apply/);
+  assert.match(script, /pdf-disk-audit-bidir-copies-apply/);
   const xhtml = fs.readFileSync(
     path.join(root, "addon/chrome/content/preferences.xhtml"),
     "utf8",
@@ -272,6 +393,7 @@ test("prefs wire bidirectional scan + open + apply", () => {
   assert.match(xhtml, /pdf-disk-audit-bidir-heading/);
   assert.match(xhtml, /id="pdf-disk-audit-bidir"/);
   assert.match(xhtml, /id="pdf-disk-audit-bidir-apply"/);
+  assert.match(xhtml, /id="pdf-disk-audit-bidir-copies-apply"/);
   for (const loc of ["en-US", "de", "it-IT", "tr-TR"]) {
     const ftl = fs.readFileSync(
       path.join(root, "addon/locale", loc, "preferences.ftl"),
@@ -281,5 +403,6 @@ test("prefs wire bidirectional scan + open + apply", () => {
     assert.match(ftl, /pdf-disk-audit-bidir-help/);
     assert.match(ftl, /pdf-disk-audit-bidir\s*=/);
     assert.match(ftl, /pdf-disk-audit-bidir-apply\s*=/);
+    assert.match(ftl, /pdf-disk-audit-bidir-copies-apply\s*=/);
   }
 });
