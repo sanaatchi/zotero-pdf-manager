@@ -1,4 +1,4 @@
-// @ajan: cursor · @etiket: katman-2, bidirectional-audit, item-pdf-cross, type-mismatch, match-suggest, apply
+// @ajan: cursor · @etiket: katman-2, bidirectional-audit, item-pdf-cross, type-mismatch, match-suggest, apply, hash-verify, broken-repair
 /**
  * Unified two-ended PDF control report:
  *   item → PDF  (linked / broken / missing / type conflict / mismatch tags)
@@ -14,11 +14,13 @@ import {
   crossFolderUnlinkedLosers,
   extractFilenameItemTypeTag,
   filenameItemTypeMismatch,
+  filterHashVerifiedLosers,
   groupCrossFolderDuplicates,
   isDiskAuditDryRun,
   isUnderDisinda,
   movePathToQuarantine,
   normalizeDiskAuditRoots,
+  sameDirLinkedKeepers,
 } from "./diskAudit";
 import { parseFilenameMetadata } from "./filenameMetadata";
 import { getPref } from "../utils/prefs";
@@ -198,16 +200,28 @@ export async function walkPdfEntries(
  * Pure: suggest alternate absolute paths for a broken attachment using
  * basename match against a disk inventory (same name elsewhere under roots).
  */
+export function basenameSoftVariants(name: string): string[] {
+  const n = String(name || "").toLowerCase();
+  if (!n) return [];
+  const out = [n];
+  // downloads often append " 3.pdf" / " 6.pdf"
+  const stripped = n.replace(/ \d+(?=\.pdf$)/i, "");
+  if (stripped !== n) out.push(stripped);
+  return out;
+}
+
 export function suggestAlternatePaths(
   brokenBasename: string,
   diskFiles: Array<{ path: string; basename: string }>,
   limit = 5,
 ): string[] {
-  const want = String(brokenBasename || "").toLowerCase();
-  if (!want) return [];
+  const wants = new Set(basenameSoftVariants(brokenBasename));
+  if (!wants.size) return [];
   const hits: string[] = [];
   for (const f of diskFiles) {
-    if (String(f.basename || "").toLowerCase() !== want) continue;
+    const base = String(f.basename || "").toLowerCase();
+    const variants = basenameSoftVariants(base);
+    if (![...wants].some((w) => variants.includes(w) || base === w)) continue;
     hits.push(f.path);
     if (hits.length >= limit) break;
   }
@@ -245,7 +259,7 @@ export function titleOverlapScore(a: string, b: string): number {
 }
 
 export type BidirMatchSuggestion = {
-  kind: "orphan_to_missing";
+  kind: "orphan_to_missing" | "orphan_to_broken" | "broken_alt_path";
   score: number;
   clear: boolean;
   itemID: number;
@@ -256,6 +270,7 @@ export type BidirMatchSuggestion = {
   pdfFile: string;
   filenameType: string | null;
   typeOk: boolean;
+  itemStatus?: "missing" | "broken";
 };
 
 /**
@@ -268,6 +283,7 @@ export function suggestOrphanToMissingMatches(
     key: string;
     title: string;
     itemType: string;
+    status?: "missing" | "broken";
   }>,
   orphans: Array<{ path: string; file: string; filenameType: string | null }>,
   opts?: { minScore?: number; clearScore?: number; minShared?: number },
@@ -296,7 +312,8 @@ export function suggestOrphanToMissingMatches(
       if (detail.shared < 1 || score < minScore) continue;
       const clear = typeOk && detail.shared >= minShared && score >= clearScore;
       all.push({
-        kind: "orphan_to_missing",
+        kind:
+          item.status === "broken" ? "orphan_to_broken" : "orphan_to_missing",
         score: Math.round(score * 1000) / 1000,
         clear,
         itemID: item.itemID,
@@ -307,6 +324,7 @@ export function suggestOrphanToMissingMatches(
         pdfFile: pdf.file,
         filenameType: pdf.filenameType,
         typeOk,
+        itemStatus: item.status || "missing",
       });
     }
   }
@@ -588,14 +606,14 @@ export async function runBidirectionalAudit(opts?: {
   );
 
   const missingForMatch = itemRows
-    .filter((r) => r.status === "missing")
+    .filter((r) => r.status === "missing" || r.status === "broken")
     .map((r) => ({
       itemID: r.itemID,
       key: r.key,
       title: r.title,
       itemType: r.itemType,
+      status: r.status as "missing" | "broken",
     }));
-  // Also include missing parents that were counted but not pushed? missing always pushed.
   const orphanForMatch = pdfRows
     .filter((r) => r.status === "orphan")
     .map((r) => ({
@@ -607,7 +625,56 @@ export async function runBidirectionalAudit(opts?: {
     missingForMatch,
     orphanForMatch,
   );
+  // Exact basename (soft) alternate paths for broken → clear repairs
+  const usedItems = new Set(matchSuggestions.map((m) => m.itemID));
+  const usedPdfs = new Set(
+    matchSuggestions.map((m) => m.pdfPath.toLowerCase()),
+  );
+  for (const row of itemRows) {
+    if (row.status !== "broken" || !row.alternatePaths.length) continue;
+    if (usedItems.has(row.itemID)) continue;
+    const alt = row.alternatePaths[0];
+    if (!alt || usedPdfs.has(alt.toLowerCase())) continue;
+    usedItems.add(row.itemID);
+    usedPdfs.add(alt.toLowerCase());
+    matchSuggestions.push({
+      kind: "broken_alt_path",
+      score: 1,
+      clear: true,
+      itemID: row.itemID,
+      itemKey: row.key,
+      itemTitle: row.title,
+      itemType: row.itemType,
+      pdfPath: alt,
+      pdfFile: PathUtils.filename(alt),
+      filenameType: extractFilenameItemTypeTag(PathUtils.filename(alt)),
+      typeOk: true,
+      itemStatus: "broken",
+    });
+  }
+  matchSuggestions.sort((a, b) => b.score - a.score);
   const clearMatches = matchSuggestions.filter((m) => m.clear);
+
+  opts?.onProgress?.({
+    text: "Çapraz kopyalar hash doğrulanıyor…",
+    progress: 90,
+  });
+  const keepersByLoser = new Map<string, string[]>();
+  for (const loser of unlinkedLosers) {
+    const keepers: string[] = [];
+    for (const g of crossGroups) {
+      if (!g.paths.some((p) => pathKey(p) === pathKey(loser))) continue;
+      for (const p of g.paths) {
+        if (referenced.has(pathKey(p))) keepers.push(p);
+      }
+    }
+    for (const k of await sameDirLinkedKeepers(loser, referenced, pathKey)) {
+      if (!keepers.some((x) => pathKey(x) === pathKey(k))) keepers.push(k);
+    }
+    keepersByLoser.set(loser, keepers);
+  }
+  const { verified: verifiedLosers, rejected: hashRejectedLosers } =
+    await filterHashVerifiedLosers(unlinkedLosers, keepersByLoser);
 
   const payload = {
     kind: "bidirectional" as const,
@@ -621,8 +688,14 @@ export async function runBidirectionalAudit(opts?: {
       linked: pdfLinked,
       orphan: pdfOrphan,
       crossFolderGroups: crossGroups.length,
-      crossFolderUnlinkedLosers: unlinkedLosers.length,
+      crossFolderUnlinkedLosers: verifiedLosers.length,
+      crossFolderHashRejected: hashRejectedLosers.length,
       downloadFilesScanned: downloadFiles.length,
+    },
+    hashVerify: {
+      candidates: unlinkedLosers.length,
+      verified: verifiedLosers.length,
+      rejected: hashRejectedLosers.length,
     },
     matchSuggestions: {
       total: matchSuggestions.length,
@@ -640,7 +713,7 @@ export async function runBidirectionalAudit(opts?: {
       paths: g.paths,
       dirs: g.dirs,
     })),
-    crossFolderUnlinkedLosers: unlinkedLosers.slice(0, 500),
+    crossFolderUnlinkedLosers: verifiedLosers.slice(0, 500),
   };
 
   const reportPath = await writeBidirReport(payload);
@@ -757,7 +830,13 @@ export async function applyBidirectionalSuggestions(opts?: {
   }
   const rows = (
     (report?.matchSuggestions?.rows as BidirMatchSuggestion[]) || []
-  ).filter((r) => r && r.kind === "orphan_to_missing");
+  ).filter(
+    (r) =>
+      r &&
+      (r.kind === "orphan_to_missing" ||
+        r.kind === "orphan_to_broken" ||
+        r.kind === "broken_alt_path"),
+  );
   const targets =
     opts?.clearOnly !== false ? rows.filter((r) => r.clear) : rows;
   const losers: string[] = report?.crossFolderUnlinkedLosers || [];
@@ -839,6 +918,22 @@ export async function applyBidirectionalSuggestions(opts?: {
         planned += 1;
         continue;
       }
+      // Broken: remove inaccessible PDF attachments, then link Kaynaklar file.
+      if (row.kind === "orphan_to_broken" || row.kind === "broken_alt_path") {
+        for (const cid of item.getAttachments?.() || []) {
+          const att = await Zotero.Items.getAsync(cid);
+          if (!att?.isFileAttachment?.()) continue;
+          const p = await att.getFilePathAsync?.().catch(() => "");
+          const exists = p ? await IOUtils.exists(p).catch(() => false) : false;
+          if (!exists) {
+            try {
+              await Zotero.Items.trashTx(att.id);
+            } catch (e) {
+              ztoolkit.log("trash broken att failed", e);
+            }
+          }
+        }
+      }
       await Zotero.Attachments.linkFromFile({
         file: row.pdfPath,
         parentItemID: item.id,
@@ -857,6 +952,7 @@ export async function applyBidirectionalSuggestions(opts?: {
       text: `Karantina ${i + 1}/${losers.length}`,
       progress: 70 + Math.round((25 * i) / Math.max(1, losers.length)),
     });
+    // Losers were hash-verified at Tara time (filterHashVerifiedLosers).
     const moved = await movePathToQuarantine(p, "copies", dryRun);
     if (moved.ok && moved.planned) planned += 1;
     else if (moved.ok) quarantined += 1;

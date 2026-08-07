@@ -1,8 +1,8 @@
-<!-- @ajan: cursor · @etiket: katman-2, eksik-raporu, periodical, console-group-polyfill, author-line-gate, no-validate-subtitle-enrich, title-length-aware, isbn-prefer-any, tr-pdf-encoding, medium-cov-soft, mismatch-note-clear, validated-pdf-lock, field-weights-score, medium-author-noyear, openusing-finally, pdfkitap, dirzon, disk-audit, unit-interval-pref, tr-TR, disk-audit-apply, watch-root-kaynaklar, path-fold, bidirectional-audit, cross-folder-dupe, match-suggest, bidir-apply -->
+<!-- @ajan: cursor · @etiket: katman-2, eksik-raporu, periodical, console-group-polyfill, author-line-gate, no-validate-subtitle-enrich, title-length-aware, isbn-prefer-any, tr-pdf-encoding, medium-cov-soft, mismatch-note-clear, validated-pdf-lock, field-weights-score, medium-author-noyear, openusing-finally, pdfkitap, dirzon, disk-audit, unit-interval-pref, tr-TR, disk-audit-apply, watch-root-kaynaklar, path-fold, bidirectional-audit, cross-folder-dupe, match-suggest, bidir-apply, hash-verify, broken-repair -->
 
 # Cursor — Katman 2 Eksikler Raporu
 
-**Tarih:** 2026-08-07 · **Sürüm:** PDF Manager **v1.0.152**  
+**Tarih:** 2026-08-07 · **Sürüm:** PDF Manager **v1.0.153**  
 **Analiz:** ürün ↔ `referanslar/katman-2/` ↔ GitHub (Attanger, Zotadata, Zoplicate,
 ZotAssets, File Utility, Attachment Scanner, ozefe/yoktez).
 
@@ -13,7 +13,15 @@ ZotAssets, File Utility, Attachment Scanner, ozefe/yoktez).
 | Açık **P1** ürün boşluğu? | **Yok** — P2-1…P2-6 + B1–B5 + G0/G1 kapalı      |
 | Gerçek açık iş?           | Checklist Bölüm B (kullanıcı) + isteğe bağlı P3 |
 | Yeni zorunlu XPI portu?   | **Yok** — GitHub taraması yeni P1 üretmedi      |
-| İki uçlu denetim?         | **v1.0.152** Tara + net eşleşme Çöz + downloads |
+| İki uçlu denetim?         | **v1.0.153** hash-kopya + kırık onarım Çöz      |
+
+### Son eklenen (v1.0.153)
+
+| Madde                  | Not                                                                                        |
+| ---------------------- | ------------------------------------------------------------------------------------------ |
+| Hash doğrulamalı kopya | Tara: ad+boyut aday → head/tail SHA-256; yalnız verified losers `applyTargets` / bidir Çöz |
+| Kırık ek onarımı       | broken + soft basename (`Book 3.pdf`→`Book.pdf`) + title match; Çöz trash+linkFromFile     |
+| broken_alt_path        | Exact/soft basename alternatifleri clear eşleşme olarak rapora                             |
 
 ### Son eklenen (v1.0.152)
 

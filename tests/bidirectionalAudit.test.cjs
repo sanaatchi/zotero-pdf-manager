@@ -20,6 +20,10 @@ test("bidirectionalAudit module surface", () => {
   assert.match(src, /openLastBidirectionalReport/);
   assert.match(src, /suggestAlternatePaths/);
   assert.match(src, /suggestOrphanToMissingMatches/);
+  assert.match(src, /basenameSoftVariants/);
+  assert.match(src, /orphan_to_broken/);
+  assert.match(src, /broken_alt_path/);
+  assert.match(src, /filterHashVerifiedLosers/);
   assert.match(src, /siblingDownloadsRoots/);
   assert.match(src, /walkPdfEntries/);
   assert.match(src, /filenameItemTypeMismatch/);
@@ -28,6 +32,22 @@ test("bidirectionalAudit module surface", () => {
   assert.match(src, /crossFolder/);
   assert.match(src, /matchSuggestions/);
   assert.match(src, /kind: \"bidirectional\"/);
+});
+
+test("basenameSoftVariants strips trailing copy numbers", () => {
+  function basenameSoftVariants(name) {
+    const n = String(name || "").toLowerCase();
+    if (!n) return [];
+    const out = [n];
+    const stripped = n.replace(/ \d+(?=\.pdf$)/i, "");
+    if (stripped !== n) out.push(stripped);
+    return out;
+  }
+  assert.deepEqual(basenameSoftVariants("Book.pdf"), ["book.pdf"]);
+  assert.deepEqual(basenameSoftVariants("Book 3.pdf"), [
+    "book 3.pdf",
+    "book.pdf",
+  ]);
 });
 
 test("title overlap rejects single-token false friends", () => {

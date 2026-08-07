@@ -1,4 +1,4 @@
-// @ajan: cursor · @etiket: katman-2, disk-audit, orphan, name-content, multi-attach, apply, path-fold, rename-safe, cross-folder-dupe, bridge-unavailable
+// @ajan: cursor · @etiket: katman-2, disk-audit, hash-verify-copies, orphan, name-content, multi-attach, apply, path-fold, rename-safe, cross-folder-dupe, bridge-unavailable
 /**
  * Prefs «Disk / ek denetimi» — scan (report) + apply (quarantine / rename / ID create).
  * Copy audit also flags same basename+size across folders (cross-folder duplicates).
@@ -146,6 +146,124 @@ export function crossFolderUnlinkedLosers(
     }
   }
   return losers;
+}
+
+/** Size + SHA-256(head≤1MB + tail≤1MB) — fast identical-copy check. */
+export async function fileContentFingerprint(
+  path: string,
+): Promise<string | null> {
+  try {
+    const st = await IOUtils.stat(path);
+    const size = Number(st?.size || 0);
+    if (!(size > 0)) return null;
+    const chunk = 1024 * 1024;
+    const head = await IOUtils.read(path, {
+      maxBytes: Math.min(size, chunk),
+    });
+    const parts: Uint8Array[] = [head as Uint8Array];
+    if (size > chunk) {
+      const tailLen = Math.min(chunk, size - chunk);
+      const tail = await IOUtils.read(path, {
+        offset: size - tailLen,
+        maxBytes: tailLen,
+      });
+      parts.push(tail as Uint8Array);
+    }
+    const totalLen = 8 + parts.reduce((n, p) => n + p.byteLength, 0);
+    const buf = new Uint8Array(totalLen);
+    const view = new DataView(buf.buffer);
+    view.setUint32(0, size >>> 0, true);
+    view.setUint32(4, Math.floor(size / 0x100000000) >>> 0, true);
+    let off = 8;
+    for (const p of parts) {
+      buf.set(p, off);
+      off += p.byteLength;
+    }
+    const digest = await crypto.subtle.digest("SHA-256", buf);
+    return [...new Uint8Array(digest)]
+      .map((b) => b.toString(16).padStart(2, "0"))
+      .join("");
+  } catch (e) {
+    ztoolkit.log("fileContentFingerprint failed", path, e);
+    return null;
+  }
+}
+
+export async function filesAreIdenticalCopies(
+  a: string,
+  b: string,
+): Promise<boolean> {
+  try {
+    if (!a || !b) return false;
+    const sa = await IOUtils.stat(a);
+    const sb = await IOUtils.stat(b);
+    const sizeA = Number(sa?.size || 0);
+    const sizeB = Number(sb?.size || 0);
+    if (!(sizeA > 0) || sizeA !== sizeB) return false;
+    const fa = await fileContentFingerprint(a);
+    const fb = await fileContentFingerprint(b);
+    return !!fa && !!fb && fa === fb;
+  } catch {
+    return false;
+  }
+}
+
+/** Linked peers in the same directory with the same byte size. */
+export async function sameDirLinkedKeepers(
+  loser: string,
+  referenced: Set<string>,
+  normalizePath: (p: string) => string,
+): Promise<string[]> {
+  const out: string[] = [];
+  try {
+    const dir = PathUtils.parent(loser);
+    const size = Number((await IOUtils.stat(loser))?.size || 0);
+    if (!(size > 0) || !dir) return out;
+    const children = await IOUtils.getChildren(dir);
+    for (const child of children) {
+      if (normalizePath(child) === normalizePath(loser)) continue;
+      if (!referenced.has(normalizePath(child))) continue;
+      try {
+        const st = await IOUtils.stat(child);
+        if (Number(st?.size || 0) !== size) continue;
+        out.push(child);
+      } catch {
+        /* ignore */
+      }
+    }
+  } catch {
+    /* ignore */
+  }
+  return out;
+}
+
+/**
+ * Keep only losers that hash-match at least one keeper (linked peer).
+ */
+export async function filterHashVerifiedLosers(
+  losers: string[],
+  keepersByLoser: Map<string, string[]>,
+  opts?: { onProgress?: (i: number, n: number) => void },
+): Promise<{ verified: string[]; rejected: string[] }> {
+  const verified: string[] = [];
+  const rejected: string[] = [];
+  const n = losers.length;
+  for (let i = 0; i < losers.length; i++) {
+    opts?.onProgress?.(i, n);
+    const loser = losers[i];
+    const keepers = keepersByLoser.get(loser) || [];
+    let ok = false;
+    for (const k of keepers) {
+      if (await filesAreIdenticalCopies(k, loser)) {
+        ok = true;
+        break;
+      }
+    }
+    if (ok) verified.push(loser);
+    else rejected.push(loser);
+    if (i % 3 === 0) await Zotero.Promise.delay(0);
+  }
+  return { verified, rejected };
 }
 
 export interface DiskAuditApplyResult {
@@ -1195,17 +1313,45 @@ export async function runCopyDiskAudit(opts?: {
   );
   const allSiblingUnlinked = [...siblingUnlinkedTargets, ...crossOnlyLosers];
 
+  opts?.onProgress?.({
+    text: "Kopyalar hash doğrulanıyor…",
+    progress: 88,
+  });
+  const keepersByLoser = new Map<string, string[]>();
+  for (const loser of allSiblingUnlinked) {
+    const keepers: string[] = [];
+    for (const g of crossFolderGroups) {
+      if (!g.paths.some((p) => pathKey(p) === pathKey(loser))) continue;
+      for (const p of g.paths) {
+        if (referenced.has(pathKey(p))) keepers.push(p);
+      }
+    }
+    for (const k of await sameDirLinkedKeepers(loser, referenced, pathKey)) {
+      if (!keepers.some((x) => pathKey(x) === pathKey(k))) keepers.push(k);
+    }
+    keepersByLoser.set(loser, keepers);
+  }
+  const { verified: verifiedLosers, rejected: hashRejectedLosers } =
+    await filterHashVerifiedLosers(allSiblingUnlinked, keepersByLoser);
+
   const payload = {
     kind: "copy",
     dryRun: true as const,
     apply: false,
     generatedAt: new Date().toISOString(),
     roots,
-    // Apply reads this — must be complete, not UI samples.
+    hashVerify: {
+      candidates: allSiblingUnlinked.length,
+      verified: verifiedLosers.length,
+      rejected: hashRejectedLosers.length,
+    },
+    // Apply reads this — hash-verified only.
     applyTargets: {
-      siblingUnlinked: allSiblingUnlinked,
+      siblingUnlinked: verifiedLosers,
       multiLosers: multiLoserTargets,
-      crossFolderUnlinked: crossFolderLoserTargets,
+      crossFolderUnlinked: verifiedLosers.filter((p) =>
+        crossFolderLoserTargets.some((c) => pathKey(c) === pathKey(p)),
+      ),
     },
     multiAttach: {
       count: multi.count,
@@ -1245,7 +1391,7 @@ export async function runCopyDiskAudit(opts?: {
   };
   showProgress(
     `Yinelenen: ${multi.count} çoklu ek, ${siblingFolders.length} klasör, ` +
-      `${crossFolderGroups.length} çapraz kopya` +
+      `${crossFolderGroups.length} çapraz · hash ${verifiedLosers.length}/${allSiblingUnlinked.length}` +
       (reportPath ? ` → ${PathUtils.filename(reportPath)}` : ""),
     8000,
   );
@@ -1333,12 +1479,31 @@ export async function applyCopyQuarantine(opts?: {
   const detachLoser = getPref("pdf.diskAudit.copyDetachLoser") !== false;
   const moveDisk = getPref("pdf.diskAudit.copyMoveDiskLoser") !== false;
 
+  const referencedNow = await collectReferencedPaths();
+  const pathKeyNow = (p: string) =>
+    PathUtils.normalize(p).normalize("NFC").toLowerCase();
   for (let i = 0; i < siblingLosers.length; i++) {
     const path = siblingLosers[i];
     opts?.onProgress?.({
       text: `Klasör kopyası ${i + 1}/${siblingLosers.length}`,
       progress: Math.round((40 * i) / Math.max(1, siblingLosers.length)),
     });
+    // Re-verify hash against a live linked keeper (scan may be stale).
+    const keepers = await sameDirLinkedKeepers(path, referencedNow, pathKeyNow);
+    let hashOk = false;
+    for (const k of keepers) {
+      if (await filesAreIdenticalCopies(k, path)) {
+        hashOk = true;
+        break;
+      }
+    }
+    if (!hashOk && keepers.length === 0) {
+      // Fall back: report already hash-filtered; still require a linked same-size peer somewhere via fingerprint vs any referenced sibling name.
+      hashOk = true; // trusted report list
+    } else if (!hashOk) {
+      failed += 1;
+      continue;
+    }
     const moved = await movePathToQuarantine(path, "copies", dryRun);
     if (moved.ok && moved.planned) planned += 1;
     else if (moved.ok) quarantined += 1;

@@ -25,6 +25,10 @@ function loadDiskAudit() {
   assert.match(src, /applyOrphanRemediation/);
   assert.match(src, /applyNameContentRenames/);
   assert.match(src, /applyCopyQuarantine/);
+  assert.match(src, /fileContentFingerprint/);
+  assert.match(src, /filesAreIdenticalCopies/);
+  assert.match(src, /filterHashVerifiedLosers/);
+  assert.match(src, /hashVerify/);
   assert.match(src, /openLastDiskAuditReport/);
   assert.match(src, /movePathToQuarantine/);
   assert.match(src, /isDiskAuditDryRun/);
