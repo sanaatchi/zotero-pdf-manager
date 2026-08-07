@@ -29,14 +29,26 @@ test("diskAudit module exports report-only runners", () => {
 
 test("proposeAttangerRename + classify helpers (inline)", () => {
   // Mirror the pure logic for unit certainty without full Zotero bundle.
-  function proposeAttangerRename(currentName, contentTitle, contentAuthor, contentYear) {
-    const title = String(contentTitle || "").replace(/\s+/g, " ").trim();
+  function proposeAttangerRename(
+    currentName,
+    contentTitle,
+    contentAuthor,
+    contentYear,
+  ) {
+    const title = String(contentTitle || "")
+      .replace(/\s+/g, " ")
+      .trim();
     if (title.length < 4) return null;
     const author = (contentAuthor || "").split(/[;,]/)[0].trim() || "Unknown";
-    const year = String(contentYear || "").replace(/\D/g, "").slice(0, 4);
+    const year = String(contentYear || "")
+      .replace(/\D/g, "")
+      .slice(0, 4);
     const yearPart = year.length === 4 ? ` (${year})` : "";
     let stem = `${author}${yearPart} ${title}`.replace(/\s+/g, " ").trim();
-    stem = stem.replace(/[\\/:*?"<>|]/g, " ").replace(/\s+/g, " ").trim();
+    stem = stem
+      .replace(/[\\/:*?"<>|]/g, " ")
+      .replace(/\s+/g, " ")
+      .trim();
     const proposed = `${stem}.pdf`;
     if (proposed.toLowerCase() === currentName.toLowerCase()) return null;
     return proposed;
@@ -46,10 +58,15 @@ test("proposeAttangerRename + classify helpers (inline)", () => {
       return { class: "unverifiable", clearMismatch: false };
     }
     const v = String(result.verdict).toLowerCase();
-    if (v === "match" || v === "ok") return { class: "ok", clearMismatch: false };
-    if (v === "weak" || v === "review") return { class: "weak", clearMismatch: false };
+    if (v === "match" || v === "ok")
+      return { class: "ok", clearMismatch: false };
+    if (v === "weak" || v === "review")
+      return { class: "weak", clearMismatch: false };
     if (v === "mismatch") {
-      return { class: "mismatch", clearMismatch: Number(result.confidence || 0) >= 0.75 };
+      return {
+        class: "mismatch",
+        clearMismatch: Number(result.confidence || 0) >= 0.75,
+      };
     }
     return { class: "unverifiable", clearMismatch: false };
   }
@@ -59,11 +76,13 @@ test("proposeAttangerRename + classify helpers (inline)", () => {
     "Saint Exupéry (2016) Küçük prens.pdf",
   );
   assert.equal(
-    classifyNameContentFromBridge({ verdict: "mismatch", confidence: 0.9 }).clearMismatch,
+    classifyNameContentFromBridge({ verdict: "mismatch", confidence: 0.9 })
+      .clearMismatch,
     true,
   );
   assert.equal(
-    classifyNameContentFromBridge({ verdict: "mismatch", confidence: 0.2 }).clearMismatch,
+    classifyNameContentFromBridge({ verdict: "mismatch", confidence: 0.2 })
+      .clearMismatch,
     false,
   );
   assert.equal(classifyNameContentFromBridge({ verdict: "match" }).class, "ok");

@@ -15,8 +15,7 @@ declare const IOUtils: any;
 declare const PathUtils: any;
 
 const DISINDA_TOKEN = "_zotero_disinda";
-const FALLBACK_KAYNAKLAR =
-  "D:\\OneDrive\\1A_E_KAYNAKLARIM\\Zotero Kaynaklar";
+const FALLBACK_KAYNAKLAR = "D:\\OneDrive\\1A_E_KAYNAKLARIM\\Zotero Kaynaklar";
 
 export type DiskAuditKind = "orphan" | "nameContent" | "copy";
 
@@ -64,8 +63,7 @@ export function normalizeDiskAuditRoots(opts?: {
   includeDisinda?: boolean;
 }): string[] {
   const useWatch =
-    opts?.useWatchRoots ??
-    (getPref("pdf.diskAudit.useWatchRoots") !== false);
+    opts?.useWatchRoots ?? getPref("pdf.diskAudit.useWatchRoots") !== false;
   const includeDisinda =
     opts?.includeDisinda ?? !!getPref("pdf.diskAudit.includeDisinda");
   let roots: string[] = [];
@@ -76,7 +74,10 @@ export function normalizeDiskAuditRoots(opts?: {
       opts?.rootsPref ?? getPref("pdf.diskAudit.roots") ?? "",
     ).trim();
     roots = raw
-      ? raw.split(/[;\n]+/).map((s) => s.trim()).filter(Boolean)
+      ? raw
+          .split(/[;\n]+/)
+          .map((s) => s.trim())
+          .filter(Boolean)
       : [defaultKaynaklarPath()];
   }
   if (!roots.length) roots = [defaultKaynaklarPath()];
@@ -89,8 +90,10 @@ export function normalizeDiskAuditRoots(opts?: {
 }
 
 export function isUnderDisinda(path: string): boolean {
-  return path.replace(/\\/g, "/").toLowerCase().includes(`/${DISINDA_TOKEN}/`) ||
-    path.replace(/\\/g, "/").toLowerCase().includes(`/${DISINDA_TOKEN}`);
+  return (
+    path.replace(/\\/g, "/").toLowerCase().includes(`/${DISINDA_TOKEN}/`) ||
+    path.replace(/\\/g, "/").toLowerCase().includes(`/${DISINDA_TOKEN}`)
+  );
 }
 
 export function proposeAttangerRename(
@@ -99,30 +102,41 @@ export function proposeAttangerRename(
   contentAuthor?: string,
   contentYear?: string,
 ): string | null {
-  const title = String(contentTitle || "").replace(/\s+/g, " ").trim();
+  const title = String(contentTitle || "")
+    .replace(/\s+/g, " ")
+    .trim();
   if (title.length < 4) return null;
   const meta = parseFilenameMetadata(currentName);
   const author =
     (contentAuthor || "").split(/[;,]/)[0].trim() ||
     (meta.authors && meta.authors[0]) ||
     "Unknown";
-  const year = String(contentYear || meta.year || "").replace(/\D/g, "").slice(0, 4);
+  const year = String(contentYear || meta.year || "")
+    .replace(/\D/g, "")
+    .slice(0, 4);
   const yearPart = year.length === 4 ? ` (${year})` : "";
   const itemType = meta.itemType ? ` [${meta.itemType}]` : "";
   const pub = meta.publisher ? ` ${meta.publisher}` : "";
-  let stem = `${author}${yearPart} ${title}${itemType}${pub}`.replace(/\s+/g, " ").trim();
-  stem = stem.replace(/[\\/:*?"<>|]/g, " ").replace(/\s+/g, " ").trim();
+  let stem = `${author}${yearPart} ${title}${itemType}${pub}`
+    .replace(/\s+/g, " ")
+    .trim();
+  stem = stem
+    .replace(/[\\/:*?"<>|]/g, " ")
+    .replace(/\s+/g, " ")
+    .trim();
   if (stem.length > 180) stem = stem.slice(0, 180).trim();
   const proposed = `${stem}.pdf`;
   if (proposed.toLowerCase() === currentName.toLowerCase()) return null;
   return proposed;
 }
 
-export function classifyNameContentFromBridge(result: {
-  verdict?: string;
-  confidence?: number;
-  reason?: string;
-} | null): {
+export function classifyNameContentFromBridge(
+  result: {
+    verdict?: string;
+    confidence?: number;
+    reason?: string;
+  } | null,
+): {
   class: string;
   clearMismatch: boolean;
 } {
@@ -166,10 +180,7 @@ async function resolveReportDir(): Promise<string> {
   }
 }
 
-async function writeReport(
-  kind: string,
-  payload: unknown,
-): Promise<string> {
+async function writeReport(kind: string, payload: unknown): Promise<string> {
   const dir = await resolveReportDir();
   if (!dir) return "";
   const stamp = new Date().toISOString().replace(/[:.]/g, "-");
@@ -268,7 +279,10 @@ export async function runNameContentDiskAudit(opts?: {
 }): Promise<DiskAuditSummary> {
   const roots = normalizeDiskAuditRoots();
   const maxFiles = Math.max(1, Number(opts?.maxFiles || 400));
-  opts?.onProgress?.({ text: "Collecting orphans for name↔content…", progress: 5 });
+  opts?.onProgress?.({
+    text: "Collecting orphans for name↔content…",
+    progress: 5,
+  });
   const referenced = await collectReferencedPaths();
   const includeDisinda = !!getPref("pdf.diskAudit.includeDisinda");
   const { orphanFiles } = await classifyOrphanTree(
@@ -346,8 +360,9 @@ export async function runNameContentDiskAudit(opts?: {
     else counts.unverifiable += 1;
 
     const contentTitle =
-      String((bridge as any)?.guessed_title || (bridge as any)?.content_title || "") ||
-      "";
+      String(
+        (bridge as any)?.guessed_title || (bridge as any)?.content_title || "",
+      ) || "";
     let proposed: string | null = null;
     if (verdict.clearMismatch) {
       counts.clearMismatch += 1;
@@ -453,7 +468,8 @@ export async function listMultiAttachParents(limit = 50): Promise<{
         if (samples.length < limit) {
           samples.push({
             parentKey: parent.key,
-            parentTitle: parent.getDisplayTitle?.() || parent.getField?.("title") || "",
+            parentTitle:
+              parent.getDisplayTitle?.() || parent.getField?.("title") || "",
             pdfCount: pdfs.length,
             paths: pdfs,
           });
@@ -629,7 +645,8 @@ export async function runDiskAuditWithProgress(
 }
 
 function summarizeLine(s: DiskAuditSummary): string {
-  if (s.kind === "orphan") return `Orphans: ${s.orphanCount ?? 0} (report only)`;
+  if (s.kind === "orphan")
+    return `Orphans: ${s.orphanCount ?? 0} (report only)`;
   if (s.kind === "nameContent") {
     const n = s.nameContent;
     return `Name↔content: clear_mismatch ${n?.clearMismatch ?? 0} / ${n?.scanned ?? 0} (dry-run)`;

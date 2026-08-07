@@ -16,11 +16,11 @@ ZotAssets, File Utility, Attachment Scanner, ozefe/yoktez).
 
 ### Son eklenen (v1.0.146)
 
-| Madde | Not |
-| ----- | --- |
-| OA Search dirzon checkbox | ALL_SOURCES + FEDERATED_SOURCE_* + prefs; TR kitap önceliği pdfkitap→dirzon |
-| Prefs «Disk / ek denetimi» P0 | Üç buton report-only (orphan / name↔content / kopya); apply/quarantine disabled |
-| Multi-attach + clear_mismatch dry-run | Copy scan lists ≥2 PDF parents; Kaynaklar rename önerisi dry-run (apply yok) |
+| Madde                                 | Not                                                                             |
+| ------------------------------------- | ------------------------------------------------------------------------------- |
+| OA Search dirzon checkbox             | ALL_SOURCES + FEDERATED_SOURCE_* + prefs; TR kitap önceliği pdfkitap→dirzon     |
+| Prefs «Disk / ek denetimi» P0         | Üç buton report-only (orphan / name↔content / kopya); apply/quarantine disabled |
+| Multi-attach + clear_mismatch dry-run | Copy scan lists ≥2 PDF parents; Kaynaklar rename önerisi dry-run (apply yok)    |
 
 ### Son eklenen (v1.0.145)
 
