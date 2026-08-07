@@ -1,4 +1,4 @@
-// @ajan: cursor · @etiket: katman-2, disk-audit, test, apply, cross-folder-dupe, bridge-unavailable, dry-run-ux
+// @ajan: cursor · @etiket: katman-2, disk-audit, test, apply, cross-folder-dupe, bridge-unavailable, dry-run-ux, confirm-fail-closed, hash-fail-closed
 "use strict";
 
 const { test } = require("node:test");
@@ -41,6 +41,12 @@ function loadDiskAudit() {
   assert.match(src, /findAttachmentByAbsolutePath/);
   assert.match(src, /applyTargets/);
   assert.match(src, /crossFolder/);
+  // B6: confirmApply fail-closed when no window.
+  assert.match(src, /Fail-closed \(B6\)/);
+  assert.doesNotMatch(src, /function confirmApply[\s\S]{0,400}return true;/);
+  // B5: no trusted-report hashOk shortcut when keepers empty.
+  assert.doesNotMatch(src, /hashOk = true; \/\/ trusted report list/);
+  assert.match(src, /peerKeepers/);
   return src;
 }
 

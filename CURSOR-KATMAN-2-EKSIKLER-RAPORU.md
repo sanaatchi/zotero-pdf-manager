@@ -1,19 +1,38 @@
-<!-- @ajan: cursor · @etiket: katman-2, eksik-raporu, periodical, console-group-polyfill, author-line-gate, no-validate-subtitle-enrich, title-length-aware, isbn-prefer-any, tr-pdf-encoding, medium-cov-soft, mismatch-note-clear, validated-pdf-lock, field-weights-score, medium-author-noyear, openusing-finally, pdfkitap, dirzon, disk-audit, unit-interval-pref, tr-TR, disk-audit-apply, watch-root-kaynaklar, path-fold, bidirectional-audit, cross-folder-dupe, match-suggest, bidir-apply, hash-verify, broken-repair, pathutils-safe, human-md-report, quarantine-only, clear-score-tighten, prefs-layout, soft-edition-gate, dry-run-ux -->
+<!-- @ajan: cursor · @etiket: katman-2, eksik-raporu, periodical, console-group-polyfill, author-line-gate, no-validate-subtitle-enrich, title-length-aware, isbn-prefer-any, tr-pdf-encoding, medium-cov-soft, mismatch-note-clear, validated-pdf-lock, field-weights-score, medium-author-noyear, openusing-finally, pdfkitap, dirzon, disk-audit, unit-interval-pref, tr-TR, disk-audit-apply, watch-root-kaynaklar, path-fold, bidirectional-audit, cross-folder-dupe, match-suggest, bidir-apply, hash-verify, broken-repair, pathutils-safe, human-md-report, quarantine-only, clear-score-tighten, prefs-layout, soft-edition-gate, dry-run-ux, bug-hunt-1-0-158 -->
 
 # Cursor — Katman 2 Eksikler Raporu
 
-**Tarih:** 2026-08-07 · **Sürüm:** PDF Manager **v1.0.157**  
+**Tarih:** 2026-08-07 · **Sürüm:** PDF Manager **v1.0.158** (bug hunt B1–B7 kapandı; B8 açık)  
 **Analiz:** ürün ↔ `referanslar/katman-2/` ↔ GitHub (Attanger, Zotadata, Zoplicate,
 ZotAssets, File Utility, Attachment Scanner, ozefe/yoktez).
 
 ## Özet hüküm
 
-| Soru                      | Cevap                                                              |
-| ------------------------- | ------------------------------------------------------------------ |
-| Açık **P1** ürün boşluğu? | **Yok** — P0 hata analizi (Çöz ayrımı + dry-run UX) kapandı        |
-| Gerçek açık iş?           | Checklist Bölüm B (kullanıcı) + isteğe bağlı P3                    |
-| Yeni zorunlu XPI portu?   | **Yok** — GitHub taraması yeni P1 üretmedi                         |
-| İki uçlu denetim?         | **v1.0.157** Plan yaz düğmeleri + Yalnız kopyalar / Çöz eşleşmeler |
+| Soru                      | Cevap                                                                                 |
+| ------------------------- | -------------------------------------------------------------------------------------- |
+| Açık **P0** ürün boşluğu? | **Yok** — B1/B2 **v1.0.158** ile kapandı (apply rapor ayrımı + startup eşik onarımı) |
+| Açık **P1** ürün boşluğu? | **Var** — **B8** (`menu.ts` ham PathUtils); B3–B7 **v1.0.158** ile kapandı           |
+| Gerçek açık iş?           | B8 + Checklist Bölüm B (kullanıcı) + isteğe bağlı P3 (B9–B15 canvas backlog)         |
+| Yeni zorunlu XPI portu?   | **Yok** — GitHub taraması yeni P1 üretmedi                                           |
+| İki uçlu denetim?         | **v1.0.157+** Plan yaz + Yalnız kopyalar / Çöz eşleşmeler; **158** apply last-* ayrı |
+
+### Son eklenen (v1.0.158 — bug hunt hotfix)
+
+**Not:** Aşağıdaki B1–B8, "Kapalı (doğrulandı)" tablosundaki eski
+**B1–B5** (v1.0.47–49, "linked ek silme" / "port yolları" konulu Katman 1↔2
+handoff maddeleri) ile **aynı ID, farklı konu** — karıştırılmamalı.
+Kaynak: `pdf-manager-bug-hunt-157.canvas.tsx` (B1–B15); SSOT bu tablo.
+
+| ID     | Öncelik | Madde                                                                 | Durum                          |
+| ------ | ------- | --------------------------------------------------------------------- | ------------------------------- |
+| **B1** | **P0**  | Plan/Çöz → `last-bidirectional` Tara raporunu ezer                    | ✅ **1.0.158** (`*-apply.*`)   |
+| **B2** | **P0**  | Eşik 0 startup'ta mass-attach riski                                   | ✅ **1.0.158** (startup repair) |
+| **B3** | P1      | `broken_alt` zorla `clear:true` (soft basename)                       | ✅ **1.0.158** (clear gate)    |
+| **B4** | P1      | Hash fail-open: `hashSkipped` → ad+boyut «verified»                   | ✅ **1.0.158** (fail-closed)   |
+| **B5** | P1      | Hash fail-open: copy Çöz keeper yoksa `hashOk=true`                   | ✅ **1.0.158** (re-fingerprint) |
+| **B6** | P1      | Confirm diyalog fail-open (`window` yok → `true`)                     | ✅ **1.0.158** (fail-closed)   |
+| **B7** | P1      | `typeOk` +0.05 boost zayıf skoru clear eşiğinin üstüne iter           | ✅ **1.0.158** (ranking-only)  |
+| **B8** | P1      | `menu.ts` ham `PathUtils` (safe helper atlanmış)                      | **açık**                       |
 
 ### Son eklenen (v1.0.157)
 
@@ -195,12 +214,13 @@ ZotAssets, File Utility, Attachment Scanner, ozefe/yoktez).
 
 | Madde                                                   | v         | Not                                             |
 | ------------------------------------------------------- | --------- | ----------------------------------------------- |
+| Bug hunt **B1–B7** (rapor ezme, eşik-0, broken_alt, hash×2, confirm, typeOk boost) | **1.0.158** | canvas B1–B7; **B8** menu PathUtils açık |
 | P2-1…P2-6 otomasyon                                     | ≤1.0.27+  | indeks, reconcile, OA downloads/, orphan, audit |
 | OA bridge / DergiPark / LibGen / YÖK / Sci-Hub (manuel) | 1.0.43–46 | bridge `:8756`                                  |
-| **B1** linked ek silme                                  | 1.0.47    | delitemwithatt behavior                         |
-| **B2–B3** port yolları / plan drift (kısmi)             | —         | `katman-2/` kuratör; kalan drift aşağıda        |
-| **B4a–c** selective lint                                | 1.0.48–49 | journal abbr **skip**                           |
-| **B5** Zoplicate yan XPI + DOI/ISBN/KP rapor            | 1.0.49    | merge port yok                                  |
+| **B1** linked ek silme *(eski handoff ID)*              | 1.0.47    | delitemwithatt behavior                         |
+| **B2–B3** port yolları / plan drift (kısmi) *(eski)*    | —         | `katman-2/` kuratör; kalan drift aşağıda        |
+| **B4a–c** selective lint *(eski)*                       | 1.0.48–49 | journal abbr **skip**                           |
+| **B5** Zoplicate yan XPI + DOI/ISBN/KP rapor *(eski)*   | 1.0.49    | merge port yok                                  |
 
 ### Referans klasör → ürün
 
@@ -222,11 +242,19 @@ selective/behavior mevcut.
 
 | ID      | Öncelik         | Madde                                                                | Kanıt                                                                                                  | Öneri                                       |
 | ------- | --------------- | -------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------ | ------------------------------------------- |
+| **B1**  | ✅ **1.0.158**  | Plan/Çöz `last-bidirectional` ezmesi                                 | `writeBidirApplyReport` → `last-bidirectional-apply.*`; Tara last-* dokunulmaz                         | —                                           |
+| **B2**  | ✅ **1.0.158**  | Eşik 0 startup mass-attach                                           | `repairMatchThresholdPrefs` onStartup; `normalizeMatchThresholds` 0→default                            | —                                           |
+| **B3**  | ✅ **1.0.158**  | `broken_alt` zorla clear                                             | soft basename → `isClearMatchCandidate` + soft-edition/roman gates                                     | —                                           |
+| **B4**  | ✅ **1.0.158**  | Hash fail-open (fingerprint skip → verified)                         | `hashSkipped` → `verifiedLosers=[]` (fail-closed)                                                      | —                                           |
+| **B5**  | ✅ **1.0.158**  | Hash fail-open (copy apply keeper yok)                               | peer re-fingerprint; fail → skip                                                                       | —                                           |
+| **B6**  | ✅ **1.0.158**  | Confirm fail-open                                                    | `confirmApply` window yok → `false`                                                                    | —                                           |
+| **B7**  | ✅ **1.0.158**  | `typeOk` +0.05 clear eşiğini aşırır                                  | boost yalnız ranking (clear kararından sonra)                                                          | —                                           |
+| **B8**  | P1              | `menu.ts` ham `PathUtils` (safe helper atlanmış)                     | bug hunt; Match Attachment `PathUtils.filename` / `normalize`                                          | sonraki patch                               |
 | **G0**  | ✅              | OA bridge SSRF loopback                                              | `oaBridgeUrl.ts` v1.0.50 — K1/K3 parity                                                                |
 | **G0b** | ✅              | Delete confirm: empty parent folder                                  | `formatDeleteConfirmLines` + locale footer · **v1.0.51**                                               |
 | **G0c** | ✅              | KP helper DRY mirror                                                 | `src/utils/kpToken.ts` = K1 `normalizeKp` · **v1.0.51**                                                |
 | **G1**  | ✅              | YÖKTez auto politikası                                               | **B kilit:** tez = yalnız manuel; auto = **doi**+dergipark+pmc. TR makale: dergipark + (DOI varsa) doi | dokümante 2026-08-02                        |
-| **G2**  | ✅ ajan / ⬜ UI | Checklist **v1.0.49** yenilendi                                      | `ZOTERO-KABUL-CHECKLIST.md` — Bölüm A otomatik ✅ (209 test); Bölüm B Zotero smoke kullanıcı           | Kullanıcı B1–B8 işaretleyince tam kapanır   |
+| **G2**  | ✅ ajan / ⬜ UI | Checklist **v1.0.49** yenilendi                                      | `ZOTERO-KABUL-CHECKLIST.md` — Bölüm A otomatik ✅; Bölüm B Zotero smoke kullanıcı                      | Kullanıcı Bölüm B imzalayınca tam kapanır   |
 | **G3**  | ✅              | README Sci-Hub/LibGen metin                                          | düzeltildi 2026-08-02                                                                                  | auto yasak / manuel prefs ayrı              |
 | **G4**  | ✅              | REFERANS-PORT §4 stale                                               | düzeltildi                                                                                             | merger + contentMetadata ✅                 |
 | **G5**  | ✅              | AUTOMATION_PLAN durum bandı                                          | eklendi                                                                                                | teslim notu                                 |
@@ -271,11 +299,11 @@ Yeni **zorunlu** mirror veya port önerilmez.
 
 ## Sonraki 3 adım (öneri)
 
-1. **G1** — YÖKTez auto politikası (A gated / B manuel-only)
+1. **B8** — `menu.ts` PathUtils → `safeFilename` / `safePathKey` (+ matchAttachment toast)
 2. **G2 kalan** — `ZOTERO-KABUL-CHECKLIST.md` Bölüm B (Zotero UI smoke) kullanıcı imzası
-3. İsteğe bağlı P3 — G6–G10
+3. İsteğe bağlı P3 — G6–G10 / canvas B9–B15
 
-_(G2 ajan tarafı: checklist v1.0.49 + otomatik Bölüm A imzalandı. G3–G5 doküman hijyeni uygulandı.)_
+_(G2 ajan tarafı: checklist v1.0.49 + otomatik Bölüm A imzalandı. G3–G5 doküman hijyeni uygulandı. Bug hunt B1–B7 → v1.0.158.)_
 
 ---
 

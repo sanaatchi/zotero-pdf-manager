@@ -1,4 +1,4 @@
-// @ajan: cursor · @etiket: katman-2, prefs, watch-root-parent, disk-audit, unit-interval-pref, bidirectional-audit, bidir-apply, quarantine-only, prefs-layout, dry-run-ux
+// @ajan: cursor · @etiket: katman-2, prefs, watch-root-parent, disk-audit, unit-interval-pref, bidirectional-audit, bidir-apply, quarantine-only, prefs-layout, dry-run-ux, startup-threshold-repair
 import { config } from "../../package.json";
 import { getString } from "../utils/locale";
 import { getPref, setPref } from "../utils/prefs";
@@ -171,8 +171,7 @@ export async function registerPrefsScripts(_window: Window) {
   ensureNumberPref("pdf.periodicMinutes", 30);
   // 0–1 floats — never Math.floor via ensureNumberPref (0.85→0 corrupted
   // every prefs open → "score X below auto-attach 0" / mass #pdf-candidate).
-  ensureUnitIntervalPref("pdf.autoAttachThreshold", 0.85);
-  ensureUnitIntervalPref("pdf.reviewThreshold", 0.6);
+  repairMatchThresholdPrefs();
   ensureNumberPref("pdf.addSettleMs", 1000);
   ensureBooleanPref("pdf.saveOaToDownloads", true);
   ensureNumberPref("pdf.onlineMaxPerRun", 10);
@@ -322,6 +321,12 @@ export function normalizeUnitInterval(
 
 function ensureUnitIntervalPref(key: string, fallback: number) {
   setPref(key, normalizeUnitInterval(getPref(key), fallback));
+}
+
+/** Repair autoAttach/review floats at startup (prefs open is too late — B2). */
+export function repairMatchThresholdPrefs() {
+  ensureUnitIntervalPref("pdf.autoAttachThreshold", 0.85);
+  ensureUnitIntervalPref("pdf.reviewThreshold", 0.6);
 }
 
 function bindNumberPrefInput(

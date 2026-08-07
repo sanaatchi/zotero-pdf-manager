@@ -1,4 +1,4 @@
-// @ajan: cursor · @etiket: katman-2, bidirectional-audit, item-pdf-cross, type-mismatch, match-suggest, apply, hash-verify, broken-repair, pathutils-safe, human-md-report, quarantine-only, clear-score-tighten, soft-edition-guard, prefs-layout, soft-edition-gate, quarantine-skip, soft-neg, dry-run-ux
+// @ajan: cursor · @etiket: katman-2, bidirectional-audit, item-pdf-cross, type-mismatch, match-suggest, apply, hash-verify, broken-repair, pathutils-safe, human-md-report, quarantine-only, clear-score-tighten, soft-edition-guard, prefs-layout, soft-edition-gate, quarantine-skip, soft-neg, dry-run-ux, bidir-apply-report, hash-fail-closed, clear-boost-rank, broken-alt-gate
 /**
  * Unified two-ended PDF control report:
  *   item → PDF  (linked / broken / missing / type conflict / mismatch tags)
@@ -7,6 +7,7 @@
  * Reuses diskAudit helpers for roots, type tags, and cross-folder grouping.
  * Structural only (no per-file content bridge) — fast enough for full Kaynaklar.
  * JSON is machine-facing; last-bidirectional.md is the human summary.
+ * Apply writes last-bidirectional-apply.* — never clobbers Tara last-*.
  */
 import { config } from "../../package.json";
 import { writeJsonAtomic, writeUtf8Atomic } from "../utils/atomicJson";
@@ -490,6 +491,7 @@ async function writeBidirMarkdown(
   return lastMd;
 }
 
+/** Tara / scan report — updates last-bidirectional.json/.md (human open). */
 async function writeBidirReport(payload: unknown): Promise<string> {
   const dir = await resolveReportDir();
   const stamp = new Date().toISOString().replace(/[:.]/g, "-");
@@ -509,6 +511,65 @@ async function writeBidirReport(payload: unknown): Promise<string> {
     }
   }
   await writeBidirMarkdown(dir, payload, path);
+  return path;
+}
+
+/**
+ * Apply / Plan result — separate pointer so Plan/Çöz never clobbers Tara
+ * last-bidirectional.* used by «Raporu aç» and a second Çöz.
+ */
+async function writeBidirApplyReport(payload: unknown): Promise<string> {
+  const dir = await resolveReportDir();
+  const stamp = new Date().toISOString().replace(/[:.]/g, "-");
+  const path = PathUtils.join(
+    dir,
+    `disk-audit-bidirectional-apply-${stamp}.json`,
+  );
+  await writeJsonAtomic(path, payload as any);
+  const last = PathUtils.join(dir, "last-bidirectional-apply.json");
+  try {
+    await writeJsonAtomic(last, payload as any);
+  } catch (e) {
+    ztoolkit.log("writeBidirApplyReport last failed", last, e);
+    try {
+      const raw = await IOUtils.readUTF8(path);
+      await IOUtils.writeUTF8(last, raw);
+    } catch (e2) {
+      ztoolkit.log("writeBidirApplyReport last fallback failed", e2);
+    }
+  }
+  // Compact apply summary MD (not full Tara format).
+  try {
+    const p = payload as {
+      dryRun?: boolean;
+      linked?: number;
+      quarantined?: number;
+      planned?: number;
+      failed?: number;
+      mode?: string;
+      generatedAt?: string;
+    };
+    const lines = [
+      "# İki uçlu PDF — uygulama özeti",
+      "",
+      `Oluşturulma: \`${p.generatedAt || new Date().toISOString()}\``,
+      `Mod: \`${p.mode || "full"}\``,
+      "",
+      p.dryRun
+        ? `Deneme (plan): **${p.planned ?? 0}** satır — uygulanmadı.`
+        : `Bağlandı: **${p.linked ?? 0}** · Karantina: **${p.quarantined ?? 0}** · Hata: **${p.failed ?? 0}**`,
+      "",
+      "> Tara özeti için `last-bidirectional.md` (bu dosya Plan/Çöz sonucudur).",
+      "",
+    ];
+    const md = lines.join("\n");
+    const lastMd = PathUtils.join(dir, "last-bidirectional-apply.md");
+    const stampedMd = path.replace(/\.json$/i, ".md");
+    await writeUtf8Atomic(lastMd, md);
+    await writeUtf8Atomic(stampedMd, md);
+  } catch (e) {
+    ztoolkit.log("writeBidirApplyReport md failed", e);
+  }
   return path;
 }
 
@@ -707,11 +768,11 @@ export function suggestOrphanToMissingMatches(
           !pdf.filenameType ||
           !item.itemType ||
           pdf.filenameType.toLowerCase() === item.itemType.toLowerCase();
-        if (typeOk && score >= 0.5 && detail.shared >= minShared) {
-          score = Math.min(1, score + 0.05);
-        }
+        // Type mismatch demotes score before clear / minScore gates.
         if (!typeOk) score *= 0.75;
         if (detail.shared < 1 || score < minScore) continue;
+        // Clear uses raw (post-type) score — typeOk +0.05 must not alone
+        // push a weak candidate over the clear threshold (B7).
         const clear = isClearMatchCandidate({
           typeOk,
           score,
@@ -723,6 +784,10 @@ export function suggestOrphanToMissingMatches(
           clearScore,
           minShared,
         });
+        // Ranking boost only (display / sort), after clear decision.
+        if (typeOk && score >= 0.5 && detail.shared >= minShared) {
+          score = Math.min(1, score + 0.05);
+        }
         all.push({
           kind:
             item.status === "broken" ? "orphan_to_broken" : "orphan_to_missing",
@@ -1055,20 +1120,51 @@ export async function runBidirectionalAudit(opts?: {
       if (usedItems.has(row.itemID)) continue;
       const alt = row.alternatePaths[0];
       if (!alt || usedPdfs.has(alt.toLowerCase())) continue;
+      if (pathLooksQuarantined(alt)) continue;
+      let pdfTitle = safeFilename(alt).replace(/\.pdf$/i, "");
+      try {
+        const meta = parseFilenameMetadata(safeFilename(alt));
+        pdfTitle = String(meta.title || pdfTitle);
+      } catch {
+        /* keep stem */
+      }
+      if (softEditionMarkersConflict(row.title, pdfTitle)) continue;
+      if (romanVolumesConflict(row.title, pdfTitle)) continue;
+      const detail = titleOverlapDetail(row.title, pdfTitle);
+      const filenameType = extractFilenameItemTypeTag(safeFilename(alt));
+      const typeOk =
+        !filenameType ||
+        !row.itemType ||
+        filenameType.toLowerCase() === row.itemType.toLowerCase();
+      let score = detail.score;
+      if (!typeOk) score *= 0.75;
+      // Soft basename alone is never clear — same gates as orphan matches (B3).
+      const clear = isClearMatchCandidate({
+        typeOk,
+        score,
+        shared: detail.shared,
+        shortSize: detail.shortSize,
+        pdfPath: alt,
+        itemTitle: row.title,
+        pdfTitle,
+      });
+      // Keep weak alt suggestions so Rapor shows them; skip empty overlap.
+      if (!clear && (detail.shared < 1 || score < 0.5)) continue;
       usedItems.add(row.itemID);
       usedPdfs.add(alt.toLowerCase());
       matchSuggestions.push({
         kind: "broken_alt_path",
-        score: 1,
-        clear: true,
+        score:
+          Math.round((clear ? Math.max(score, 0.85) : score) * 1000) / 1000,
+        clear,
         itemID: row.itemID,
         itemKey: row.key,
         itemTitle: row.title,
         itemType: row.itemType,
         pdfPath: alt,
         pdfFile: safeFilename(alt),
-        filenameType: extractFilenameItemTypeTag(safeFilename(alt)),
-        typeOk: true,
+        filenameType,
+        typeOk,
         itemStatus: "broken",
       });
     }
@@ -1110,21 +1206,25 @@ export async function runBidirectionalAudit(opts?: {
       );
       verifiedLosers = filtered.verified;
       hashRejectedLosers = filtered.rejected;
-      // If every fingerprint failed (crypto unavailable), keep name+size losers.
+      // Fail-closed (B4): fingerprint unavailable / all failed → 0 losers.
+      // Never treat basename+size alone as verified (collision risk).
       if (
         !verifiedLosers.length &&
         hashRejectedLosers.length === unlinkedLosers.length &&
         unlinkedLosers.length > 0
       ) {
         hashSkipped = true;
-        verifiedLosers = unlinkedLosers.slice();
-        hashRejectedLosers = [];
+        verifiedLosers = [];
       }
     }
   } catch (e) {
     hashSkipped = true;
-    verifiedLosers = unlinkedLosers.slice();
-    ztoolkit.log("bidir hash verify failed — using name+size losers", e);
+    verifiedLosers = [];
+    hashRejectedLosers = unlinkedLosers.slice();
+    ztoolkit.log(
+      "bidir hash verify failed — refusing name+size losers (fail-closed)",
+      e,
+    );
   }
 
   const payload = {
@@ -1357,9 +1457,10 @@ export async function applyBidirectionalSuggestions(opts?: {
     : opts?.clearOnly !== false
       ? rows.filter((r) => r.clear)
       : rows;
-  const losers: string[] = doQuarantine
-    ? report?.crossFolderUnlinkedLosers || []
-    : [];
+  const losers: string[] =
+    doQuarantine && !report?.hashVerify?.skipped
+      ? report?.crossFolderUnlinkedLosers || []
+      : [];
 
   if (!targets.length && !losers.length) {
     new ztoolkit.ProgressWindow(config.addonName, { closeTime: 5000 })
@@ -1493,7 +1594,7 @@ export async function applyBidirectionalSuggestions(opts?: {
   }
 
   try {
-    await writeBidirReport({
+    await writeBidirApplyReport({
       kind: "bidirectional-apply",
       generatedAt: new Date().toISOString(),
       dryRun,

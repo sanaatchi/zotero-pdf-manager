@@ -1,4 +1,4 @@
-// @ajan: cursor · @etiket: katman-2, pdf-sources, bridge-guard, ocr-haystack, content-validate, nosource-sync, pdf-candidate-split, mismatch-reason, encoding-gate, re-ocr-validate, tr-i-fold, sentence-tr-override, author-line-gate, no-validate-subtitle-enrich, title-length-aware, isbn-conflict-soft, tr-pdf-encoding, medium-cov-soft, medium-author-noyear, field-weights-score, validated-pdf-lock, pdfkitap, dirzon, review-reason-coverage
+// @ajan: cursor · @etiket: katman-2, pdf-sources, bridge-guard, ocr-haystack, content-validate, nosource-sync, pdf-candidate-split, mismatch-reason, encoding-gate, re-ocr-validate, tr-i-fold, sentence-tr-override, author-line-gate, no-validate-subtitle-enrich, title-length-aware, isbn-conflict-soft, tr-pdf-encoding, medium-cov-soft, medium-author-noyear, field-weights-score, validated-pdf-lock, pdfkitap, dirzon, review-reason-coverage, zero-threshold-default
 import { getString } from "../utils/locale";
 import { getPref } from "../utils/prefs";
 import {
@@ -119,7 +119,10 @@ export type LocalMatchResult =
   | { status: "ambiguous"; score?: number }
   | { status: "none" };
 
-/** Clamp and order match thresholds (P2-2). Defaults: attach 0.85, review 0.60. */
+/** Clamp and order match thresholds (P2-2). Defaults: attach 0.85, review 0.60.
+ * Stored `0` is treated as unset (floor-corruption from ensureNumberPref) — never
+ * mass-attach with score≥0.
+ */
 export function normalizeMatchThresholds(
   autoAttach: unknown,
   review: unknown,
@@ -128,7 +131,10 @@ export function normalizeMatchThresholds(
     const n =
       typeof value === "number" ? value : Number.parseFloat(`${value ?? ""}`);
     if (!Number.isFinite(n)) return fallback;
-    return Math.min(1, Math.max(0, n));
+    // Exact 0 with positive fallback = corrupted / unset (B2).
+    if (n === 0 && fallback > 0) return fallback;
+    if (n < 0 || n > 1) return fallback;
+    return n;
   };
   let auto = parse(autoAttach, 0.85);
   let rev = parse(review, 0.6);

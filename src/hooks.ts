@@ -1,7 +1,10 @@
-// @ajan: cursor · @etiket: katman-2, p1, multi-window, lifecycle
+// @ajan: cursor · @etiket: katman-2, p1, multi-window, lifecycle, startup-threshold-repair
 import { config } from "../package.json";
 import { initLocale } from "./utils/locale";
-import { registerPrefsScripts } from "./modules/preferenceScript";
+import {
+  registerPrefsScripts,
+  repairMatchThresholdPrefs,
+} from "./modules/preferenceScript";
 import { createZToolkit } from "./utils/ztoolkit";
 import Menu from "./modules/menu";
 import { PDFReconciler } from "./modules/pdfReconciler";
@@ -36,6 +39,12 @@ async function onStartup() {
   ]);
   initLocale();
   ensureProcessToolkit();
+  // Repair floor-corrupted 0.85/0.6→0 before reconciler can mass-attach (B2).
+  try {
+    repairMatchThresholdPrefs();
+  } catch (e) {
+    ztoolkit.log("repairMatchThresholdPrefs failed", e);
+  }
   try {
     migrateBookPdfSources();
   } catch (e) {

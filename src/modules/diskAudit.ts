@@ -1,4 +1,4 @@
-// @ajan: cursor · @etiket: katman-2, disk-audit, hash-verify-copies, pathutils-safe, orphan, name-content, multi-attach, apply, path-fold, rename-safe, cross-folder-dupe, bridge-unavailable, human-md-report, quarantine-skip, dry-run-ux
+// @ajan: cursor · @etiket: katman-2, disk-audit, hash-verify-copies, pathutils-safe, orphan, name-content, multi-attach, apply, path-fold, rename-safe, cross-folder-dupe, bridge-unavailable, human-md-report, quarantine-skip, dry-run-ux, confirm-fail-closed, hash-fail-closed
 /**
  * Prefs «Disk / ek denetimi» — scan (report) + apply (quarantine / rename / ID create).
  * Copy audit also flags same basename+size across folders (cross-folder duplicates).
@@ -815,7 +815,8 @@ function confirmApply(message: string): boolean {
   } catch {
     /* ignore */
   }
-  return true;
+  // Fail-closed (B6): no window / confirm → do not apply.
+  return false;
 }
 
 async function collectReferencedPaths(): Promise<Set<string>> {
@@ -1668,6 +1669,9 @@ export async function applyCopyQuarantine(opts?: {
     diskSibling?: {
       samples?: Array<{ unlinkedPaths?: string[]; unlinkedSamples?: string[] }>;
     };
+    crossFolder?: {
+      samples?: Array<{ paths?: string[]; basename?: string; size?: number }>;
+    };
   } | null;
 
   const siblingLosers: string[] = [];
@@ -1739,9 +1743,29 @@ export async function applyCopyQuarantine(opts?: {
         break;
       }
     }
+    // Cross-folder: sameDir keepers empty — re-fingerprint vs report peers (B5).
     if (!hashOk && keepers.length === 0) {
-      // Fall back: report already hash-filtered; still require a linked same-size peer somewhere via fingerprint vs any referenced sibling name.
-      hashOk = true; // trusted report list
+      const peerKeepers: string[] = [];
+      for (const g of report?.crossFolder?.samples || []) {
+        const paths = Array.isArray(g?.paths) ? g.paths : [];
+        if (!paths.some((p: string) => pathKeyNow(p) === pathKeyNow(path))) {
+          continue;
+        }
+        for (const p of paths) {
+          if (pathKeyNow(p) === pathKeyNow(path)) continue;
+          if (referencedNow.has(pathKeyNow(p))) peerKeepers.push(p);
+        }
+      }
+      for (const k of peerKeepers) {
+        if (await filesAreIdenticalCopies(k, path)) {
+          hashOk = true;
+          break;
+        }
+      }
+      if (!hashOk) {
+        failed += 1;
+        continue;
+      }
     } else if (!hashOk) {
       failed += 1;
       continue;

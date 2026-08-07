@@ -1,4 +1,4 @@
-// @ajan: claude · @etiket: katman-2, tests, pdfReconciler, abortcontroller-fix
+// @ajan: claude · @etiket: katman-2, tests, pdfReconciler, abortcontroller-fix, zero-threshold-default
 const assert = require("node:assert/strict");
 const { test } = require("node:test");
 const path = require("node:path");
@@ -89,14 +89,25 @@ test("match confidence thresholds classify attach / review / skip", () => {
     autoAttach: 0.9,
     review: 0.5,
   });
+  // B2: stored 0 is unset / floor-corruption — restore project defaults.
+  assert.deepEqual(normalizeMatchThresholds(0, 0), {
+    autoAttach: 0.85,
+    review: 0.6,
+  });
+  assert.deepEqual(normalizeMatchThresholds(0, 0.6), {
+    autoAttach: 0.85,
+    review: 0.6,
+  });
   assert.equal(classifyMatchConfidence(0.9, 0.85, 0.6), "attach");
   assert.equal(classifyMatchConfidence(0.7, 0.85, 0.6), "review");
   assert.equal(classifyMatchConfidence(0.5, 0.85, 0.6), "skip");
   assert.equal(classifyMatchConfidence(1, 0.85, 0.6), "attach");
+  // With corrupted floors, score 0.1 must not attach.
+  assert.equal(classifyMatchConfidence(0.1, 0, 0), "skip");
 });
 
 test("unit-interval prefs repair floor-corruption (0.85→0)", () => {
-  const { normalizeUnitInterval } = loadModule(
+  const { normalizeUnitInterval, repairMatchThresholdPrefs } = loadModule(
     "src/modules/preferenceScript.ts",
   );
   assert.equal(normalizeUnitInterval(0.85, 0.85), 0.85);
@@ -108,8 +119,21 @@ test("unit-interval prefs repair floor-corruption (0.85→0)", () => {
   assert.equal(normalizeUnitInterval(1.5, 0.85), 0.85);
   // Intentional zero only when fallback is also 0 (not used for match thresholds).
   assert.equal(normalizeUnitInterval(0, 0), 0);
+  assert.equal(typeof repairMatchThresholdPrefs, "function");
 });
 
+test("B2 startup repairs match thresholds before reconciler", () => {
+  const hooks = require("node:fs").readFileSync(
+    require("node:path").join(process.cwd(), "src/hooks.ts"),
+    "utf8",
+  );
+  assert.match(hooks, /repairMatchThresholdPrefs/);
+  const startup = hooks.slice(hooks.indexOf("async function onStartup"));
+  const repairIdx = startup.indexOf("repairMatchThresholdPrefs");
+  const reconcilerIdx = startup.indexOf("ensureProcessReconciler");
+  assert.ok(repairIdx > 0, "startup calls repairMatchThresholdPrefs");
+  assert.ok(repairIdx < reconcilerIdx, "repair before reconciler start");
+});
 test("reconcile considers only regular items without a PDF", () => {
   global.Zotero = {
     Prefs: {

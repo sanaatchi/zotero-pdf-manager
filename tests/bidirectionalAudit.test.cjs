@@ -1,4 +1,4 @@
-// @ajan: cursor · @etiket: katman-2, bidirectional-audit, match-suggest, human-md-report, quarantine-only, clear-score-tighten, soft-neg, dry-run-ux, test
+// @ajan: cursor · @etiket: katman-2, bidirectional-audit, match-suggest, human-md-report, quarantine-only, clear-score-tighten, soft-neg, dry-run-ux, bidir-apply-report, test
 "use strict";
 
 const { test } = require("node:test");
@@ -51,6 +51,82 @@ test("bidirectionalAudit module surface", () => {
   assert.match(src, /Yalnız kopyalar/);
 });
 
+test("B1 apply writes last-bidirectional-apply — does not clobber Tara last", () => {
+  const src = fs.readFileSync(
+    path.join(root, "src/modules/bidirectionalAudit.ts"),
+    "utf8",
+  );
+  assert.match(src, /writeBidirApplyReport/);
+  assert.match(src, /last-bidirectional-apply\.json/);
+  assert.match(src, /last-bidirectional-apply\.md/);
+  assert.match(src, /disk-audit-bidirectional-apply-/);
+  // Apply path must call apply writer, not Tara writer.
+  const applyFn = src.slice(
+    src.indexOf("export async function applyBidirectionalSuggestions"),
+  );
+  assert.match(applyFn, /await writeBidirApplyReport\(/);
+  assert.doesNotMatch(applyFn, /await writeBidirReport\(/);
+  // Tara openLast still points at scan last-*.
+  const openFn = src.slice(
+    src.indexOf("export async function openLastBidirectionalReport"),
+  );
+  const openBody = openFn.slice(
+    0,
+    openFn.indexOf("export async function applyBidirectionalSuggestions"),
+  );
+  assert.match(openBody, /last-bidirectional\.md/);
+  assert.match(openBody, /last-bidirectional\.json/);
+  assert.doesNotMatch(openBody, /last-bidirectional-apply/);
+});
+
+test("B4 hashSkipped fail-closed — no name+size verifiedLosers restore", () => {
+  const src = fs.readFileSync(
+    path.join(root, "src/modules/bidirectionalAudit.ts"),
+    "utf8",
+  );
+  assert.match(src, /refusing name\+size losers \(fail-closed\)/);
+  // Old fail-open restore must be gone.
+  assert.equal(
+    src.includes('ztoolkit.log("bidir hash verify failed — using name+size'),
+    false,
+  );
+  assert.equal(src.includes("keep name+size losers"), false);
+  assert.equal(
+    /hashSkipped = true;\r?\n\s*verifiedLosers = unlinkedLosers\.slice\(\)/.test(
+      src,
+    ),
+    false,
+  );
+  assert.match(src, /hashSkipped = true;\r?\n\s*verifiedLosers = \[\];/);
+});
+
+test("B3 broken_alt_path uses isClearMatchCandidate — no forced clear:true", () => {
+  const src = fs.readFileSync(
+    path.join(root, "src/modules/bidirectionalAudit.ts"),
+    "utf8",
+  );
+  const marker = 'kind: "broken_alt_path"';
+  const idx = src.indexOf(marker);
+  assert.ok(idx > 0);
+  const altBlock = src.slice(Math.max(0, idx - 1400), idx + 500);
+  assert.match(altBlock, /isClearMatchCandidate/);
+  assert.match(altBlock, /titleOverlapDetail/);
+  assert.doesNotMatch(altBlock, /clear:\s*true/);
+});
+
+test("B7 typeOk +0.05 ranking boost applies after clear decision", () => {
+  const src = fs.readFileSync(
+    path.join(root, "src/modules/bidirectionalAudit.ts"),
+    "utf8",
+  );
+  const start = src.indexOf("export function suggestOrphanToMissingMatches");
+  assert.ok(start > 0);
+  const suggest = src.slice(start, start + 4500);
+  const clearIdx = suggest.indexOf("isClearMatchCandidate");
+  const boostIdx = suggest.indexOf("score + 0.05");
+  assert.ok(clearIdx > 0, "clear decision present");
+  assert.ok(boostIdx > clearIdx, "boost after clear decision");
+});
 test("formatBidirectionalMarkdown includes Turkish sections + quarantine warn", () => {
   // Mirror of formatBidirectionalMarkdown core (source-string contract + pure logic).
   const src = fs.readFileSync(
