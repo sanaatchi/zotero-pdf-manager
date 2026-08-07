@@ -33,6 +33,8 @@ function loadDiskAudit() {
   assert.match(src, /filterHashVerifiedLosers/);
   assert.match(src, /hashVerify/);
   assert.match(src, /openLastDiskAuditReport/);
+  assert.match(src, /formatDiskAuditMarkdown/);
+  assert.match(src, /last-\$\{kind\}\.md|last-\$\{fileKind\}\.md/);
   assert.match(src, /movePathToQuarantine/);
   assert.match(src, /isDiskAuditDryRun/);
   assert.match(src, /renameAttachmentFileSafe/);
@@ -47,6 +49,8 @@ test("diskAudit module exports scan + apply surface", () => {
   assert.match(src, /applyOrphanRemediation/);
   assert.match(src, /_pdf_quarantine/);
   assert.match(src, /runDiskAuditApplyWithProgress/);
+  assert.match(src, /## Ne yapmalı/);
+  assert.match(src, /Kayıtsız PDF denetimi/);
 });
 
 test("proposeAttangerRename + classify helpers (inline)", () => {

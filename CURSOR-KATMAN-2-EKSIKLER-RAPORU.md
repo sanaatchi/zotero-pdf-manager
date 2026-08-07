@@ -1,19 +1,28 @@
-<!-- @ajan: cursor · @etiket: katman-2, eksik-raporu, periodical, console-group-polyfill, author-line-gate, no-validate-subtitle-enrich, title-length-aware, isbn-prefer-any, tr-pdf-encoding, medium-cov-soft, mismatch-note-clear, validated-pdf-lock, field-weights-score, medium-author-noyear, openusing-finally, pdfkitap, dirzon, disk-audit, unit-interval-pref, tr-TR, disk-audit-apply, watch-root-kaynaklar, path-fold, bidirectional-audit, cross-folder-dupe, match-suggest, bidir-apply, hash-verify, broken-repair, pathutils-safe -->
+<!-- @ajan: cursor · @etiket: katman-2, eksik-raporu, periodical, console-group-polyfill, author-line-gate, no-validate-subtitle-enrich, title-length-aware, isbn-prefer-any, tr-pdf-encoding, medium-cov-soft, mismatch-note-clear, validated-pdf-lock, field-weights-score, medium-author-noyear, openusing-finally, pdfkitap, dirzon, disk-audit, unit-interval-pref, tr-TR, disk-audit-apply, watch-root-kaynaklar, path-fold, bidirectional-audit, cross-folder-dupe, match-suggest, bidir-apply, hash-verify, broken-repair, pathutils-safe, human-md-report -->
 
 # Cursor — Katman 2 Eksikler Raporu
 
-**Tarih:** 2026-08-07 · **Sürüm:** PDF Manager **v1.0.154**  
+**Tarih:** 2026-08-07 · **Sürüm:** PDF Manager **v1.0.155**  
 **Analiz:** ürün ↔ `referanslar/katman-2/` ↔ GitHub (Attanger, Zotadata, Zoplicate,
 ZotAssets, File Utility, Attachment Scanner, ozefe/yoktez).
 
 ## Özet hüküm
 
-| Soru                      | Cevap                                                |
-| ------------------------- | ---------------------------------------------------- |
-| Açık **P1** ürün boşluğu? | **Yok** — PathUtils-safe Tara hotfix kapandı         |
-| Gerçek açık iş?           | Checklist Bölüm B (kullanıcı) + isteğe bağlı P3      |
-| Yeni zorunlu XPI portu?   | **Yok** — GitHub taraması yeni P1 üretmedi           |
-| İki uçlu denetim?         | **v1.0.154** PathUtils-safe; rapor her zaman yazılır |
+| Soru                      | Cevap                                                              |
+| ------------------------- | ------------------------------------------------------------------ |
+| Açık **P1** ürün boşluğu? | **Yok** — insan okunur MD özet («Raporu aç») kapandı               |
+| Gerçek açık iş?           | Checklist Bölüm B (kullanıcı) + isteğe bağlı P3                    |
+| Yeni zorunlu XPI portu?   | **Yok** — GitHub taraması yeni P1 üretmedi                         |
+| İki uçlu denetim?         | **v1.0.155** JSON + `last-bidirectional.md`; Raporu aç → .md       |
+
+### Son eklenen (v1.0.155)
+
+| Madde                    | Not                                                                                          |
+| ------------------------ | -------------------------------------------------------------------------------------------- |
+| İnsan okunur MD özet     | Tara → `last-bidirectional.md` (+ stamped); Raporu aç önce .md açar (JSON makine için kalır) |
+| MD bölümleri             | Özet sayılar, hash, net eşleşme, zayıf (~10), kırık/missing, Ne yapmalı; quarantine uyarısı |
+| Disk denetimi MD         | orphan / name-content / copy için `last-*.md`; Raporu aç .md tercih                          |
+| Toast                    | Tara sonrası «özet: last-bidirectional.md» (ve disk last-*.md)                               |
 
 ### Son eklenen (v1.0.154)
 

@@ -1,4 +1,4 @@
-// @ajan: cursor · @etiket: katman-2, bidirectional-audit, match-suggest, test
+// @ajan: cursor · @etiket: katman-2, bidirectional-audit, match-suggest, human-md-report, test
 "use strict";
 
 const { test } = require("node:test");
@@ -18,6 +18,10 @@ test("bidirectionalAudit module surface", () => {
   assert.match(src, /runBidirectionalApplyWithProgress/);
   assert.match(src, /applyBidirectionalSuggestions/);
   assert.match(src, /openLastBidirectionalReport/);
+  assert.match(src, /formatBidirectionalMarkdown/);
+  assert.match(src, /last-bidirectional\.md/);
+  assert.match(src, /özet: last-bidirectional\.md/);
+  assert.match(src, /pathLooksQuarantined/);
   assert.match(src, /suggestAlternatePaths/);
   assert.match(src, /safeFilename/);
   assert.match(src, /safePathKey/);
@@ -35,6 +39,100 @@ test("bidirectionalAudit module surface", () => {
   assert.match(src, /crossFolder/);
   assert.match(src, /matchSuggestions/);
   assert.match(src, /kind: \"bidirectional\"/);
+});
+
+test("formatBidirectionalMarkdown includes Turkish sections + quarantine warn", () => {
+  // Mirror of formatBidirectionalMarkdown core (source-string contract + pure logic).
+  const src = fs.readFileSync(
+    path.join(root, "src/modules/bidirectionalAudit.ts"),
+    "utf8",
+  );
+  assert.match(src, /## Özet sayılar/);
+  assert.match(src, /## Hash doğrulama/);
+  assert.match(src, /## Net eşleşmeler/);
+  assert.match(src, /## Zayıf öneriler/);
+  assert.match(src, /## Kırık \/ missing örnekleri/);
+  assert.match(src, /## Ne yapmalı/);
+  assert.match(src, /_pdf_quarantine/);
+
+  function pathLooksQuarantined(p) {
+    return /_pdf_quarantine/i.test(String(p || ""));
+  }
+  function formatBidirectionalMarkdown(payload) {
+    const items = payload?.items || {};
+    const pdfs = payload?.pdfs || {};
+    const hash = payload?.hashVerify || {};
+    const rows = Array.isArray(payload?.matchSuggestions?.rows)
+      ? payload.matchSuggestions.rows
+      : [];
+    const clear = rows.filter((r) => r && r.clear);
+    const weak = rows.filter((r) => r && !r.clear);
+    const lines = [];
+    lines.push("# İki uçlu PDF denetimi — özet");
+    lines.push("## Özet sayılar");
+    lines.push(`| Bağlı (linked) | ${items.linked || 0} |`);
+    lines.push(`| Kırık (broken) | ${items.broken || 0} |`);
+    lines.push(`| PDF’siz (missing) | ${items.missing || 0} |`);
+    lines.push(`| PDF orphan | ${pdfs.orphan || 0} |`);
+    lines.push(`| Net eşleşme (clear) | ${clear.length} |`);
+    lines.push("## Hash doğrulama");
+    lines.push(
+      `- Aday: **${hash.candidates || 0}** · doğrulandı: **${hash.verified || 0}**`,
+    );
+    lines.push("## Net eşleşmeler");
+    for (const r of clear) {
+      const warn = pathLooksQuarantined(r.pdfPath)
+        ? "⚠ `_pdf_quarantine`"
+        : "";
+      lines.push(`| \`${r.itemKey}\` | ${r.itemTitle} | ${r.pdfFile} | ${r.score} | ${warn} |`);
+    }
+    lines.push("## Zayıf öneriler (ilk ~10)");
+    for (const r of weak.slice(0, 10)) {
+      lines.push(`- \`${r.itemKey}\` · ${r.itemTitle}`);
+    }
+    lines.push("## Kırık / missing örnekleri");
+    lines.push("## Ne yapmalı");
+    lines.push("- Tercihler → **İki uçlu denetim → Çöz**");
+    return lines.join("\n");
+  }
+
+  const md = formatBidirectionalMarkdown({
+    generatedAt: "2026-08-07T12:00:00Z",
+    items: { linked: 10, broken: 2, missing: 3, scanned: 15 },
+    pdfs: { orphan: 4, crossFolderGroups: 1, crossFolderUnlinkedLosers: 1 },
+    hashVerify: { candidates: 2, verified: 1, rejected: 1, skipped: false },
+    matchSuggestions: {
+      clear: 1,
+      weak: 1,
+      rows: [
+        {
+          clear: true,
+          itemKey: "ABCD1234",
+          itemTitle: "Test Kitap",
+          pdfFile: "Test.pdf",
+          pdfPath: "D:/Zotero Kaynaklar/_pdf_quarantine/copies/Test.pdf",
+          score: 0.9,
+        },
+        {
+          clear: false,
+          itemKey: "WEAK0001",
+          itemTitle: "Zayıf",
+          pdfFile: "Weak.pdf",
+          pdfPath: "D:/ok/Weak.pdf",
+          score: 0.55,
+        },
+      ],
+    },
+  });
+  assert.match(md, /Bağlı \(linked\) \| 10/);
+  assert.match(md, /Kırık \(broken\) \| 2/);
+  assert.match(md, /PDF orphan \| 4/);
+  assert.match(md, /ABCD1234/);
+  assert.match(md, /_pdf_quarantine/);
+  assert.match(md, /WEAK0001/);
+  assert.match(md, /Ne yapmalı/);
+  assert.equal(pathLooksQuarantined("D:/a/_pdf_quarantine/x.pdf"), true);
+  assert.equal(pathLooksQuarantined("D:/a/ok.pdf"), false);
 });
 
 test("safeFilename never throws on attachments: or empty", () => {

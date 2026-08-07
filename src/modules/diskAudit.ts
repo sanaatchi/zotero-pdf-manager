@@ -1,11 +1,16 @@
-// @ajan: cursor · @etiket: katman-2, disk-audit, hash-verify-copies, pathutils-safe, orphan, name-content, multi-attach, apply, path-fold, rename-safe, cross-folder-dupe, bridge-unavailable
+// @ajan: cursor · @etiket: katman-2, disk-audit, hash-verify-copies, pathutils-safe, orphan, name-content, multi-attach, apply, path-fold, rename-safe, cross-folder-dupe, bridge-unavailable, human-md-report
 /**
  * Prefs «Disk / ek denetimi» — scan (report) + apply (quarantine / rename / ID create).
  * Copy audit also flags same basename+size across folders (cross-folder duplicates).
+ * JSON is machine-facing; companion `.md` / `last-*.md` is the human summary.
  */
 import { config } from "../../package.json";
 import { getPref } from "../utils/prefs";
-import { readJsonOrQuarantine, writeJsonAtomic } from "../utils/atomicJson";
+import {
+  readJsonOrQuarantine,
+  writeJsonAtomic,
+  writeUtf8Atomic,
+} from "../utils/atomicJson";
 import { classifyOrphanTree } from "./attachmentScanner";
 import { getWatchRoots, DEFAULT_WATCH_ROOT, IndexedFile } from "./folderIndex";
 import { parseFilenameMetadata, yokThesisNumber } from "./filenameMetadata";
@@ -467,6 +472,136 @@ async function resolveReportDir(): Promise<string> {
   }
 }
 
+function mdEscLine(s: string): string {
+  return String(s || "")
+    .replace(/\r?\n/g, " ")
+    .trim();
+}
+
+/** Pure: short Turkish Markdown for orphan / nameContent / copy JSON payloads. */
+export function formatDiskAuditMarkdown(
+  kind: string,
+  payload: any,
+): string {
+  const generatedAt = String(payload?.generatedAt || new Date().toISOString());
+  const lines: string[] = [];
+  const title =
+    kind === "orphan" || payload?.kind === "orphan"
+      ? "Kayıtsız PDF denetimi"
+      : kind === "name-content" ||
+          kind === "nameContent" ||
+          payload?.kind === "nameContent"
+        ? "Ad ↔ içerik denetimi"
+        : kind === "copy" || payload?.kind === "copy"
+          ? "Yinelenen / kopya denetimi"
+          : `Disk denetimi (${kind})`;
+  lines.push(`# ${title} — özet`);
+  lines.push("");
+  lines.push(`Oluşturulma: \`${generatedAt}\``);
+  lines.push("> Ham JSON aynı klasörde (makine / Çöz).");
+  lines.push("");
+
+  if (payload?.kind === "orphan" || kind === "orphan") {
+    const orphans: string[] = Array.isArray(payload?.orphanFiles)
+      ? payload.orphanFiles
+      : [];
+    lines.push("## Özet sayılar");
+    lines.push("");
+    lines.push(`- Kayıtsız PDF: **${Number(payload?.orphanCount ?? orphans.length) || 0}**`);
+    lines.push(`- Boş klasör: **${Number(payload?.emptyDirs) || 0}**`);
+    lines.push("");
+    lines.push("## Örnekler (ilk ~12)");
+    lines.push("");
+    if (!orphans.length) {
+      lines.push("_Kayıtsız PDF yok._");
+    } else {
+      for (const p of orphans.slice(0, 12)) {
+        lines.push(`- \`${mdEscLine(safeFilename(p))}\``);
+      }
+      if (orphans.length > 12) {
+        lines.push(`- _… +${orphans.length - 12} (JSON)._`);
+      }
+    }
+    lines.push("");
+    lines.push("## Ne yapmalı");
+    lines.push("");
+    lines.push("- Raporu gözden geçir → **Çöz** ile kimlik oluştur / karantinaya al.");
+    lines.push("- Dry-run açıksa önce plan dosyası yazılır.");
+  } else if (
+    payload?.kind === "nameContent" ||
+    kind === "name-content" ||
+    kind === "nameContent"
+  ) {
+    const c = payload?.counts || {};
+    const clear: any[] = Array.isArray(payload?.clear_mismatch)
+      ? payload.clear_mismatch
+      : [];
+    lines.push("## Özet sayılar");
+    lines.push("");
+    lines.push(`- Taranan: **${Number(c.scanned) || 0}**`);
+    lines.push(`- OK: **${Number(c.ok) || 0}** · zayıf: **${Number(c.weak) || 0}**`);
+    lines.push(
+      `- Uyumsuz: **${Number(c.mismatch) || 0}** · net uyumsuz: **${Number(c.clearMismatch) || 0}**`,
+    );
+    lines.push(`- Yeniden adlandırma önerisi: **${Number(c.renameProposals) || 0}**`);
+    if (c.bridgeUnavailable != null) {
+      lines.push(`- Köprü yok: **${Number(c.bridgeUnavailable) || 0}**`);
+    }
+    lines.push("");
+    lines.push("## Net uyumsuz örnekleri");
+    lines.push("");
+    if (!clear.length) {
+      lines.push("_Net uyumsuz yok._");
+    } else {
+      for (const r of clear.slice(0, 12)) {
+        lines.push(
+          `- \`${mdEscLine(r.file || safeFilename(r.path))}\` → \`${mdEscLine(r.proposed_rename || "—")}\``,
+        );
+      }
+    }
+    lines.push("");
+    lines.push("## Ne yapmalı");
+    lines.push("");
+    lines.push("- Önerileri kontrol et → **Çöz** ile yeniden adlandır.");
+  } else {
+    const hash = payload?.hashVerify || {};
+    const multi = payload?.multiAttach || {};
+    const cross = payload?.crossFolder || {};
+    const apply = payload?.applyTargets || {};
+    const siblingUnlinked: string[] = Array.isArray(apply?.siblingUnlinked)
+      ? apply.siblingUnlinked
+      : [];
+    lines.push("## Özet sayılar");
+    lines.push("");
+    lines.push(`- Çoklu ek ebeveyn: **${Number(multi.count) || 0}**`);
+    lines.push(`- Çapraz klasör grubu: **${Number(cross.groupCount) || 0}**`);
+    lines.push(
+      `- Unlinked loser (çapraz): **${Number(cross.unlinkedLoserCount) || 0}**`,
+    );
+    lines.push(
+      `- Hash: aday ${Number(hash.candidates) || 0} · doğrulandı ${Number(hash.verified) || 0} · red ${Number(hash.rejected) || 0}`,
+    );
+    lines.push(`- Çöz hedefleri (verified): **${siblingUnlinked.length}**`);
+    lines.push("");
+    lines.push("## Karantina adayları (ilk ~12)");
+    lines.push("");
+    if (!siblingUnlinked.length) {
+      lines.push("_Hash-doğrulanmış kopya yok._");
+    } else {
+      for (const p of siblingUnlinked.slice(0, 12)) {
+        const warn = /_pdf_quarantine/i.test(p) ? " ⚠ zaten quarantine" : "";
+        lines.push(`- \`${mdEscLine(safeFilename(p))}\`${warn}`);
+      }
+    }
+    lines.push("");
+    lines.push("## Ne yapmalı");
+    lines.push("");
+    lines.push("- **Çöz**: doğrulanmış kopyaları `_pdf_quarantine/copies` altına taşı.");
+  }
+  lines.push("");
+  return lines.join("\n");
+}
+
 async function writeReport(kind: string, payload: unknown): Promise<string> {
   const dir = await resolveReportDir();
   if (!dir) return "";
@@ -481,6 +616,16 @@ async function writeReport(kind: string, payload: unknown): Promise<string> {
     });
   } catch (e) {
     ztoolkit.log("diskAudit last-pointer write failed", e);
+  }
+  // Human-readable companion (JSON stays for Çöz / machines).
+  try {
+    const md = formatDiskAuditMarkdown(kind, payload);
+    const stampedMd = String(path).replace(/\.json$/i, ".md");
+    const lastMd = PathUtils.join(dir, `last-${kind}.md`);
+    await writeUtf8Atomic(stampedMd, md);
+    await writeUtf8Atomic(lastMd, md);
+  } catch (e) {
+    ztoolkit.log("diskAudit markdown summary failed", e);
   }
   return path;
 }
@@ -511,9 +656,43 @@ export async function openLastDiskAuditReport(
     showProgress("Henüz rapor yok — önce Tara’ya basın");
     return false;
   }
+  const fileKind = reportKindFile(kind);
+  const dir = await resolveReportDir();
+  let openPath = path;
+  // Prefer human Markdown next to JSON / last-*.md
+  const candidates = [
+    dir ? PathUtils.join(dir, `last-${fileKind}.md`) : "",
+    String(path).replace(/\.json$/i, ".md"),
+  ].filter(Boolean);
+  for (const c of candidates) {
+    if (await IOUtils.exists(c).catch(() => false)) {
+      openPath = c;
+      break;
+    }
+  }
+  if (openPath === path) {
+    // Regenerate from JSON if an older report has no .md yet.
+    try {
+      const payload = await readJsonOrQuarantine(path);
+      if (payload && dir) {
+        const md = formatDiskAuditMarkdown(fileKind, payload);
+        const lastMd = PathUtils.join(dir, `last-${fileKind}.md`);
+        await writeUtf8Atomic(lastMd, md);
+        openPath = lastMd;
+      }
+    } catch (e) {
+      ztoolkit.log("diskAudit md regenerate failed", e);
+    }
+  }
+  try {
+    await Zotero.launchFile?.(openPath);
+    return true;
+  } catch {
+    /* fall through */
+  }
   try {
     if (typeof (Zotero.File as any)?.reveal === "function") {
-      await (Zotero.File as any).reveal(path);
+      await (Zotero.File as any).reveal(openPath);
       return true;
     }
   } catch (e) {
@@ -522,13 +701,13 @@ export async function openLastDiskAuditReport(
   try {
     const uri =
       typeof (Zotero.File as any)?.pathToFileURI === "function"
-        ? (Zotero.File as any).pathToFileURI(path)
-        : `file:///${String(path).replace(/\\/g, "/")}`;
+        ? (Zotero.File as any).pathToFileURI(openPath)
+        : `file:///${String(openPath).replace(/\\/g, "/")}`;
     (Zotero as any).launchURL?.(uri);
     return true;
   } catch (e) {
     ztoolkit.log("launchURL failed", e);
-    showProgress(`Rapor: ${path}`);
+    showProgress(`Rapor: ${openPath}`);
     return false;
   }
 }
@@ -706,7 +885,7 @@ export async function runOrphanDiskAudit(opts?: {
   };
   showProgress(
     `Kayıtsız PDF raporu: ${filtered.length} dosya` +
-      (reportPath ? ` → ${safeFilename(reportPath)}` : ""),
+      (reportPath ? ` → özet: last-orphan.md` : ""),
   );
   return summary;
 }
@@ -984,7 +1163,7 @@ export async function runNameContentDiskAudit(opts?: {
   showProgress(
     `Ad↔içerik: ${counts.clearMismatch} net uyumsuz / ${counts.scanned} tarandı` +
       (truncated ? ` (üst sınır ${maxFiles}; aday ${totalCandidates})` : "") +
-      (reportPath ? ` → ${safeFilename(reportPath)}` : ""),
+      (reportPath ? ` → özet: last-name-content.md` : ""),
     8000,
   );
   return summary;
@@ -1438,7 +1617,7 @@ export async function runCopyDiskAudit(opts?: {
   showProgress(
     `Yinelenen: ${multi.count} çoklu ek, ${siblingFolders.length} klasör, ` +
       `${crossFolderGroups.length} çapraz · hash ${verifiedLosers.length}/${allSiblingUnlinked.length}` +
-      (reportPath ? ` → ${safeFilename(reportPath)}` : ""),
+      (reportPath ? ` → özet: last-copy.md` : ""),
     8000,
   );
   return summary;

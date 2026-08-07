@@ -1,4 +1,4 @@
-// @ajan: cursor · @etiket: katman-2, bidirectional-audit, item-pdf-cross, type-mismatch, match-suggest, apply, hash-verify, broken-repair, pathutils-safe
+// @ajan: cursor · @etiket: katman-2, bidirectional-audit, item-pdf-cross, type-mismatch, match-suggest, apply, hash-verify, broken-repair, pathutils-safe, human-md-report
 /**
  * Unified two-ended PDF control report:
  *   item → PDF  (linked / broken / missing / type conflict / mismatch tags)
@@ -6,9 +6,10 @@
  *
  * Reuses diskAudit helpers for roots, type tags, and cross-folder grouping.
  * Structural only (no per-file content bridge) — fast enough for full Kaynaklar.
+ * JSON is machine-facing; last-bidirectional.md is the human summary.
  */
 import { config } from "../../package.json";
-import { writeJsonAtomic } from "../utils/atomicJson";
+import { writeJsonAtomic, writeUtf8Atomic } from "../utils/atomicJson";
 import {
   CrossFolderFile,
   crossFolderUnlinkedLosers,
@@ -182,6 +183,216 @@ async function resolveReportDir(): Promise<string> {
   return dir;
 }
 
+/** True when path sits under quarantine (warn in human summary). */
+export function pathLooksQuarantined(p: string): boolean {
+  return /_pdf_quarantine/i.test(String(p || ""));
+}
+
+function mdEsc(s: string): string {
+  return String(s || "")
+    .replace(/\r?\n/g, " ")
+    .replace(/\|/g, "\\|")
+    .trim();
+}
+
+/**
+ * Pure: Turkish Markdown summary from a bidirectional JSON payload.
+ * Keeps JSON for machines; humans open this text.
+ */
+export function formatBidirectionalMarkdown(payload: any): string {
+  const generatedAt = String(payload?.generatedAt || new Date().toISOString());
+  const items = payload?.items || {};
+  const pdfs = payload?.pdfs || {};
+  const hash = payload?.hashVerify || {};
+  const matchMeta = payload?.matchSuggestions || {};
+  const rows: BidirMatchSuggestion[] = Array.isArray(matchMeta.rows)
+    ? matchMeta.rows
+    : [];
+  const clear = rows.filter((r) => r && r.clear);
+  const weak = rows.filter((r) => r && !r.clear);
+  const clearCount = Number(matchMeta.clear ?? clear.length) || 0;
+  const weakCount =
+    Number(matchMeta.weak ?? weak.length) || Math.max(0, rows.length - clear.length);
+  const brokenSamples: any[] = Array.isArray(payload?.itemRows)
+    ? payload.itemRows.filter((r: any) => r?.status === "broken").slice(0, 8)
+    : [];
+  const missingSamples: any[] = Array.isArray(payload?.itemRows)
+    ? payload.itemRows.filter((r: any) => r?.status === "missing").slice(0, 8)
+    : [];
+  const orphanSamples: any[] = Array.isArray(payload?.pdfRows)
+    ? payload.pdfRows.filter((r: any) => r?.status === "orphan").slice(0, 8)
+    : [];
+  const roots = Array.isArray(payload?.roots) ? payload.roots : [];
+
+  const lines: string[] = [];
+  lines.push("# İki uçlu PDF denetimi — özet");
+  lines.push("");
+  lines.push(`Oluşturulma: \`${generatedAt}\``);
+  if (roots.length) {
+    lines.push(`Kökler: ${roots.map((r: string) => `\`${r}\``).join(", ")}`);
+  }
+  lines.push("");
+  lines.push("> Makine raporu: `last-bidirectional.json` (aynı klasör).");
+  lines.push("");
+  lines.push("## Özet sayılar");
+  lines.push("");
+  lines.push("| Metrik | Sayı |");
+  lines.push("| --- | ---: |");
+  lines.push(`| Öğeler tarandı | ${Number(items.scanned) || 0} |`);
+  lines.push(`| Bağlı (linked) | ${Number(items.linked) || 0} |`);
+  lines.push(`| Kırık (broken) | ${Number(items.broken) || 0} |`);
+  lines.push(`| PDF’siz (missing) | ${Number(items.missing) || 0} |`);
+  lines.push(`| Çoklu ek (multi) | ${Number(items.multi) || 0} |`);
+  lines.push(`| Tür çatışması | ${Number(items.typeConflict) || 0} |`);
+  lines.push(`| PDF orphan | ${Number(pdfs.orphan) || 0} |`);
+  lines.push(`| Çapraz klasör grubu | ${Number(pdfs.crossFolderGroups) || 0} |`);
+  lines.push(
+    `| Çapraz kopya (unlinked) | ${Number(pdfs.crossFolderUnlinkedLosers) || 0} |`,
+  );
+  lines.push(`| Net eşleşme (clear) | ${clearCount} |`);
+  lines.push(`| Zayıf öneri (weak) | ${weakCount} |`);
+  lines.push("");
+  lines.push("## Hash doğrulama");
+  lines.push("");
+  if (hash.skipped) {
+    lines.push(
+      `- Hash atlandı / kullanılamadı — ad+boyut adayları tutuldu (aday ${Number(hash.candidates) || 0}).`,
+    );
+  } else {
+    lines.push(
+      `- Aday: **${Number(hash.candidates) || 0}** · doğrulandı: **${Number(hash.verified) || 0}** · reddedildi: **${Number(hash.rejected) || 0}**`,
+    );
+  }
+  lines.push("");
+  lines.push("## Net eşleşmeler");
+  lines.push("");
+  if (!clear.length) {
+    lines.push("_Net eşleşme yok._");
+  } else {
+    lines.push("| Key | Başlık | PDF | Skor | Not |");
+    lines.push("| --- | --- | --- | ---: | --- |");
+    for (const r of clear.slice(0, 40)) {
+      const warn = pathLooksQuarantined(r.pdfPath)
+        ? "⚠ `_pdf_quarantine`"
+        : r.kind === "orphan_to_broken" || r.kind === "broken_alt_path"
+          ? "kırık onarım"
+          : "";
+      lines.push(
+        `| \`${mdEsc(r.itemKey)}\` | ${mdEsc(r.itemTitle).slice(0, 80)} | \`${mdEsc(r.pdfFile || safeFilename(r.pdfPath))}\` | ${r.score} | ${warn} |`,
+      );
+    }
+    if (clear.length > 40) {
+      lines.push("");
+      lines.push(`_… ve ${clear.length - 40} net eşleşme daha (JSON’da)._`);
+    }
+  }
+  lines.push("");
+  lines.push("## Zayıf öneriler (ilk ~10)");
+  lines.push("");
+  if (!weak.length) {
+    lines.push("_Zayıf öneri yok._");
+  } else {
+    for (const r of weak.slice(0, 10)) {
+      const q = pathLooksQuarantined(r.pdfPath) ? " ⚠ quarantine" : "";
+      lines.push(
+        `- \`${mdEsc(r.itemKey)}\` · ${mdEsc(r.itemTitle).slice(0, 60)} ↔ \`${mdEsc(r.pdfFile || safeFilename(r.pdfPath))}\` (skor ${r.score})${q}`,
+      );
+    }
+    if (weak.length > 10) {
+      lines.push(`- _… +${weak.length - 10} zayıf (JSON)._`);
+    }
+  }
+  lines.push("");
+  lines.push("## Kırık / missing örnekleri");
+  lines.push("");
+  if (!brokenSamples.length && !missingSamples.length) {
+    lines.push("_Kırık veya PDF’siz örnek yok (veya satırlar raporda yok)._");
+  } else {
+    if (brokenSamples.length) {
+      lines.push("**Kırık ekler:**");
+      for (const r of brokenSamples) {
+        const p0 = Array.isArray(r.paths) && r.paths[0] ? safeFilename(r.paths[0]) : "—";
+        lines.push(
+          `- \`${mdEsc(r.key)}\` · ${mdEsc(r.title).slice(0, 70)} · \`${mdEsc(p0)}\``,
+        );
+      }
+      lines.push("");
+    }
+    if (missingSamples.length) {
+      lines.push("**PDF’siz öğeler:**");
+      for (const r of missingSamples) {
+        lines.push(
+          `- \`${mdEsc(r.key)}\` · ${mdEsc(r.title).slice(0, 70)}`,
+        );
+      }
+      lines.push("");
+    }
+    if (orphanSamples.length) {
+      lines.push("**Orphan PDF örnekleri:**");
+      for (const r of orphanSamples) {
+        lines.push(`- \`${mdEsc(r.file || safeFilename(r.path))}\``);
+      }
+    }
+  }
+  lines.push("");
+  lines.push("## Ne yapmalı");
+  lines.push("");
+  const actions: string[] = [];
+  if (clearCount > 0) {
+    actions.push(
+      "Tercihler → **İki uçlu denetim → Çöz**: net eşleşmeleri bağla (gerekirse dry-run açık bırak).",
+    );
+  }
+  if ((Number(pdfs.crossFolderUnlinkedLosers) || 0) > 0) {
+    actions.push(
+      "Çöz ayrıca hash-doğrulanmış çapraz kopyaları `_pdf_quarantine/copies` altına taşır.",
+    );
+  }
+  if ((Number(items.broken) || 0) > 0 && clearCount === 0) {
+    actions.push(
+      "Kırık ekler için alternatif yol / orphan eşleşmesi yoksa dosyayı Kaynaklar’da elle kontrol et.",
+    );
+  }
+  if ((Number(items.missing) || 0) > 0 && clearCount === 0) {
+    actions.push(
+      "PDF’siz öğeler için OA ara veya diskte doğru dosyayı bulup bağla.",
+    );
+  }
+  if (!actions.length) {
+    actions.push("Özet temiz görünüyor — ek işlem gerekmeyebilir.");
+  }
+  actions.push(
+    "Ham veri / otomasyon için aynı klasördeki `last-bidirectional.json` dosyasını kullan.",
+  );
+  for (const a of actions) lines.push(`- ${a}`);
+  lines.push("");
+  return lines.join("\n");
+}
+
+async function writeBidirMarkdown(dir: string, payload: unknown, stampedJsonPath: string): Promise<string> {
+  const md = formatBidirectionalMarkdown(payload);
+  const lastMd = PathUtils.join(dir, "last-bidirectional.md");
+  const stampedMd = String(stampedJsonPath || "").replace(/\.json$/i, ".md");
+  try {
+    await writeUtf8Atomic(lastMd, md);
+  } catch (e) {
+    ztoolkit.log("writeBidirReport last-bidirectional.md failed", e);
+    try {
+      await IOUtils.writeUTF8(lastMd, md);
+    } catch (e2) {
+      ztoolkit.log("writeBidirReport md fallback failed", e2);
+    }
+  }
+  if (stampedMd && stampedMd !== stampedJsonPath) {
+    try {
+      await writeUtf8Atomic(stampedMd, md);
+    } catch (e) {
+      ztoolkit.log("writeBidirReport stamped md failed", e);
+    }
+  }
+  return lastMd;
+}
+
 async function writeBidirReport(payload: unknown): Promise<string> {
   const dir = await resolveReportDir();
   const stamp = new Date().toISOString().replace(/[:.]/g, "-");
@@ -200,7 +411,22 @@ async function writeBidirReport(payload: unknown): Promise<string> {
       ztoolkit.log("writeBidirReport last fallback failed", e2);
     }
   }
+  await writeBidirMarkdown(dir, payload, path);
   return path;
+}
+
+async function launchReportFile(target: string): Promise<void> {
+  try {
+    await Zotero.launchFile?.(target);
+    return;
+  } catch {
+    /* fall through */
+  }
+  try {
+    (Zotero as any).FileLauncher?.launch?.(target);
+  } catch (e) {
+    ztoolkit.log("launchReportFile failed", target, e);
+  }
 }
 
 /** Walk watch roots → PDF entries (path, basename, size, dir). */
@@ -864,7 +1090,7 @@ export async function runBidirectionalAudit(opts?: {
         ` · PDF orphan ${pdfOrphan}` +
         ` · eşleşme ${clearMatches.length}/${matchSuggestions.length}` +
         ` · çapraz ${crossGroups.length}` +
-        (reportPath ? ` → ${safeFilename(reportPath)}` : ""),
+        ` · özet: last-bidirectional.md`,
       type: "success",
       progress: 100,
     })
@@ -874,8 +1100,10 @@ export async function runBidirectionalAudit(opts?: {
 
 export async function openLastBidirectionalReport(): Promise<void> {
   const dir = await resolveReportDir();
-  let target = PathUtils.join(dir, "last-bidirectional.json");
-  if (!(await IOUtils.exists(target).catch(() => false))) {
+  const lastMd = PathUtils.join(dir, "last-bidirectional.md");
+  const lastJson = PathUtils.join(dir, "last-bidirectional.json");
+  let jsonTarget = lastJson;
+  if (!(await IOUtils.exists(jsonTarget).catch(() => false))) {
     // Fallback: newest stamped report if last- write failed.
     try {
       const kids: string[] = (await IOUtils.getChildren(dir)) || [];
@@ -884,30 +1112,54 @@ export async function openLastBidirectionalReport(): Promise<void> {
           /disk-audit-bidirectional-.*\.json$/i.test(safeFilename(p)),
         )
         .sort();
-      if (stamped.length) target = stamped[stamped.length - 1];
+      if (stamped.length) jsonTarget = stamped[stamped.length - 1];
     } catch {
       /* ignore */
     }
   }
-  if (!(await IOUtils.exists(target).catch(() => false))) {
+  const hasJson = await IOUtils.exists(jsonTarget).catch(() => false);
+  if (!hasJson) {
     new ztoolkit.ProgressWindow(config.addonName, { closeTime: 8000 })
       .createLine({
         text:
           "Önce «İki uçlu denetim Tara» çalıştırın" +
-          ` · beklenen: ${dir}\\last-bidirectional.json`,
+          ` · beklenen: ${dir}\\last-bidirectional.md`,
         type: "fail",
       })
       .show();
     return;
   }
-  try {
-    await Zotero.launchFile?.(target);
-  } catch {
-    try {
-      (Zotero as any).FileLauncher?.launch?.(target);
-    } catch (e) {
-      ztoolkit.log("openLastBidirectionalReport failed", e);
+
+  // Prefer human Markdown; regenerate from JSON if missing (pre-1.0.155 reports).
+  let mdTarget = lastMd;
+  let hasMd = await IOUtils.exists(mdTarget).catch(() => false);
+  if (!hasMd) {
+    const siblingMd = String(jsonTarget).replace(/\.json$/i, ".md");
+    if (
+      siblingMd !== jsonTarget &&
+      (await IOUtils.exists(siblingMd).catch(() => false))
+    ) {
+      mdTarget = siblingMd;
+      hasMd = true;
     }
+  }
+  if (!hasMd) {
+    try {
+      const raw = await IOUtils.readUTF8(jsonTarget);
+      const payload = JSON.parse(raw);
+      await writeBidirMarkdown(dir, payload, jsonTarget);
+      hasMd = await IOUtils.exists(lastMd).catch(() => false);
+      if (hasMd) mdTarget = lastMd;
+    } catch (e) {
+      ztoolkit.log("openLastBidirectionalReport md regenerate failed", e);
+    }
+  }
+
+  const target = hasMd ? mdTarget : jsonTarget;
+  try {
+    await launchReportFile(target);
+  } catch (e) {
+    ztoolkit.log("openLastBidirectionalReport failed", e);
   }
 }
 
