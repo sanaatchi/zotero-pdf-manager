@@ -1,4 +1,4 @@
-// @ajan: cursor · @etiket: katman-2, orphan, link-only, no-dup-copy
+// @ajan: cursor · @etiket: katman-2, orphan, link-only, no-dup-copy, path-fold
 import { IndexedFile } from "./folderIndex";
 import { appendAuditEvent } from "./automationAudit";
 import {
@@ -104,7 +104,8 @@ export function extractDocumentIdentifiers(text: string) {
 }
 
 function canonicalPath(path: string) {
-  return path.replace(/\//g, "\\").toLocaleLowerCase();
+  // Path fold: toLowerCase (not toLocaleLowerCase) — tr-TR "I"→"ı".
+  return path.replace(/\//g, "\\").toLowerCase();
 }
 
 function orphanTitleTokens(value: string): Set<string> {

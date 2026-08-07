@@ -1,4 +1,4 @@
-// @ajan: claude · @etiket: katman-2, p2, attachmentScanner, safe-regex, stale-mismatch-tag-fix, hash-prefix-normalize, library-scope-fix
+// @ajan: cursor · @etiket: katman-2, p2, attachmentScanner, safe-regex, stale-mismatch-tag-fix, hash-prefix-normalize, library-scope-fix, path-fold
 import { config } from "../../package.json";
 import { getPref } from "../utils/prefs";
 import { compileUserRegex, safeRegexTest } from "../utils/safeRegex";
@@ -276,7 +276,7 @@ export async function removeDuplicateFileLinks() {
       if (!attachment?.isFileAttachment()) continue;
       const path = await attachment.getFilePathAsync().catch(() => "");
       if (!path) continue;
-      const normalized = PathUtils.normalize(path).toLocaleLowerCase();
+      const normalized = PathUtils.normalize(path).toLowerCase();
       if (paths.has(normalized)) {
         await Zotero.Items.trashTx(attachmentID);
         removed++;

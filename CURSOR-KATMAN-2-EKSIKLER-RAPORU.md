@@ -1,8 +1,8 @@
-<!-- @ajan: cursor · @etiket: katman-2, eksik-raporu, periodical, console-group-polyfill, author-line-gate, no-validate-subtitle-enrich, title-length-aware, isbn-prefer-any, tr-pdf-encoding, medium-cov-soft, mismatch-note-clear, validated-pdf-lock, field-weights-score, medium-author-noyear, openusing-finally, pdfkitap, dirzon, disk-audit, unit-interval-pref, tr-TR, disk-audit-apply -->
+<!-- @ajan: cursor · @etiket: katman-2, eksik-raporu, periodical, console-group-polyfill, author-line-gate, no-validate-subtitle-enrich, title-length-aware, isbn-prefer-any, tr-pdf-encoding, medium-cov-soft, mismatch-note-clear, validated-pdf-lock, field-weights-score, medium-author-noyear, openusing-finally, pdfkitap, dirzon, disk-audit, unit-interval-pref, tr-TR, disk-audit-apply, watch-root-kaynaklar, path-fold -->
 
 # Cursor — Katman 2 Eksikler Raporu
 
-**Tarih:** 2026-08-07 · **Sürüm:** PDF Manager **v1.0.149**  
+**Tarih:** 2026-08-07 · **Sürüm:** PDF Manager **v1.0.150**  
 **Analiz:** ürün ↔ `referanslar/katman-2/` ↔ GitHub (Attanger, Zotadata, Zoplicate,
 ZotAssets, File Utility, Attachment Scanner, ozefe/yoktez).
 
@@ -13,6 +13,14 @@ ZotAssets, File Utility, Attachment Scanner, ozefe/yoktez).
 | Açık **P1** ürün boşluğu? | **Yok** — P2-1…P2-6 + B1–B5 + G0/G1 kapalı      |
 | Gerçek açık iş?           | Checklist Bölüm B (kullanıcı) + isteğe bağlı P3 |
 | Yeni zorunlu XPI portu?   | **Yok** — GitHub taraması yeni P1 üretmedi      |
+
+### Son eklenen (v1.0.150)
+
+| Madde                         | Not                                                                                          |
+| ----------------------------- | -------------------------------------------------------------------------------------------- |
+| Kaynaklar izleme kökü         | Default + migrate; legacy `1A_E_KAYNAKLARIM` üst kök silinir                                 |
+| Path-fold tr-TR               | Dosya yolu karşılaştırmalarında `toLowerCase` (`I`→`ı` yok)                                  |
+| Disk denetimi Çöz güvenliği   | `renameAttachmentFile`; kopya `applyTargets` tam liste; orphan tam liste; ad↔içerik max 5000 |
 
 ### Son eklenen (v1.0.149)
 

@@ -148,6 +148,10 @@ test("multi-root PDF indexing is exposed in preferences", () => {
 
   assert.match(
     prefs,
+    /pdf\.watchRoots",\s*"D:\\\\OneDrive\\\\1A_E_KAYNAKLARIM\\\\Zotero Kaynaklar"/,
+  );
+  assert.doesNotMatch(
+    prefs,
     /pdf\.watchRoots",\s*"D:\\\\OneDrive\\\\1A_E_KAYNAKLARIM"/,
   );
   assert.doesNotMatch(

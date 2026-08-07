@@ -51,7 +51,7 @@ test("watch roots are de-duplicated case-insensitively", () => {
   ]);
 });
 
-test("ensurePathInWatchRoots appends default parent once", () => {
+test("ensurePathInWatchRoots appends default Kaynaklar once", () => {
   const { ensurePathInWatchRoots, DEFAULT_WATCH_ROOT } = loadModule();
   const once = ensurePathInWatchRoots("", DEFAULT_WATCH_ROOT);
   assert.equal(once, DEFAULT_WATCH_ROOT);
@@ -59,25 +59,34 @@ test("ensurePathInWatchRoots appends default parent once", () => {
   assert.equal(twice, DEFAULT_WATCH_ROOT);
 });
 
-test("collapseNestedWatchRoots drops Dışı under parent", () => {
+test("normalizeDefaultWatchRoots pins Kaynaklar and strips OneDrive parent", () => {
   const {
     collapseNestedWatchRoots,
     normalizeDefaultWatchRoots,
     DEFAULT_WATCH_ROOT,
+    LEGACY_ONEDRIVE_LIBRARY_ROOT,
   } = loadModule();
-  const disi = `${DEFAULT_WATCH_ROOT}\\Kütüphane Dışı Kaynaklar`;
+  const nested = `${DEFAULT_WATCH_ROOT}\\sanat`;
   assert.equal(
-    collapseNestedWatchRoots(`${DEFAULT_WATCH_ROOT};${disi}`),
+    collapseNestedWatchRoots(`${DEFAULT_WATCH_ROOT};${nested}`),
     DEFAULT_WATCH_ROOT,
   );
-  assert.equal(collapseNestedWatchRoots(disi), disi);
-  // migrate: Dışı-only → parent (covers all buckets/subfolders recursively)
-  assert.equal(normalizeDefaultWatchRoots(disi), DEFAULT_WATCH_ROOT);
   assert.equal(normalizeDefaultWatchRoots(""), DEFAULT_WATCH_ROOT);
   assert.equal(
-    normalizeDefaultWatchRoots(`E:\\Other;${disi}`),
+    normalizeDefaultWatchRoots(LEGACY_ONEDRIVE_LIBRARY_ROOT),
+    DEFAULT_WATCH_ROOT,
+  );
+  assert.equal(
+    normalizeDefaultWatchRoots(
+      `${LEGACY_ONEDRIVE_LIBRARY_ROOT};${DEFAULT_WATCH_ROOT}`,
+    ),
+    DEFAULT_WATCH_ROOT,
+  );
+  assert.equal(
+    normalizeDefaultWatchRoots(`E:\\Other;${LEGACY_ONEDRIVE_LIBRARY_ROOT}`),
     `E:\\Other;${DEFAULT_WATCH_ROOT}`,
   );
+  assert.match(DEFAULT_WATCH_ROOT, /Zotero Kaynaklar$/i);
 });
 
 test("filesystem roots retain their required trailing separator", () => {

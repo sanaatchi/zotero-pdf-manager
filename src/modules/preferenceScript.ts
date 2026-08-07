@@ -199,8 +199,7 @@ function migratePDFWatchRoots() {
       roots = "";
     }
   }
-  // Parent 1A_E_KAYNAKLARIM covers all buckets/subfolders recursively;
-  // drop nested Dışı (or any child) when the parent is listed.
+  // Standard root = Zotero Kaynaklar; strip bare OneDrive parent if present.
   const next = normalizeDefaultWatchRoots(String(roots || ""));
   setPref("pdf.watchRoots", next);
   if (next !== String(roots || "").trim()) {

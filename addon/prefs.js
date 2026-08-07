@@ -1,4 +1,4 @@
-// @ajan: cursor · @etiket: katman-2, prefs, watch-root-parent, pdfkitap, dirzon
+// @ajan: cursor · @etiket: katman-2, prefs, watch-root-kaynaklar, pdfkitap, dirzon, disk-audit
 /* eslint-disable no-undef */
 pref("extensions.zotero.__addonRef__.enable", true);
 pref("extensions.zotero.__addonRef__.attachType", "linking");
@@ -87,14 +87,14 @@ pref(
 pref("extensions.zotero.__addonRef__.pdf.localEnabled", true);
 pref(
   "extensions.zotero.__addonRef__.pdf.localFolder",
-  "D:\\OneDrive\\1A_E_KAYNAKLARIM",
+  "D:\\OneDrive\\1A_E_KAYNAKLARIM\\Zotero Kaynaklar",
 );
 // Semicolon/newline-separated roots. Empty migrates from localFolder;
-// migrate always ensures 1A_E_KAYNAKLARIM (recursive subfolders) and drops
-// nested children of that parent (preferenceScript + folderIndex).
+// migrate ensures Zotero Kaynaklar and strips the bare OneDrive parent
+// (preferenceScript + folderIndex) — parent caused ~12k false orphans.
 pref(
   "extensions.zotero.__addonRef__.pdf.watchRoots",
-  "D:\\OneDrive\\1A_E_KAYNAKLARIM",
+  "D:\\OneDrive\\1A_E_KAYNAKLARIM\\Zotero Kaynaklar",
 );
 pref("extensions.zotero.__addonRef__.pdf.useLinkedAttachmentBase", true);
 pref("extensions.zotero.__addonRef__.pdf.localAsLink", true);
@@ -163,5 +163,6 @@ pref("extensions.zotero.__addonRef__.pdf.diskAudit.quarantineDir", "");
 pref("extensions.zotero.__addonRef__.pdf.diskAudit.copyDetachLoser", true);
 pref("extensions.zotero.__addonRef__.pdf.diskAudit.copyMoveDiskLoser", true);
 pref("extensions.zotero.__addonRef__.pdf.diskAudit.bridgeBatch", true);
+pref("extensions.zotero.__addonRef__.pdf.diskAudit.nameContentMaxFiles", 5000);
 pref("extensions.zotero.__addonRef__.pdf.metadataOnlySourcesMigratedV1", false);
 pref("extensions.zotero.__addonRef__.pdf.doiUnpaywallAutoMigratedV1", false);

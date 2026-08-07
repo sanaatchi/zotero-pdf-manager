@@ -1,4 +1,4 @@
-// @ajan: cursor · @etiket: katman-2, disk-audit, orphan, name-content, multi-attach, apply
+// @ajan: cursor · @etiket: katman-2, disk-audit, orphan, name-content, multi-attach, apply, path-fold, rename-safe
 /**
  * Prefs «Disk / ek denetimi» — scan (report) + apply (quarantine / rename / ID create).
  */
@@ -73,14 +73,7 @@ export function isDiskAuditDryRun(): boolean {
 }
 
 function defaultKaynaklarPath(): string {
-  try {
-    if (typeof PathUtils !== "undefined" && PathUtils?.join) {
-      return PathUtils.join(DEFAULT_WATCH_ROOT, "Zotero Kaynaklar");
-    }
-  } catch {
-    /* ignore */
-  }
-  return FALLBACK_KAYNAKLAR;
+  return DEFAULT_WATCH_ROOT || FALLBACK_KAYNAKLAR;
 }
 
 export function normalizeDiskAuditRoots(opts?: {
@@ -404,7 +397,7 @@ export async function runOrphanDiskAudit(opts?: {
   onProgress?: (p: DiskAuditProgress) => void;
 }): Promise<DiskAuditSummary> {
   const roots = normalizeDiskAuditRoots();
-  opts?.onProgress?.({ text: "Scanning orphans…", progress: 10 });
+  opts?.onProgress?.({ text: "Kayıtsız PDF taranıyor…", progress: 10 });
   const referenced = await collectReferencedPaths();
   const includeDisinda = !!getPref("pdf.diskAudit.includeDisinda");
   const { orphanFiles, emptyDirs } = await classifyOrphanTree(
@@ -431,7 +424,9 @@ export async function runOrphanDiskAudit(opts?: {
     includeDisinda,
     orphanCount: filtered.length,
     emptyDirs: emptyDirs.length,
-    orphanFiles: filtered.slice(0, 2000),
+    // Full list for Çöz — truncating here silently skipped orphans on apply.
+    orphanFiles: filtered,
+    orphanFilesTruncated: false,
     emptyDirSamples: emptyDirs.slice(0, 200),
   };
   const reportPath = await writeReport("orphan", payload);
@@ -444,7 +439,7 @@ export async function runOrphanDiskAudit(opts?: {
     samples: filtered.slice(0, 8),
   };
   showProgress(
-    `Orphan report: ${filtered.length} file(s)` +
+    `Kayıtsız PDF raporu: ${filtered.length} dosya` +
       (reportPath ? ` → ${PathUtils.filename(reportPath)}` : ""),
   );
   return summary;
@@ -491,7 +486,7 @@ export async function applyOrphanRemediation(opts?: {
   for (let i = 0; i < orphans.length; i++) {
     const path = orphans[i];
     opts?.onProgress?.({
-      text: `Anchors ${i + 1}/${orphans.length}`,
+      text: `Kimlik ${i + 1}/${orphans.length}`,
       progress: Math.round((40 * i) / Math.max(1, orphans.length)),
     });
     const anchors = await peekAnchors(path);
@@ -519,7 +514,7 @@ export async function applyOrphanRemediation(opts?: {
       new Set(),
       libraryID,
       "autoCreate",
-      Math.min(100, withId.length),
+      withId.length,
       dryRun,
       "disk-audit-orphan",
       "automatic",
@@ -533,7 +528,7 @@ export async function applyOrphanRemediation(opts?: {
   for (let i = 0; i < withoutId.length; i++) {
     const path = withoutId[i];
     opts?.onProgress?.({
-      text: `Quarantine ${i + 1}/${withoutId.length}`,
+      text: `Karantina ${i + 1}/${withoutId.length}`,
       progress: Math.round(50 + (45 * i) / Math.max(1, withoutId.length)),
     });
     const moved = await movePathToQuarantine(path, "orphans", dryRun);
@@ -563,8 +558,8 @@ export async function applyOrphanRemediation(opts?: {
   }
   showProgress(
     dryRun
-      ? `Orphan plan: create ${withId.length}, quarantine ${withoutId.length}`
-      : `Orphan fix: created ${created}, quarantined ${quarantined}, failed ${failed}`,
+      ? `Plan: ${withId.length} kimlikli öğe, ${withoutId.length} karantina`
+      : `Çözüldü: ${created} öğe oluşturuldu, ${quarantined} karantinaya, ${failed} hata`,
     8000,
   );
   return applyResult;
@@ -575,9 +570,12 @@ export async function runNameContentDiskAudit(opts?: {
   maxFiles?: number;
 }): Promise<DiskAuditSummary> {
   const roots = normalizeDiskAuditRoots();
-  const maxFiles = Math.max(1, Number(opts?.maxFiles || 400));
+  const maxFiles = Math.max(
+    1,
+    Number(opts?.maxFiles || getPref("pdf.diskAudit.nameContentMaxFiles") || 5000),
+  );
   opts?.onProgress?.({
-    text: "Collecting orphans for name↔content…",
+    text: "Ad↔içerik için kayıtsız PDF toplanıyor…",
     progress: 5,
   });
   const referenced = await collectReferencedPaths();
@@ -602,7 +600,9 @@ export async function runNameContentDiskAudit(opts?: {
     p.toLowerCase().includes("zotero kaynaklar"),
   );
   if (kaynaklarPref.length) targets = kaynaklarPref;
+  const totalCandidates = targets.length;
   targets = targets.slice(0, maxFiles);
+  const truncated = totalCandidates > targets.length;
 
   const counts = {
     scanned: 0,
@@ -620,7 +620,7 @@ export async function runNameContentDiskAudit(opts?: {
     const path = targets[i];
     const name = PathUtils.filename(path);
     opts?.onProgress?.({
-      text: `Name↔content ${i + 1}/${targets.length}`,
+      text: `Ad↔içerik ${i + 1}/${targets.length}`,
       progress: Math.round(10 + (80 * i) / Math.max(1, targets.length)),
     });
     const parsed = parseFilenameMetadata(name);
@@ -694,6 +694,9 @@ export async function runNameContentDiskAudit(opts?: {
     roots,
     scope: "orphans_only",
     apply: false,
+    maxFiles,
+    totalCandidates,
+    truncated,
     counts,
     clear_mismatch: clearMismatch,
     items,
@@ -708,7 +711,8 @@ export async function runNameContentDiskAudit(opts?: {
     samples: clearMismatch.slice(0, 8),
   };
   showProgress(
-    `Name↔content: ${counts.clearMismatch} clear_mismatch / ${counts.scanned} scanned` +
+    `Ad↔içerik: ${counts.clearMismatch} net uyumsuz / ${counts.scanned} tarandı` +
+      (truncated ? ` (üst sınır ${maxFiles}; aday ${totalCandidates})` : "") +
       (reportPath ? ` → ${PathUtils.filename(reportPath)}` : ""),
     8000,
   );
@@ -744,7 +748,7 @@ export async function applyNameContentRenames(opts?: {
     !confirmApply(
       dryRun
         ? `${rows.length} dosya için YENİDEN ADLANDIRMA PLANI yazılsın mı?`
-        : `${rows.length} dosya yeniden adlandırılsın mı? (clear_mismatch)`,
+        : `${rows.length} dosya önerilen adlarla yeniden adlandırılsın mı?`,
     )
   ) {
     return { kind: "nameContent", dryRun, detail: "cancelled" };
@@ -759,7 +763,7 @@ export async function applyNameContentRenames(opts?: {
     const src = String(row.path);
     const newName = String(row.proposed_rename);
     opts?.onProgress?.({
-      text: `Rename ${i + 1}/${rows.length}`,
+      text: `Yeniden adlandır ${i + 1}/${rows.length}`,
       progress: Math.round((90 * i) / Math.max(1, rows.length)),
     });
     try {
@@ -781,10 +785,18 @@ export async function applyNameContentRenames(opts?: {
         applied.push({ from: src, to: dest });
         continue;
       }
-      if (dest.toLowerCase() !== src.toLowerCase()) {
+      // Prefer Zotero renameAttachmentFile so linked paths stay valid
+      // (attachments:… / baseDir-relative). Blind attachmentPath=absolute breaks links.
+      const attachment = await findAttachmentByAbsolutePath(src);
+      if (attachment) {
+        const ok = await renameAttachmentFileSafe(attachment, newName);
+        if (!ok) {
+          failed += 1;
+          continue;
+        }
+      } else if (dest.toLowerCase() !== src.toLowerCase()) {
         await IOUtils.move(src, dest);
       }
-      await relinkAttachmentPath(src, dest);
       renamed += 1;
       applied.push({ from: src, to: dest });
     } catch {
@@ -812,18 +824,17 @@ export async function applyNameContentRenames(opts?: {
   }
   showProgress(
     dryRun
-      ? `Rename plan: ${planned} file(s)`
-      : `Renamed ${renamed}, failed ${failed}`,
+      ? `Yeniden adlandırma planı: ${planned} dosya`
+      : `Yeniden adlandırıldı: ${renamed}, hata: ${failed}`,
     8000,
   );
   return applyResult;
 }
 
-async function relinkAttachmentPath(
-  oldPath: string,
-  newPath: string,
-): Promise<void> {
-  const oldKey = PathUtils.normalize(oldPath).normalize("NFC").toLowerCase();
+async function findAttachmentByAbsolutePath(
+  absolutePath: string,
+): Promise<Zotero.Item | null> {
+  const want = PathUtils.normalize(absolutePath).normalize("NFC").toLowerCase();
   try {
     const rows =
       (await Zotero.DB.queryAsync(
@@ -836,23 +847,40 @@ async function relinkAttachmentPath(
       const path = await attachment.getFilePathAsync().catch(() => "");
       if (!path) continue;
       const key = PathUtils.normalize(path).normalize("NFC").toLowerCase();
-      if (key !== oldKey) continue;
-      try {
-        if (typeof (attachment as any).attachmentPath !== "undefined") {
-          // Linked attachments: set path relative to base when possible.
-          (attachment as any).attachmentPath = newPath;
-          await attachment.saveTx();
-        }
-      } catch (e) {
-        ztoolkit.log("relinkAttachmentPath failed", e);
-      }
+      if (key === want) return attachment;
     }
   } catch (e) {
-    ztoolkit.log("relinkAttachmentPath scan failed", e);
+    ztoolkit.log("findAttachmentByAbsolutePath failed", e);
+  }
+  return null;
+}
+
+/** Same contract as menu.renameAttachmentFile — keeps linked paths coherent. */
+async function renameAttachmentFileSafe(
+  attItem: Zotero.Item,
+  newName: string,
+): Promise<boolean> {
+  try {
+    const renameAttachment = (attItem as any).renameAttachmentFile as
+      | ((...args: any[]) => Promise<boolean>)
+      | undefined;
+    if (typeof renameAttachment !== "function") return false;
+    if (renameAttachment.length <= 1) {
+      return !!(await renameAttachment.call(attItem, newName, {
+        overwrite: false,
+        unique: true,
+        updateTitle: false,
+        out: {},
+      }));
+    }
+    return !!(await renameAttachment.call(attItem, newName, false, true));
+  } catch (e) {
+    ztoolkit.log("renameAttachmentFileSafe failed", e);
+    return false;
   }
 }
 
-export async function listMultiAttachParents(limit = 50): Promise<{
+export async function listMultiAttachParents(limit = 99999): Promise<{
   count: number;
   samples: Array<{
     parentKey: string;
@@ -949,9 +977,9 @@ export async function listMultiAttachParents(limit = 50): Promise<{
 export async function runCopyDiskAudit(opts?: {
   onProgress?: (p: DiskAuditProgress) => void;
 }): Promise<DiskAuditSummary> {
-  opts?.onProgress?.({ text: "Scanning multi-attach parents…", progress: 15 });
-  const multi = await listMultiAttachParents(50);
-  opts?.onProgress?.({ text: "Scanning disk siblings…", progress: 55 });
+  opts?.onProgress?.({ text: "Çoklu ek taranıyor…", progress: 15 });
+  const multi = await listMultiAttachParents();
+  opts?.onProgress?.({ text: "Klasör kopyaları taranıyor…", progress: 55 });
   const roots = normalizeDiskAuditRoots();
   const referenced = await collectReferencedPaths();
   const siblingFolders: Array<{
@@ -1002,12 +1030,31 @@ export async function runCopyDiskAudit(opts?: {
           linked,
           unlinked: unlinked.length,
           unlinkedSamples: unlinked.slice(0, 5),
-          unlinkedPaths: unlinked.slice(0, 200),
+          // Full list for Çöz — samples alone silently skipped folders >30.
+          unlinkedPaths: unlinked,
         });
       }
     };
     await walk(root, 0);
   }
+
+  const multiLoserTargets: Array<{ id: number; path: string; size: number }> =
+    [];
+  for (const sample of multi.samples) {
+    const atts = sample.attachments || [];
+    if (atts.length < 2) continue;
+    const sorted = [...atts].sort((a, b) => (b.size || 0) - (a.size || 0));
+    for (const loser of sorted.slice(1)) {
+      multiLoserTargets.push({
+        id: loser.id,
+        path: loser.path,
+        size: loser.size,
+      });
+    }
+  }
+  const siblingUnlinkedTargets = siblingFolders.flatMap(
+    (f) => f.unlinkedPaths || f.unlinkedSamples || [],
+  );
 
   const payload = {
     kind: "copy",
@@ -1015,14 +1062,22 @@ export async function runCopyDiskAudit(opts?: {
     apply: false,
     generatedAt: new Date().toISOString(),
     roots,
+    // Apply reads this — must be complete, not UI samples.
+    applyTargets: {
+      siblingUnlinked: siblingUnlinkedTargets,
+      multiLosers: multiLoserTargets,
+    },
     multiAttach: {
       count: multi.count,
-      samples: multi.samples,
+      samples: multi.samples.slice(0, 30),
     },
     diskSibling: {
       folderCount: siblingFolders.length,
       unlinkedSum: siblingFolders.reduce((a, f) => a + f.unlinked, 0),
-      samples: siblingFolders.slice(0, 30),
+      samples: siblingFolders.slice(0, 30).map((f) => ({
+        ...f,
+        unlinkedPaths: (f.unlinkedPaths || []).slice(0, 20),
+      })),
     },
   };
   const reportPath = await writeReport("copy", payload);
@@ -1036,7 +1091,7 @@ export async function runCopyDiskAudit(opts?: {
     samples: multi.samples.slice(0, 4),
   };
   showProgress(
-    `Copy report: ${multi.count} multi-attach parent(s), ${siblingFolders.length} sibling folder(s)` +
+    `Yinelenen: ${multi.count} çoklu ek, ${siblingFolders.length} klasör kopyası` +
       (reportPath ? ` → ${PathUtils.filename(reportPath)}` : ""),
     8000,
   );
@@ -1054,6 +1109,10 @@ export async function applyCopyQuarantine(opts?: {
     return { kind: "copy", dryRun, failed: 1, detail: "no-report" };
   }
   const report = (await readJsonOrQuarantine(reportPath)) as {
+    applyTargets?: {
+      siblingUnlinked?: string[];
+      multiLosers?: Array<{ id: number; path: string; size: number }>;
+    };
     multiAttach?: {
       samples?: Array<{
         attachments?: Array<{
@@ -1069,20 +1128,32 @@ export async function applyCopyQuarantine(opts?: {
   } | null;
 
   const siblingLosers: string[] = [];
-  for (const folder of report?.diskSibling?.samples || []) {
-    const paths = folder.unlinkedPaths?.length
-      ? folder.unlinkedPaths
-      : folder.unlinkedSamples || [];
-    for (const p of paths) if (p) siblingLosers.push(p);
+  if (Array.isArray(report?.applyTargets?.siblingUnlinked)) {
+    for (const p of report!.applyTargets!.siblingUnlinked!) {
+      if (p) siblingLosers.push(p);
+    }
+  } else {
+    for (const folder of report?.diskSibling?.samples || []) {
+      const paths = folder.unlinkedPaths?.length
+        ? folder.unlinkedPaths
+        : folder.unlinkedSamples || [];
+      for (const p of paths) if (p) siblingLosers.push(p);
+    }
   }
 
   type Att = { id: number; path: string; size: number };
   const multiLosers: Att[] = [];
-  for (const sample of report?.multiAttach?.samples || []) {
-    const atts = (sample.attachments || []).filter((a) => a && a.id);
-    if (atts.length < 2) continue;
-    const sorted = [...atts].sort((a, b) => (b.size || 0) - (a.size || 0));
-    for (const loser of sorted.slice(1)) multiLosers.push(loser);
+  if (Array.isArray(report?.applyTargets?.multiLosers)) {
+    for (const a of report!.applyTargets!.multiLosers!) {
+      if (a && a.id) multiLosers.push(a);
+    }
+  } else {
+    for (const sample of report?.multiAttach?.samples || []) {
+      const atts = (sample.attachments || []).filter((a) => a && a.id);
+      if (atts.length < 2) continue;
+      const sorted = [...atts].sort((a, b) => (b.size || 0) - (a.size || 0));
+      for (const loser of sorted.slice(1)) multiLosers.push(loser);
+    }
   }
 
   const total = siblingLosers.length + multiLosers.length;
@@ -1095,7 +1166,7 @@ export async function applyCopyQuarantine(opts?: {
     !confirmApply(
       dryRun
         ? `${total} kopya için KARANTİNA PLANI yazılsın mı?`
-        : `${total} kopya _pdf_quarantine/copies altına taşınsın mı? (silinmez)`,
+        : `${total} fazla kopya karantina klasörüne taşınsın mı? (silinmez)`,
     )
   ) {
     return { kind: "copy", dryRun, detail: "cancelled" };
@@ -1111,7 +1182,7 @@ export async function applyCopyQuarantine(opts?: {
   for (let i = 0; i < siblingLosers.length; i++) {
     const path = siblingLosers[i];
     opts?.onProgress?.({
-      text: `Sibling ${i + 1}/${siblingLosers.length}`,
+      text: `Klasör kopyası ${i + 1}/${siblingLosers.length}`,
       progress: Math.round((40 * i) / Math.max(1, siblingLosers.length)),
     });
     const moved = await movePathToQuarantine(path, "copies", dryRun);
@@ -1123,7 +1194,7 @@ export async function applyCopyQuarantine(opts?: {
   for (let i = 0; i < multiLosers.length; i++) {
     const loser = multiLosers[i];
     opts?.onProgress?.({
-      text: `Multi-attach ${i + 1}/${multiLosers.length}`,
+      text: `Çoklu ek ${i + 1}/${multiLosers.length}`,
       progress: Math.round(45 + (50 * i) / Math.max(1, multiLosers.length)),
     });
     try {
@@ -1168,8 +1239,8 @@ export async function applyCopyQuarantine(opts?: {
   }
   showProgress(
     dryRun
-      ? `Copy plan: ${total} action(s)`
-      : `Copy fix: quarantined ${quarantined}, detached ${detached}, failed ${failed}`,
+      ? `Karantina planı: ${total} işlem`
+      : `Karantina: ${quarantined} taşındı, ${detached} ek kaldırıldı, ${failed} hata`,
     8000,
   );
   return applyResult;
@@ -1192,7 +1263,12 @@ export async function runDiskAuditWithProgress(
   });
   progress
     .createLine({
-      text: `Disk audit (${kind})…`,
+      text:
+        kind === "orphan"
+          ? "Kayıtsız PDF taranıyor…"
+          : kind === "nameContent"
+            ? "Ad ↔ içerik taranıyor…"
+            : "Yinelenen PDF taranıyor…",
       type: "default",
       progress: 5,
     })
@@ -1226,7 +1302,7 @@ export async function runDiskAuditWithProgress(
   } catch (e) {
     ztoolkit.log("diskAudit failed", e);
     progress.changeLine({
-      text: `Disk audit failed: ${String((e as Error)?.message || e)}`,
+      text: `Tarama başarısız: ${String((e as Error)?.message || e)}`,
       type: "fail",
       progress: 100,
       idx: 0,
@@ -1251,7 +1327,12 @@ export async function runDiskAuditApplyWithProgress(
   });
   progress
     .createLine({
-      text: `Disk fix (${kind})…`,
+      text:
+        kind === "orphan"
+          ? "Kayıtsız PDF çözülüyor…"
+          : kind === "nameContent"
+            ? "Yeniden adlandırma uygulanıyor…"
+            : "Kopyalar karantinaya alınıyor…",
       type: "default",
       progress: 5,
     })
@@ -1286,7 +1367,7 @@ export async function runDiskAuditApplyWithProgress(
   } catch (e) {
     ztoolkit.log("diskAudit apply failed", e);
     progress.changeLine({
-      text: `Disk fix failed: ${String((e as Error)?.message || e)}`,
+      text: `Çözüm başarısız: ${String((e as Error)?.message || e)}`,
       type: "fail",
       progress: 100,
       idx: 0,
@@ -1303,19 +1384,19 @@ export async function runDiskAuditApplyWithProgress(
 
 function summarizeLine(s: DiskAuditSummary): string {
   if (s.kind === "orphan")
-    return `Orphans: ${s.orphanCount ?? 0} — next: Open report → Fix`;
+    return `Kayıtsız: ${s.orphanCount ?? 0} — sırada: Raporu aç → Çöz`;
   if (s.kind === "nameContent") {
     const n = s.nameContent;
-    return `Name↔content: clear_mismatch ${n?.clearMismatch ?? 0} / ${n?.scanned ?? 0} — next: Fix`;
+    return `Ad↔içerik: ${n?.clearMismatch ?? 0} net uyumsuz / ${n?.scanned ?? 0} — sırada: Çöz`;
   }
-  return `Copy: multi-attach ${s.multiAttachParents ?? 0}, siblings ${s.siblingFolders ?? 0} — next: Fix`;
+  return `Yinelenen: ${s.multiAttachParents ?? 0} çoklu ek, ${s.siblingFolders ?? 0} klasör — sırada: Çöz`;
 }
 
 function summarizeApply(r: DiskAuditApplyResult): string {
-  if (r.detail === "cancelled") return "Fix cancelled";
-  if (r.detail === "no-report") return "No report — scan first";
+  if (r.detail === "cancelled") return "Çöz iptal edildi";
+  if (r.detail === "no-report") return "Rapor yok — önce Tara";
   if (r.dryRun) {
-    return `Plan recorded (dry-run): created ${r.created ?? 0}, quarantine ${r.quarantined ?? 0}, rename ${r.renamed ?? 0}, planned ${r.planned ?? 0}`;
+    return `Plan kaydedildi (deneme): öğe ${r.created ?? 0}, karantina ${r.quarantined ?? 0}, ad ${r.renamed ?? 0}, plan ${r.planned ?? 0}`;
   }
-  return `Done: created ${r.created ?? 0}, quarantined ${r.quarantined ?? 0}, renamed ${r.renamed ?? 0}, detached ${r.detached ?? 0}, failed ${r.failed ?? 0}`;
+  return `Bitti: öğe ${r.created ?? 0}, karantina ${r.quarantined ?? 0}, ad ${r.renamed ?? 0}, ek kaldırıldı ${r.detached ?? 0}, hata ${r.failed ?? 0}`;
 }

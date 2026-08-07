@@ -23,6 +23,9 @@ function loadDiskAudit() {
   assert.match(src, /openLastDiskAuditReport/);
   assert.match(src, /movePathToQuarantine/);
   assert.match(src, /isDiskAuditDryRun/);
+  assert.match(src, /renameAttachmentFileSafe/);
+  assert.match(src, /findAttachmentByAbsolutePath/);
+  assert.match(src, /applyTargets/);
   return src;
 }
 

@@ -1,4 +1,4 @@
-// @ajan: cursor · @etiket: katman-2, folderIndex, watch-root-parent, downloads-probe
+// @ajan: cursor · @etiket: katman-2, folderIndex, watch-root-kaynaklar, path-fold, downloads-probe
 import { getPref } from "../utils/prefs";
 import { parseFilenameMetadata } from "./filenameMetadata";
 import { readJsonOrQuarantine, writeJsonAtomic } from "../utils/atomicJson";
@@ -127,9 +127,9 @@ export function parseWatchRoots(raw: string): string[] {
       root = root.replace(/[\\/]+$/, "");
     }
     if (!root) continue;
-    // Windows paths are case-insensitive. Lowercasing is also harmless for
-    // de-duplication on the platforms supported by Zotero.
-    const key = root.toLocaleLowerCase();
+    // Windows paths are case-insensitive. Use toLowerCase (not
+    // toLocaleLowerCase): on tr-TR, ASCII "I" → "ı" breaks 1A_E_KAYNAKLARIM.
+    const key = root.toLowerCase();
     if (seen.has(key)) continue;
     seen.add(key);
     roots.push(root);
@@ -138,11 +138,15 @@ export function parseWatchRoots(raw: string): string[] {
 }
 
 /**
- * Default local PDF search root (full OneDrive tree: Zotero / Kütüphane /
- * Dışı buckets and nested folders). Indexing walks recursively up to
- * MAX_WALK_DEPTH. Must stay in sync with prefs.js + preference migrate.
+ * Standard linked-PDF root (Zotero Kaynaklar). Must stay in sync with
+ * prefs.js + preference migrate. Do NOT default to the OneDrive parent
+ * ``1A_E_KAYNAKLARIM`` — that scanned ~12k non-library PDFs as orphans.
  */
-export const DEFAULT_WATCH_ROOT = "D:\\OneDrive\\1A_E_KAYNAKLARIM";
+export const DEFAULT_WATCH_ROOT =
+  "D:\\OneDrive\\1A_E_KAYNAKLARIM\\Zotero Kaynaklar";
+
+/** Former default (full OneDrive tree) — stripped on migrate. */
+export const LEGACY_ONEDRIVE_LIBRARY_ROOT = "D:\\OneDrive\\1A_E_KAYNAKLARIM";
 
 /** @deprecated Use DEFAULT_WATCH_ROOT — kept as alias for older callers. */
 export const DEFAULT_DISI_WATCH_ROOT = DEFAULT_WATCH_ROOT;
@@ -158,20 +162,22 @@ export function ensurePathInWatchRoots(
   const roots = parseWatchRoots(current || "");
   const want = (pathToAdd || "").trim().replace(/[\\/]+$/, "");
   if (!want) return roots.join(";");
-  const wantKey = want.toLocaleLowerCase();
-  if (roots.some((r) => r.toLocaleLowerCase() === wantKey)) {
+  const wantKey = want.toLowerCase();
+  if (roots.some((r) => r.toLowerCase() === wantKey)) {
     return roots.join(";");
   }
   return parseWatchRoots([...roots, want].join(";")).join(";");
 }
 
 function watchRootKey(root: string): string {
-  return root.toLocaleLowerCase().replace(/[\\/]+$/, "");
+  // Use toLowerCase (not toLocaleLowerCase): on tr-TR, ASCII "I" becomes
+  // dotless "ı" and breaks path equality for 1A_E_KAYNAKLARIM.
+  return root.toLowerCase().replace(/[\\/]+$/, "");
 }
 
 /**
  * Drop roots nested under another listed root (parent alone covers the tree).
- * Example: parent + ``…\\Kütüphane Dışı Kaynaklar`` → parent only.
+ * Example: parent + ``…\\sanat`` → parent only.
  */
 export function collapseNestedWatchRoots(current: string): string {
   const roots = parseWatchRoots(current || "");
@@ -188,11 +194,18 @@ export function collapseNestedWatchRoots(current: string): string {
 }
 
 /**
- * Ensure ``DEFAULT_WATCH_ROOT`` is listed and collapse nested children of it
- * (or any parent/child pair). Used by preference migrate on upgrade.
+ * Ensure ``DEFAULT_WATCH_ROOT`` (Zotero Kaynaklar) is listed; strip the bare
+ * legacy OneDrive parent so migrate cannot re-expand to ~12k orphans.
  */
 export function normalizeDefaultWatchRoots(current: string): string {
-  const withDefault = ensurePathInWatchRoots(current || "", DEFAULT_WATCH_ROOT);
+  const legacyKey = watchRootKey(LEGACY_ONEDRIVE_LIBRARY_ROOT);
+  const stripped = parseWatchRoots(current || "").filter(
+    (root) => watchRootKey(root) !== legacyKey,
+  );
+  const withDefault = ensurePathInWatchRoots(
+    stripped.join(";"),
+    DEFAULT_WATCH_ROOT,
+  );
   return collapseNestedWatchRoots(withDefault);
 }
 
@@ -327,7 +340,8 @@ async function loadPersisted(): Promise<Map<string, IndexedFile>> {
         typeof f.alnum === "string"
       ) {
         map.set(f.path, f as IndexedFile);
-        map.set(f.path.toLocaleLowerCase(), f as IndexedFile);
+        // Path keys: ASCII toLowerCase (not toLocaleLowerCase) — tr-TR "I"→"ı".
+        map.set(f.path.toLowerCase(), f as IndexedFile);
       }
     }
   } catch (e) {
@@ -480,12 +494,12 @@ async function buildIndexLocked(
     { path: string; mtime: number; size?: number }
   >();
   for (const file of discovered) {
-    unique.set(file.path.toLocaleLowerCase(), file);
+    unique.set(file.path.toLowerCase(), file);
   }
 
   const index: IndexedFile[] = Array.from(unique.values()).map((d) => {
     const prev =
-      persisted.get(d.path) || persisted.get(d.path.toLocaleLowerCase());
+      persisted.get(d.path) || persisted.get(d.path.toLowerCase());
     return indexEntryFromDiscovery(d.path, d.mtime, prev, d.size);
   });
 
@@ -530,8 +544,8 @@ async function registerDownloadedFileLocked(
     const size = typeof stat?.size === "number" ? stat.size : undefined;
     const entry = indexEntryFromDiscovery(path, mtime, null, size);
     if (memCache) {
-      const key = path.toLocaleLowerCase();
-      const next = memCache.filter((f) => f.path.toLocaleLowerCase() !== key);
+      const key = path.toLowerCase();
+      const next = memCache.filter((f) => f.path.toLowerCase() !== key);
       next.push(entry);
       memCache = next;
       memCacheAt = Date.now();
