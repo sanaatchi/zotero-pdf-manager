@@ -1,4 +1,4 @@
-// @ajan: cursor · @etiket: katman-2, prefs, watch-root-parent, disk-audit, unit-interval-pref
+// @ajan: cursor · @etiket: katman-2, prefs, watch-root-parent, disk-audit, unit-interval-pref, bidirectional-audit
 import { config } from "../../package.json";
 import { getString } from "../utils/locale";
 import { getPref, setPref } from "../utils/prefs";
@@ -14,6 +14,10 @@ import {
   runDiskAuditApplyWithProgress,
   runDiskAuditWithProgress,
 } from "./diskAudit";
+import {
+  openLastBidirectionalReport,
+  runBidirectionalAuditWithProgress,
+} from "./bidirectionalAudit";
 
 async function runManualReconcileWithProgress() {
   const reconciler = addon.data.pdfReconciler;
@@ -440,6 +444,16 @@ function bindPrefEvents(_window: Window) {
   doc.querySelector("#pdf-create-orphans")?.addEventListener("command", () => {
     void addon.data.pdfReconciler?.processOrphansNow();
   });
+  doc
+    .querySelector("#pdf-disk-audit-bidir")
+    ?.addEventListener("command", () => {
+      void runBidirectionalAuditWithProgress();
+    });
+  doc
+    .querySelector("#pdf-disk-audit-bidir-open")
+    ?.addEventListener("command", () => {
+      void openLastBidirectionalReport();
+    });
   doc
     .querySelector("#pdf-disk-audit-orphan")
     ?.addEventListener("command", () => {

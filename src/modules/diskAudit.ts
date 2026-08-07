@@ -1,6 +1,7 @@
-// @ajan: cursor · @etiket: katman-2, disk-audit, orphan, name-content, multi-attach, apply, path-fold, rename-safe
+// @ajan: cursor · @etiket: katman-2, disk-audit, orphan, name-content, multi-attach, apply, path-fold, rename-safe, cross-folder-dupe, bridge-unavailable
 /**
  * Prefs «Disk / ek denetimi» — scan (report) + apply (quarantine / rename / ID create).
+ * Copy audit also flags same basename+size across folders (cross-folder duplicates).
  */
 import { config } from "../../package.json";
 import { getPref } from "../utils/prefs";
@@ -37,18 +38,114 @@ export interface DiskAuditSummary {
   linkedHint?: number;
   multiAttachParents?: number;
   siblingFolders?: number;
+  crossFolderDupes?: number;
   nameContent?: {
     scanned: number;
     ok: number;
     mismatch: number;
     weak: number;
     unverifiable: number;
+    bridgeUnavailable?: number;
     clearMismatch: number;
     renameProposals: number;
   };
   samples?: unknown[];
   error?: string;
   apply?: DiskAuditApplyResult;
+}
+
+/** One PDF on disk with size — used for cross-folder duplicate grouping. */
+export type CrossFolderFile = {
+  path: string;
+  basename: string;
+  size: number;
+  dir: string;
+};
+
+export type CrossFolderDupeGroup = {
+  basename: string;
+  size: number;
+  paths: string[];
+  dirs: string[];
+};
+
+const FILENAME_ITEM_TYPE_RE =
+  /\[(book|journalArticle|thesis|bookSection|conferencePaper|report|document|webpage|newspaperArticle|magazineArticle|preprint|manuscript)\]/i;
+
+/** Attanger-style `[itemType]` tag in a PDF filename, or null. */
+export function extractFilenameItemTypeTag(filename: string): string | null {
+  const m = String(filename || "").match(FILENAME_ITEM_TYPE_RE);
+  return m ? m[1] : null;
+}
+
+/** True when filename `[type]` disagrees with Zotero parent itemType. */
+export function filenameItemTypeMismatch(
+  zoteroItemType: string,
+  filename: string,
+): { mismatch: boolean; filenameType: string | null } {
+  const tag = extractFilenameItemTypeTag(filename);
+  if (!tag || !zoteroItemType) {
+    return { mismatch: false, filenameType: tag };
+  }
+  return {
+    mismatch: tag.toLowerCase() !== String(zoteroItemType).toLowerCase(),
+    filenameType: tag,
+  };
+}
+
+/**
+ * Same basename + byte size in two or more directories → exact content copy candidates.
+ * Same-dir duplicates are ignored (sibling-folder audit covers mixed linked/unlinked).
+ */
+export function groupCrossFolderDuplicates(
+  files: CrossFolderFile[],
+): CrossFolderDupeGroup[] {
+  const map = new Map<string, CrossFolderFile[]>();
+  for (const f of files) {
+    if (!f?.path || !f.basename || !(f.size > 0)) continue;
+    const key = `${String(f.basename).toLowerCase()}|${f.size}`;
+    const list = map.get(key) || [];
+    list.push(f);
+    map.set(key, list);
+  }
+  const out: CrossFolderDupeGroup[] = [];
+  for (const list of map.values()) {
+    if (list.length < 2) continue;
+    const dirs = Array.from(new Set(list.map((x) => x.dir)));
+    if (dirs.length < 2) continue;
+    out.push({
+      basename: list[0].basename,
+      size: list[0].size,
+      paths: list.map((x) => x.path),
+      dirs,
+    });
+  }
+  out.sort((a, b) => b.size - a.size || b.paths.length - a.paths.length);
+  return out;
+}
+
+/**
+ * Prefer keeping a Zotero-linked copy; return unlinked paths in the same
+ * basename+size group for quarantine.
+ */
+export function crossFolderUnlinkedLosers(
+  groups: CrossFolderDupeGroup[],
+  referenced: Set<string>,
+  normalizePath: (p: string) => string,
+): string[] {
+  const losers: string[] = [];
+  for (const g of groups) {
+    const linked: string[] = [];
+    const unlinked: string[] = [];
+    for (const p of g.paths) {
+      if (referenced.has(normalizePath(p))) linked.push(p);
+      else unlinked.push(p);
+    }
+    if (linked.length >= 1 && unlinked.length >= 1) {
+      for (const p of unlinked) losers.push(p);
+    }
+  }
+  return losers;
 }
 
 export interface DiskAuditApplyResult {
@@ -155,11 +252,19 @@ export function classifyNameContentFromBridge(
     confidence?: number;
     reason?: string;
   } | null,
+  opts?: { bridgeAttempted?: boolean },
 ): {
   class: string;
   clearMismatch: boolean;
 } {
-  if (!result || !result.verdict) {
+  // Bridge call failed / unreachable — distinct from "PDF text unverifiable".
+  if (!result) {
+    if (opts?.bridgeAttempted === false) {
+      return { class: "unverifiable", clearMismatch: false };
+    }
+    return { class: "bridge_unavailable", clearMismatch: false };
+  }
+  if (!result.verdict) {
     return { class: "unverifiable", clearMismatch: false };
   }
   const v = String(result.verdict).toLowerCase();
@@ -612,6 +717,7 @@ export async function runNameContentDiskAudit(opts?: {
     mismatch: 0,
     weak: 0,
     unverifiable: 0,
+    bridgeUnavailable: 0,
     clearMismatch: 0,
     renameProposals: 0,
   };
@@ -656,6 +762,8 @@ export async function runNameContentDiskAudit(opts?: {
     if (verdict.class === "ok") counts.ok += 1;
     else if (verdict.class === "mismatch") counts.mismatch += 1;
     else if (verdict.class === "weak") counts.weak += 1;
+    else if (verdict.class === "bridge_unavailable")
+      counts.bridgeUnavailable += 1;
     else counts.unverifiable += 1;
 
     const contentTitle =
@@ -980,9 +1088,11 @@ export async function runCopyDiskAudit(opts?: {
 }): Promise<DiskAuditSummary> {
   opts?.onProgress?.({ text: "Çoklu ek taranıyor…", progress: 15 });
   const multi = await listMultiAttachParents();
-  opts?.onProgress?.({ text: "Klasör kopyaları taranıyor…", progress: 55 });
+  opts?.onProgress?.({ text: "Klasör kopyaları taranıyor…", progress: 45 });
   const roots = normalizeDiskAuditRoots();
   const referenced = await collectReferencedPaths();
+  const pathKey = (p: string) =>
+    PathUtils.normalize(p).normalize("NFC").toLowerCase();
   const siblingFolders: Array<{
     dir: string;
     pdfCount: number;
@@ -991,6 +1101,7 @@ export async function runCopyDiskAudit(opts?: {
     unlinkedSamples: string[];
     unlinkedPaths: string[];
   }> = [];
+  const allPdfEntries: CrossFolderFile[] = [];
 
   for (const root of roots) {
     const walk = async (dir: string, depth: number) => {
@@ -1014,13 +1125,23 @@ export async function runCopyDiskAudit(opts?: {
           await walk(child, depth + 1);
           continue;
         }
-        if (String(child).toLowerCase().endsWith(".pdf")) pdfs.push(child);
+        if (!String(child).toLowerCase().endsWith(".pdf")) continue;
+        pdfs.push(child);
+        const size = Number(st?.size || 0);
+        if (size > 0) {
+          allPdfEntries.push({
+            path: child,
+            basename: PathUtils.filename(child),
+            size,
+            dir,
+          });
+        }
       }
       if (pdfs.length < 2) return;
       let linked = 0;
       const unlinked: string[] = [];
       for (const p of pdfs) {
-        const key = PathUtils.normalize(p).normalize("NFC").toLowerCase();
+        const key = pathKey(p);
         if (referenced.has(key)) linked += 1;
         else unlinked.push(p);
       }
@@ -1039,6 +1160,17 @@ export async function runCopyDiskAudit(opts?: {
     await walk(root, 0);
   }
 
+  opts?.onProgress?.({
+    text: "Çapraz klasör kopyaları taranıyor…",
+    progress: 75,
+  });
+  const crossFolderGroups = groupCrossFolderDuplicates(allPdfEntries);
+  const crossFolderLoserTargets = crossFolderUnlinkedLosers(
+    crossFolderGroups,
+    referenced,
+    pathKey,
+  );
+
   const multiLoserTargets: Array<{ id: number; path: string; size: number }> =
     [];
   for (const sample of multi.samples) {
@@ -1056,6 +1188,12 @@ export async function runCopyDiskAudit(opts?: {
   const siblingUnlinkedTargets = siblingFolders.flatMap(
     (f) => f.unlinkedPaths || f.unlinkedSamples || [],
   );
+  // Union sibling + cross-folder unlinked losers (dedupe by path key).
+  const siblingSet = new Set(siblingUnlinkedTargets.map(pathKey));
+  const crossOnlyLosers = crossFolderLoserTargets.filter(
+    (p) => !siblingSet.has(pathKey(p)),
+  );
+  const allSiblingUnlinked = [...siblingUnlinkedTargets, ...crossOnlyLosers];
 
   const payload = {
     kind: "copy",
@@ -1065,8 +1203,9 @@ export async function runCopyDiskAudit(opts?: {
     roots,
     // Apply reads this — must be complete, not UI samples.
     applyTargets: {
-      siblingUnlinked: siblingUnlinkedTargets,
+      siblingUnlinked: allSiblingUnlinked,
       multiLosers: multiLoserTargets,
+      crossFolderUnlinked: crossFolderLoserTargets,
     },
     multiAttach: {
       count: multi.count,
@@ -1080,6 +1219,18 @@ export async function runCopyDiskAudit(opts?: {
         unlinkedPaths: (f.unlinkedPaths || []).slice(0, 20),
       })),
     },
+    crossFolder: {
+      groupCount: crossFolderGroups.length,
+      unlinkedLoserCount: crossFolderLoserTargets.length,
+      samples: crossFolderGroups.slice(0, 40).map((g) => ({
+        basename: g.basename,
+        size: g.size,
+        dirs: g.dirs,
+        paths: g.paths,
+        linkedCount: g.paths.filter((p) => referenced.has(pathKey(p))).length,
+        orphanCount: g.paths.filter((p) => !referenced.has(pathKey(p))).length,
+      })),
+    },
   };
   const reportPath = await writeReport("copy", payload);
   const summary: DiskAuditSummary = {
@@ -1089,10 +1240,12 @@ export async function runCopyDiskAudit(opts?: {
     reportPath,
     multiAttachParents: multi.count,
     siblingFolders: siblingFolders.length,
+    crossFolderDupes: crossFolderGroups.length,
     samples: multi.samples.slice(0, 4),
   };
   showProgress(
-    `Yinelenen: ${multi.count} çoklu ek, ${siblingFolders.length} klasör kopyası` +
+    `Yinelenen: ${multi.count} çoklu ek, ${siblingFolders.length} klasör, ` +
+      `${crossFolderGroups.length} çapraz kopya` +
       (reportPath ? ` → ${PathUtils.filename(reportPath)}` : ""),
     8000,
   );
@@ -1390,7 +1543,11 @@ function summarizeLine(s: DiskAuditSummary): string {
     const n = s.nameContent;
     return `Ad↔içerik: ${n?.clearMismatch ?? 0} net uyumsuz / ${n?.scanned ?? 0} — sırada: Çöz`;
   }
-  return `Yinelenen: ${s.multiAttachParents ?? 0} çoklu ek, ${s.siblingFolders ?? 0} klasör — sırada: Çöz`;
+  return (
+    `Yinelenen: ${s.multiAttachParents ?? 0} çoklu ek, ${s.siblingFolders ?? 0} klasör` +
+    (s.crossFolderDupes != null ? `, ${s.crossFolderDupes} çapraz kopya` : "") +
+    ` — sırada: Çöz`
+  );
 }
 
 function summarizeApply(r: DiskAuditApplyResult): string {

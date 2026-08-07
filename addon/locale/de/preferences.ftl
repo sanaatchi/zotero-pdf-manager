@@ -209,6 +209,11 @@ pdf-disk-audit-include-disinda =
 pdf-disk-audit-dry-run =
     .label = Trockenlauf / nur Plan (empfohlen)
 pdf-disk-audit-dry-run-help = Wenn aktiv, verschiebt/benennt Beheben nicht um; Plan landet im Bericht. Wenn aus, nach Bestätigung anwenden.
+pdf-disk-audit-bidir-heading = 0) Bidirektionale Prüfung (Eintrag ↔ PDF)
+pdf-disk-audit-bidir-help = Ein Scan: von Zotero-Einträgen zu PDFs (fehlend/defekt/Typkonflikt) und von Disk-PDFs zu Einträgen (Waisen / gleiche Datei in anderem Ordner). Zuerst ausführen; die drei Zeilen darunter sind Detailkorrekturen.
+pdf-disk-audit-bidir =
+    .label = Scannen
+
 pdf-disk-audit-orphan-heading = 1) Verwaiste PDFs
 pdf-disk-audit-orphan-help = Auf der Festplatte, nicht in Zotero. Beheben: Einträge für DOI/ISBN/YÖK; Rest nach _pdf_quarantine/orphans.
 pdf-disk-audit-orphan =
