@@ -28,6 +28,7 @@ test("bidirectionalAudit module surface", () => {
   assert.match(src, /extractRomanVolumeToken/);
   assert.match(src, /romanVolumesConflict/);
   assert.match(src, /isClearMatchCandidate/);
+  assert.match(src, /softEditionMarkersConflict/);
   assert.match(src, /suggestAlternatePaths/);
   assert.match(src, /safeFilename/);
   assert.match(src, /safePathKey/);
@@ -176,17 +177,35 @@ test("roman volume I vs II and quarantine never clear", () => {
     if (!ra || !rb) return false;
     return ra !== rb;
   }
+  function softEditionMarkersConflict(a, b) {
+    const markers = [
+      /\bsolutions?\b/i,
+      /\bmanual\b/i,
+      /\binstructor\b/i,
+      /\bworkbook\b/i,
+      /\banswer\s*keys?\b/i,
+      /\bteachers?\s*editions?\b/i,
+      /\bçözüm(?:ler|leri)?\b/i,
+    ];
+    const left = String(a || "");
+    const right = String(b || "");
+    for (const re of markers) {
+      if (re.test(left) !== re.test(right)) return true;
+    }
+    return false;
+  }
   function isClearMatchCandidate(opts) {
-    const clearScore = opts.clearScore ?? 0.75;
-    const minShared = opts.minShared ?? 2;
+    const clearScore = opts.clearScore ?? 0.85;
+    const minShared = opts.minShared ?? 3;
     if (!opts.typeOk) return false;
     if (pathLooksQuarantined(opts.pdfPath)) return false;
     if (romanVolumesConflict(opts.itemTitle, opts.pdfTitle)) return false;
+    if (softEditionMarkersConflict(opts.itemTitle, opts.pdfTitle)) return false;
     const shortTitle = opts.shortSize > 0 && opts.shortSize <= 2;
     const needShared = shortTitle
       ? Math.max(minShared, opts.shortSize)
       : minShared;
-    const needScore = shortTitle ? Math.max(clearScore, 0.9) : clearScore;
+    const needScore = shortTitle ? Math.max(clearScore, 0.95) : clearScore;
     return opts.shared >= needShared && opts.score >= needScore;
   }
 
@@ -199,9 +218,13 @@ test("roman volume I vs II and quarantine never clear", () => {
     ),
     true,
   );
+  assert.equal(romanVolumesConflict("Same Title I", "Same Title I"), false);
   assert.equal(
-    romanVolumesConflict("Same Title I", "Same Title I"),
-    false,
+    softEditionMarkersConflict(
+      "Fundamentals of Physics",
+      "Solutions Manual Fundamentals of Physics",
+    ),
+    true,
   );
   assert.equal(
     isClearMatchCandidate({
@@ -227,7 +250,19 @@ test("roman volume I vs II and quarantine never clear", () => {
     }),
     false,
   );
-  // Short title: need shared >= 2 even when shortSize is 1.
+  assert.equal(
+    isClearMatchCandidate({
+      typeOk: true,
+      score: 0.95,
+      shared: 4,
+      shortSize: 4,
+      pdfPath: "D:/ok/manual.pdf",
+      itemTitle: "Fundamentals of Physics",
+      pdfTitle: "Solutions Manual Fundamentals of Physics",
+    }),
+    false,
+  );
+  // Short title: need shared >= minShared (3) even when shortSize is 1.
   assert.equal(
     isClearMatchCandidate({
       typeOk: true,

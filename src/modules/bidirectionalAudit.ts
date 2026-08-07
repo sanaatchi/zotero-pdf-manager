@@ -1,4 +1,4 @@
-// @ajan: cursor · @etiket: katman-2, bidirectional-audit, item-pdf-cross, type-mismatch, match-suggest, apply, hash-verify, broken-repair, pathutils-safe, human-md-report, quarantine-only, clear-score-tighten
+// @ajan: cursor · @etiket: katman-2, bidirectional-audit, item-pdf-cross, type-mismatch, match-suggest, apply, hash-verify, broken-repair, pathutils-safe, human-md-report, quarantine-only, clear-score-tighten, soft-edition-guard, prefs-layout, soft-edition-gate, quarantine-skip, soft-neg, dry-run-ux
 /**
  * Unified two-ended PDF control report:
  *   item → PDF  (linked / broken / missing / type conflict / mismatch tags)
@@ -19,6 +19,7 @@ import {
   groupCrossFolderDuplicates,
   isDiskAuditDryRun,
   isUnderDisinda,
+  isUnderQuarantine,
   movePathToQuarantine,
   normalizeDiskAuditRoots,
   sameDirLinkedKeepers,
@@ -185,7 +186,29 @@ async function resolveReportDir(): Promise<string> {
 
 /** True when path sits under quarantine (warn / never clear-match). */
 export function pathLooksQuarantined(p: string): boolean {
-  return /_pdf_quarantine/i.test(String(p || ""));
+  return isUnderQuarantine(p);
+}
+
+/**
+ * Soft-negative markers: Solutions Manual ↔ textbook, instructor edition, etc.
+ * One-sided marker ⇒ never clear (wrong edition / companion book).
+ */
+export function softEditionMarkersConflict(a: string, b: string): boolean {
+  const markers = [
+    /\bsolutions?\b/i,
+    /\bmanual\b/i,
+    /\binstructor\b/i,
+    /\bworkbook\b/i,
+    /\banswer\s*keys?\b/i,
+    /\bteachers?\s*editions?\b/i,
+    /\bçözüm(?:ler|leri)?\b/i,
+  ];
+  const left = String(a || "");
+  const right = String(b || "");
+  for (const re of markers) {
+    if (re.test(left) !== re.test(right)) return true;
+  }
+  return false;
 }
 
 /**
@@ -225,8 +248,9 @@ export function romanVolumesConflict(a: string, b: string): boolean {
 
 /**
  * Whether a title-overlap candidate may be marked clear for auto-link.
- * Never clear quarantine paths or Roman I vs II mismatches; short titles
- * need full short-side coverage at a higher score floor.
+ * Never clear quarantine paths, Roman I vs II, or soft-negatives
+ * (manual/solutions); short titles need full short-side coverage at a
+ * higher score floor. Default bar: ≥3 shared tokens + score ≥0.85.
  */
 export function isClearMatchCandidate(opts: {
   typeOk: boolean;
@@ -239,16 +263,17 @@ export function isClearMatchCandidate(opts: {
   clearScore?: number;
   minShared?: number;
 }): boolean {
-  const clearScore = opts.clearScore ?? 0.75;
-  const minShared = opts.minShared ?? 2;
+  const clearScore = opts.clearScore ?? 0.85;
+  const minShared = opts.minShared ?? 3;
   if (!opts.typeOk) return false;
   if (pathLooksQuarantined(opts.pdfPath)) return false;
   if (romanVolumesConflict(opts.itemTitle, opts.pdfTitle)) return false;
+  if (softEditionMarkersConflict(opts.itemTitle, opts.pdfTitle)) return false;
   const shortTitle = opts.shortSize > 0 && opts.shortSize <= 2;
   const needShared = shortTitle
     ? Math.max(minShared, opts.shortSize)
     : minShared;
-  const needScore = shortTitle ? Math.max(clearScore, 0.9) : clearScore;
+  const needScore = shortTitle ? Math.max(clearScore, 0.95) : clearScore;
   return opts.shared >= needShared && opts.score >= needScore;
 }
 
@@ -510,6 +535,7 @@ export async function walkPdfEntries(
 
   const walk = async (dir: string, depth: number) => {
     if (depth > maxDepth) return;
+    if (isUnderQuarantine(dir)) return;
     if (!includeDisinda && isUnderDisinda(dir)) return;
     let children: string[] = [];
     try {
@@ -525,10 +551,12 @@ export async function walkPdfEntries(
         continue;
       }
       if (st?.type === "directory") {
+        if (isUnderQuarantine(child)) continue;
         await walk(child, depth + 1);
         continue;
       }
       if (!String(child).toLowerCase().endsWith(".pdf")) continue;
+      if (isUnderQuarantine(child)) continue;
       const size = Number(st?.size || 0);
       out.push({
         path: child,
@@ -649,16 +677,18 @@ export function suggestOrphanToMissingMatches(
   orphans: Array<{ path: string; file: string; filenameType: string | null }>,
   opts?: { minScore?: number; clearScore?: number; minShared?: number },
 ): BidirMatchSuggestion[] {
-  // Clear needs ≥2 shared tokens + high coverage — single-word overlaps
-  // ("tarihi", "sanat") produced false positives at 0.55 in live Kaynaklar.
+  // Clear defaults tightened in isClearMatchCandidate (≥3 shared, ≥0.85).
+  // Callers can still pass lower bars for weak-suggestion ranking.
   const minScore = opts?.minScore ?? 0.5;
-  const clearScore = opts?.clearScore ?? 0.75;
-  const minShared = opts?.minShared ?? 2;
+  const clearScore = opts?.clearScore ?? 0.85;
+  const minShared = opts?.minShared ?? 3;
   type Cand = BidirMatchSuggestion;
   const all: Cand[] = [];
   for (const item of missing) {
     for (const pdf of orphans) {
       try {
+        // Quarantine never enters match suggestions (inventory should already skip).
+        if (pathLooksQuarantined(pdf.path)) continue;
         let pdfTitle = String(pdf.file || "").replace(/\.pdf$/i, "");
         try {
           const meta = parseFilenameMetadata(pdf.file);
@@ -666,6 +696,9 @@ export function suggestOrphanToMissingMatches(
         } catch {
           /* keep stem */
         }
+        // Soft-negatives / volume I≠II: omit entirely (not merely weak).
+        if (softEditionMarkersConflict(item.title, pdfTitle)) continue;
+        if (romanVolumesConflict(item.title, pdfTitle)) continue;
         const detail = titleOverlapDetail(item.title, pdfTitle);
         let score = detail.score;
         const typeOk =
@@ -676,8 +709,6 @@ export function suggestOrphanToMissingMatches(
           score = Math.min(1, score + 0.05);
         }
         if (!typeOk) score *= 0.75;
-        if (romanVolumesConflict(item.title, pdfTitle)) score *= 0.5;
-        if (pathLooksQuarantined(pdf.path)) score *= 0.4;
         if (detail.shared < 1 || score < minScore) continue;
         const clear = isClearMatchCandidate({
           typeOk,
@@ -1317,9 +1348,10 @@ export async function applyBidirectionalSuggestions(opts?: {
           (r.kind === "orphan_to_missing" ||
             r.kind === "orphan_to_broken" ||
             r.kind === "broken_alt_path") &&
-          // Defense in depth: never auto-link quarantine even if old report.
+          // Defense in depth: never auto-link quarantine / soft-neg even if old report.
           !pathLooksQuarantined(r.pdfPath) &&
-          !romanVolumesConflict(r.itemTitle, r.pdfFile || r.pdfPath),
+          !romanVolumesConflict(r.itemTitle, r.pdfFile || r.pdfPath) &&
+          !softEditionMarkersConflict(r.itemTitle, r.pdfFile || r.pdfPath),
       )
     : [];
   const targets = !doMatches
@@ -1486,7 +1518,7 @@ export async function applyBidirectionalSuggestions(opts?: {
   new ztoolkit.ProgressWindow(config.addonName, { closeTime: 8000 })
     .createLine({
       text: dryRun
-        ? `Plan: ${planned} işlem`
+        ? `Uygulanmadı — deneme açık: Plan ${planned}`
         : `Çözüldü: ${linked} bağlandı, ${quarantined} karantina, ${failed} hata`,
       type: failed && !linked && !quarantined ? "fail" : "success",
     })
@@ -1532,18 +1564,30 @@ async function runBidirApplyProgress(
 
 /** Prefs «Çöz eşleşmeler» — links clear matches only (no copy quarantine). */
 export async function runBidirectionalApplyWithProgress(): Promise<void> {
-  await runBidirApplyProgress("İki uçlu eşleşmeler uygulanıyor…", {
-    matches: true,
-    quarantine: false,
-    clearOnly: true,
-  });
+  const dryRun = isDiskAuditDryRun();
+  await runBidirApplyProgress(
+    dryRun
+      ? "Plan yazılıyor (eşleşmeler, deneme)…"
+      : "İki uçlu eşleşmeler uygulanıyor…",
+    {
+      matches: true,
+      quarantine: false,
+      clearOnly: true,
+    },
+  );
 }
 
 /** Prefs «Yalnız kopyalar» — hash-verified cross-folder losers only. */
 export async function runBidirectionalCopiesApplyWithProgress(): Promise<void> {
-  await runBidirApplyProgress("Çapraz kopyalar karantinaya…", {
-    quarantineOnly: true,
-  });
+  const dryRun = isDiskAuditDryRun();
+  await runBidirApplyProgress(
+    dryRun
+      ? "Plan yazılıyor (kopyalar, deneme)…"
+      : "Çapraz kopyalar karantinaya…",
+    {
+      quarantineOnly: true,
+    },
+  );
 }
 
 export async function runBidirectionalAuditWithProgress(): Promise<BidirAuditSummary> {
