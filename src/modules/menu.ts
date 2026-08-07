@@ -2201,7 +2201,8 @@ function isFilenameMatched(prefName: string, filenameNoExt: string | null) {
 async function getAttachmentFilenameNoExt(attItem: Zotero.Item) {
   const file = (await attItem.getFilePathAsync()) as string;
   if (!file) return null;
-  const origFilename = PathUtils.split(file).pop() as string;
+  const origFilename = safeFilename(file);
+  if (!origFilename) return null;
   return origFilename.replace(filenameExtRE, "");
 }
 
@@ -2362,7 +2363,11 @@ async function renameFileInternal(attItem: Zotero.Item, retry = 0) {
     ztoolkit.log("renameFile skipped: attachment file not found", attItem);
     return;
   }
-  const origFilename = PathUtils.split(file).pop() as string;
+  const origFilename = safeFilename(file);
+  if (!origFilename) {
+    ztoolkit.log("renameFile skipped: empty filename", attItem);
+    return;
+  }
   if (!checkFileType(attItem, origFilename)) {
     ztoolkit.log("renameFile skipped: unsupported file type", origFilename);
     return;
@@ -2429,7 +2434,7 @@ async function renameFileInternal(attItem: Zotero.Item, retry = 0) {
   }
   const renamedFile = (await attItem.getFilePathAsync()) as string;
   const actualFilename = renamedFile
-    ? (PathUtils.split(renamedFile).pop() as string)
+    ? safeFilename(renamedFile) || newName
     : newName;
   if (shouldUpdateTitle) {
     ztoolkit.log("renameFile sync attachment title", {

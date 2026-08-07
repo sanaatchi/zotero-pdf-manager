@@ -149,6 +149,17 @@ test("menu.ts uses safe helpers on match/rename attachment paths", () => {
   assert.doesNotMatch(live, /PathUtils\.filename\s*\(/);
   assert.doesNotMatch(live, /PathUtils\.normalize\s*\(/);
   assert.doesNotMatch(live, /PathUtils\.parent\s*\(/);
+  // B8 residual: getAttachmentFilenameNoExt / renameFileInternal must not
+  // use raw PathUtils.split(...).pop() — prefer safeFilename.
+  assert.doesNotMatch(live, /PathUtils\.split\s*\(/);
+  assert.match(
+    menu,
+    /async function getAttachmentFilenameNoExt[\s\S]*?safeFilename\s*\(/,
+  );
+  assert.match(
+    menu,
+    /async function renameFileInternal[\s\S]*?safeFilename\s*\(/,
+  );
 });
 
 test("safeFilename never throws on attachments:/empty/relative", () => {

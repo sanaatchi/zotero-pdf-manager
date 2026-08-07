@@ -1,8 +1,8 @@
-<!-- @ajan: cursor · @etiket: katman-2, eksik-raporu, periodical, console-group-polyfill, author-line-gate, no-validate-subtitle-enrich, title-length-aware, isbn-prefer-any, tr-pdf-encoding, medium-cov-soft, mismatch-note-clear, validated-pdf-lock, field-weights-score, medium-author-noyear, openusing-finally, pdfkitap, dirzon, disk-audit, unit-interval-pref, tr-TR, disk-audit-apply, watch-root-kaynaklar, path-fold, bidirectional-audit, cross-folder-dupe, match-suggest, bidir-apply, hash-verify, broken-repair, pathutils-safe, human-md-report, quarantine-only, clear-score-tighten, prefs-layout, soft-edition-gate, dry-run-ux, bug-hunt-1-0-159 -->
+<!-- @ajan: cursor · @etiket: katman-2, eksik-raporu, periodical, console-group-polyfill, author-line-gate, no-validate-subtitle-enrich, title-length-aware, isbn-prefer-any, tr-pdf-encoding, medium-cov-soft, mismatch-note-clear, validated-pdf-lock, field-weights-score, medium-author-noyear, openusing-finally, pdfkitap, dirzon, disk-audit, unit-interval-pref, tr-TR, disk-audit-apply, watch-root-kaynaklar, path-fold, bidirectional-audit, cross-folder-dupe, match-suggest, bidir-apply, hash-verify, broken-repair, pathutils-safe, human-md-report, quarantine-only, clear-score-tighten, prefs-layout, soft-edition-gate, dry-run-ux, bug-hunt-1-0-160 -->
 
 # Cursor — Katman 2 Eksikler Raporu
 
-**Tarih:** 2026-08-07 · **Sürüm:** PDF Manager **v1.0.159** (bug hunt B1–B8 kapandı)  
+**Tarih:** 2026-08-07 · **Sürüm:** PDF Manager **v1.0.160** (bug hunt B1–B8 kapandı)  
 **Analiz:** ürün ↔ `referanslar/katman-2/` ↔ GitHub (Attanger, Zotadata, Zoplicate,
 ZotAssets, File Utility, Attachment Scanner, ozefe/yoktez).
 
@@ -11,16 +11,26 @@ ZotAssets, File Utility, Attachment Scanner, ozefe/yoktez).
 | Soru                      | Cevap                                                                                |
 | ------------------------- | ------------------------------------------------------------------------------------ |
 | Açık **P0** ürün boşluğu? | **Yok** — B1/B2 **v1.0.158** ile kapandı (apply rapor ayrımı + startup eşik onarımı) |
-| Açık **P1** ürün boşluğu? | **Yok** (bug hunt B1–B8) — kalan P1 = B10/B15 backlog (canvas); B8 **v1.0.159**      |
+| Açık **P1** ürün boşluğu? | **Yok** (B8 kalan `PathUtils.split` **v1.0.160**); B10/B15 backlog (canvas)          |
 | Gerçek açık iş?           | Checklist Bölüm B (kullanıcı) + isteğe bağlı P3 (B9–B15 canvas backlog)              |
 | Yeni zorunlu XPI portu?   | **Yok** — GitHub taraması yeni P1 üretmedi                                           |
 | İki uçlu denetim?         | **v1.0.157+** Plan yaz + Yalnız kopyalar / Çöz eşleşmeler; **158** apply last-* ayrı |
 
+### Son eklenen (v1.0.160 — B8 residual PathUtils.split kapandı)
+
+`getAttachmentFilenameNoExt` + `renameFileInternal` ham `PathUtils.split(...).pop()`
+→ `safeFilename()` (`src/utils/safePath.ts`). `tests/safePath.test.cjs`: `menu.ts`
+canlı kodda `PathUtils.split(` yok; helper’lar `safeFilename` kullanıyor.
+B1–B7 durumu değişmedi (158’de kapalı).
+
+| ID     | Öncelik | Madde                                            | Durum                        |
+| ------ | ------- | ------------------------------------------------ | ---------------------------- |
+| **B8** | **P1**  | `menu.ts` ham `PathUtils` (safe helper atlanmış) | ✅ **1.0.160** (split dahil) |
+
 ### Son eklenen (v1.0.159 — B8 PathUtils-safe menu)
 
-| ID     | Öncelik | Madde                                            | Durum                                    |
-| ------ | ------- | ------------------------------------------------ | ---------------------------------------- |
-| **B8** | **P1**  | `menu.ts` ham `PathUtils` (safe helper atlanmış) | ✅ **1.0.159** (`src/utils/safePath.ts`) |
+Match/rename/move + `pdfSources.findParentLinkedPdfByPath` → `safePath.ts`.
+Bağımsız inceleme: 3 ham `PathUtils.split` kaldı → **v1.0.160** ile kapandı.
 
 ### Son eklenen (v1.0.158 — bug hunt hotfix)
 
@@ -29,16 +39,16 @@ ZotAssets, File Utility, Attachment Scanner, ozefe/yoktez).
 handoff maddeleri) ile **aynı ID, farklı konu** — karıştırılmamalı.
 Kaynak: `pdf-manager-bug-hunt-157.canvas.tsx` (B1–B15); SSOT bu tablo.
 
-| ID     | Öncelik | Madde                                                       | Durum                           |
-| ------ | ------- | ----------------------------------------------------------- | ------------------------------- |
-| **B1** | **P0**  | Plan/Çöz → `last-bidirectional` Tara raporunu ezer          | ✅ **1.0.158** (`*-apply.*`)    |
-| **B2** | **P0**  | Eşik 0 startup'ta mass-attach riski                         | ✅ **1.0.158** (startup repair) |
-| **B3** | P1      | `broken_alt` zorla `clear:true` (soft basename)             | ✅ **1.0.158** (clear gate)     |
-| **B4** | P1      | Hash fail-open: `hashSkipped` → ad+boyut «verified»         | ✅ **1.0.158** (fail-closed)    |
-| **B5** | P1      | Hash fail-open: copy Çöz keeper yoksa `hashOk=true`         | ✅ **1.0.158** (re-fingerprint) |
-| **B6** | P1      | Confirm diyalog fail-open (`window` yok → `true`)           | ✅ **1.0.158** (fail-closed)    |
-| **B7** | P1      | `typeOk` +0.05 boost zayıf skoru clear eşiğinin üstüne iter | ✅ **1.0.158** (ranking-only)   |
-| **B8** | P1      | `menu.ts` ham `PathUtils` (safe helper atlanmış)            | ✅ **1.0.159** (`safePath.ts`)  |
+| ID     | Öncelik | Madde                                                       | Durum                                                |
+| ------ | ------- | ----------------------------------------------------------- | ---------------------------------------------------- |
+| **B1** | **P0**  | Plan/Çöz → `last-bidirectional` Tara raporunu ezer          | ✅ **1.0.158** (`*-apply.*`)                         |
+| **B2** | **P0**  | Eşik 0 startup'ta mass-attach riski                         | ✅ **1.0.158** (startup repair)                      |
+| **B3** | P1      | `broken_alt` zorla `clear:true` (soft basename)             | ✅ **1.0.158** (clear gate)                          |
+| **B4** | P1      | Hash fail-open: `hashSkipped` → ad+boyut «verified»         | ✅ **1.0.158** (fail-closed)                         |
+| **B5** | P1      | Hash fail-open: copy Çöz keeper yoksa `hashOk=true`         | ✅ **1.0.158** (re-fingerprint)                      |
+| **B6** | P1      | Confirm diyalog fail-open (`window` yok → `true`)           | ✅ **1.0.158** (fail-closed)                         |
+| **B7** | P1      | `typeOk` +0.05 boost zayıf skoru clear eşiğinin üstüne iter | ✅ **1.0.158** (ranking-only)                        |
+| **B8** | P1      | `menu.ts` ham `PathUtils` (safe helper atlanmış)            | ✅ **1.0.160** (159 move/match + 160 residual split) |
 
 ### Son eklenen (v1.0.157)
 
@@ -246,29 +256,29 @@ selective/behavior mevcut.
 
 ## Açık — sıralı
 
-| ID      | Öncelik         | Madde                                                                | Kanıt                                                                                                  | Öneri                                       |
-| ------- | --------------- | -------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------ | ------------------------------------------- |
-| **B1**  | ✅ **1.0.158**  | Plan/Çöz `last-bidirectional` ezmesi                                 | `writeBidirApplyReport` → `last-bidirectional-apply.*`; Tara last-* dokunulmaz                         | —                                           |
-| **B2**  | ✅ **1.0.158**  | Eşik 0 startup mass-attach                                           | `repairMatchThresholdPrefs` onStartup; `normalizeMatchThresholds` 0→default                            | —                                           |
-| **B3**  | ✅ **1.0.158**  | `broken_alt` zorla clear                                             | soft basename → `isClearMatchCandidate` + soft-edition/roman gates                                     | —                                           |
-| **B4**  | ✅ **1.0.158**  | Hash fail-open (fingerprint skip → verified)                         | `hashSkipped` → `verifiedLosers=[]` (fail-closed)                                                      | —                                           |
-| **B5**  | ✅ **1.0.158**  | Hash fail-open (copy apply keeper yok)                               | peer re-fingerprint; fail → skip                                                                       | —                                           |
-| **B6**  | ✅ **1.0.158**  | Confirm fail-open                                                    | `confirmApply` window yok → `false`                                                                    | —                                           |
-| **B7**  | ✅ **1.0.158**  | `typeOk` +0.05 clear eşiğini aşırır                                  | boost yalnız ranking (clear kararından sonra)                                                          | —                                           |
-| **B8**  | ✅ **1.0.159**  | `menu.ts` ham PathUtils → `safePath.ts`                              | Match/rename/move + `pdfSources.findParentLinkedPdfByPath`; tests `safePath.test.cjs`                  | —                                           |
-| **G0**  | ✅              | OA bridge SSRF loopback                                              | `oaBridgeUrl.ts` v1.0.50 — K1/K3 parity                                                                |
-| **G0b** | ✅              | Delete confirm: empty parent folder                                  | `formatDeleteConfirmLines` + locale footer · **v1.0.51**                                               |
-| **G0c** | ✅              | KP helper DRY mirror                                                 | `src/utils/kpToken.ts` = K1 `normalizeKp` · **v1.0.51**                                                |
-| **G1**  | ✅              | YÖKTez auto politikası                                               | **B kilit:** tez = yalnız manuel; auto = **doi**+dergipark+pmc. TR makale: dergipark + (DOI varsa) doi | dokümante 2026-08-02                        |
-| **G2**  | ✅ ajan / ⬜ UI | Checklist **v1.0.49** yenilendi                                      | `ZOTERO-KABUL-CHECKLIST.md` — Bölüm A otomatik ✅; Bölüm B Zotero smoke kullanıcı                      | Kullanıcı Bölüm B imzalayınca tam kapanır   |
-| **G3**  | ✅              | README Sci-Hub/LibGen metin                                          | düzeltildi 2026-08-02                                                                                  | auto yasak / manuel prefs ayrı              |
-| **G4**  | ✅              | REFERANS-PORT §4 stale                                               | düzeltildi                                                                                             | merger + contentMetadata ✅                 |
-| **G5**  | ✅              | AUTOMATION_PLAN durum bandı                                          | eklendi                                                                                                | teslim notu                                 |
-| **G6**  | **P3**          | `tr-TR` locale yok                                                   | `addon/locale/` = de / en-US / it-IT                                                                   | İsteğe bağlı                                |
-| **G7**  | **P3**          | format-metadata kalan (univ place, edition, preprint/webpage guard…) | rules dir vs `metadataNormalize.ts`                                                                    | Düşük ROI; journal abbr skip kalır          |
-| **G8**  | **P3**          | Menü hâlâ “Attanger” markası                                         | `menu.ts`                                                                                              | Kimlik cilası                               |
-| **G9**  | **P3**          | arxiv-workflow preprint↔published                                    | mirror yok                                                                                             | EN preprint ağır değilse skip               |
-| **G10** | **P3**          | Çoklu ek rol (ZotAssets benzeri)                                     | GitHub: Lyz-623/ZotAssets                                                                              | TR arşiv için zorunlu değil; araştırma notu |
+| ID      | Öncelik         | Madde                                                                | Kanıt                                                                                                                              | Öneri                                       |
+| ------- | --------------- | -------------------------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------- |
+| **B1**  | ✅ **1.0.158**  | Plan/Çöz `last-bidirectional` ezmesi                                 | `writeBidirApplyReport` → `last-bidirectional-apply.*`; Tara last-* dokunulmaz                                                     | —                                           |
+| **B2**  | ✅ **1.0.158**  | Eşik 0 startup mass-attach                                           | `repairMatchThresholdPrefs` onStartup; `normalizeMatchThresholds` 0→default                                                        | —                                           |
+| **B3**  | ✅ **1.0.158**  | `broken_alt` zorla clear                                             | soft basename → `isClearMatchCandidate` + soft-edition/roman gates                                                                 | —                                           |
+| **B4**  | ✅ **1.0.158**  | Hash fail-open (fingerprint skip → verified)                         | `hashSkipped` → `verifiedLosers=[]` (fail-closed)                                                                                  | —                                           |
+| **B5**  | ✅ **1.0.158**  | Hash fail-open (copy apply keeper yok)                               | peer re-fingerprint; fail → skip                                                                                                   | —                                           |
+| **B6**  | ✅ **1.0.158**  | Confirm fail-open                                                    | `confirmApply` window yok → `false`                                                                                                | —                                           |
+| **B7**  | ✅ **1.0.158**  | `typeOk` +0.05 clear eşiğini aşırır                                  | boost yalnız ranking (clear kararından sonra)                                                                                      | —                                           |
+| **B8**  | ✅ **1.0.160**  | `menu.ts` ham PathUtils → `safePath.ts`                              | 159: match/move + pdfSources; 160: `getAttachmentFilenameNoExt`/`renameFileInternal` → `safeFilename`; test `PathUtils.split(` yok | —                                           |
+| **G0**  | ✅              | OA bridge SSRF loopback                                              | `oaBridgeUrl.ts` v1.0.50 — K1/K3 parity                                                                                            |
+| **G0b** | ✅              | Delete confirm: empty parent folder                                  | `formatDeleteConfirmLines` + locale footer · **v1.0.51**                                                                           |
+| **G0c** | ✅              | KP helper DRY mirror                                                 | `src/utils/kpToken.ts` = K1 `normalizeKp` · **v1.0.51**                                                                            |
+| **G1**  | ✅              | YÖKTez auto politikası                                               | **B kilit:** tez = yalnız manuel; auto = **doi**+dergipark+pmc. TR makale: dergipark + (DOI varsa) doi                             | dokümante 2026-08-02                        |
+| **G2**  | ✅ ajan / ⬜ UI | Checklist **v1.0.49** yenilendi                                      | `ZOTERO-KABUL-CHECKLIST.md` — Bölüm A otomatik ✅; Bölüm B Zotero smoke kullanıcı                                                  | Kullanıcı Bölüm B imzalayınca tam kapanır   |
+| **G3**  | ✅              | README Sci-Hub/LibGen metin                                          | düzeltildi 2026-08-02                                                                                                              | auto yasak / manuel prefs ayrı              |
+| **G4**  | ✅              | REFERANS-PORT §4 stale                                               | düzeltildi                                                                                                                         | merger + contentMetadata ✅                 |
+| **G5**  | ✅              | AUTOMATION_PLAN durum bandı                                          | eklendi                                                                                                                            | teslim notu                                 |
+| **G6**  | **P3**          | `tr-TR` locale yok                                                   | `addon/locale/` = de / en-US / it-IT                                                                                               | İsteğe bağlı                                |
+| **G7**  | **P3**          | format-metadata kalan (univ place, edition, preprint/webpage guard…) | rules dir vs `metadataNormalize.ts`                                                                                                | Düşük ROI; journal abbr skip kalır          |
+| **G8**  | **P3**          | Menü hâlâ “Attanger” markası                                         | `menu.ts`                                                                                                                          | Kimlik cilası                               |
+| **G9**  | **P3**          | arxiv-workflow preprint↔published                                    | mirror yok                                                                                                                         | EN preprint ağır değilse skip               |
+| **G10** | **P3**          | Çoklu ek rol (ZotAssets benzeri)                                     | GitHub: Lyz-623/ZotAssets                                                                                                          | TR arşiv için zorunlu değil; araştırma notu |
 
 ### Yapılmaz (kilitli)
 
