@@ -8,21 +8,21 @@ ZotAssets, File Utility, Attachment Scanner, ozefe/yoktez).
 
 ## Özet hüküm
 
-| Soru                      | Cevap                                                              |
-| ------------------------- | ------------------------------------------------------------------ |
-| Açık **P1** ürün boşluğu? | **Yok** — insan okunur MD özet («Raporu aç») kapandı               |
-| Gerçek açık iş?           | Checklist Bölüm B (kullanıcı) + isteğe bağlı P3                    |
-| Yeni zorunlu XPI portu?   | **Yok** — GitHub taraması yeni P1 üretmedi                         |
-| İki uçlu denetim?         | **v1.0.155** JSON + `last-bidirectional.md`; Raporu aç → .md       |
+| Soru                      | Cevap                                                        |
+| ------------------------- | ------------------------------------------------------------ |
+| Açık **P1** ürün boşluğu? | **Yok** — insan okunur MD özet («Raporu aç») kapandı         |
+| Gerçek açık iş?           | Checklist Bölüm B (kullanıcı) + isteğe bağlı P3              |
+| Yeni zorunlu XPI portu?   | **Yok** — GitHub taraması yeni P1 üretmedi                   |
+| İki uçlu denetim?         | **v1.0.155** JSON + `last-bidirectional.md`; Raporu aç → .md |
 
 ### Son eklenen (v1.0.155)
 
-| Madde                    | Not                                                                                          |
-| ------------------------ | -------------------------------------------------------------------------------------------- |
-| İnsan okunur MD özet     | Tara → `last-bidirectional.md` (+ stamped); Raporu aç önce .md açar (JSON makine için kalır) |
-| MD bölümleri             | Özet sayılar, hash, net eşleşme, zayıf (~10), kırık/missing, Ne yapmalı; quarantine uyarısı |
-| Disk denetimi MD         | orphan / name-content / copy için `last-*.md`; Raporu aç .md tercih                          |
-| Toast                    | Tara sonrası «özet: last-bidirectional.md» (ve disk last-*.md)                               |
+| Madde                | Not                                                                                          |
+| -------------------- | -------------------------------------------------------------------------------------------- |
+| İnsan okunur MD özet | Tara → `last-bidirectional.md` (+ stamped); Raporu aç önce .md açar (JSON makine için kalır) |
+| MD bölümleri         | Özet sayılar, hash, net eşleşme, zayıf (~10), kırık/missing, Ne yapmalı; quarantine uyarısı  |
+| Disk denetimi MD     | orphan / name-content / copy için `last-*.md`; Raporu aç .md tercih                          |
+| Toast                | Tara sonrası «özet: last-bidirectional.md» (ve disk last-*.md)                               |
 
 ### Son eklenen (v1.0.154)
 

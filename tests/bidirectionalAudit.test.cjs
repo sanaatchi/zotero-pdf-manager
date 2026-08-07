@@ -81,10 +81,10 @@ test("formatBidirectionalMarkdown includes Turkish sections + quarantine warn", 
     );
     lines.push("## Net eşleşmeler");
     for (const r of clear) {
-      const warn = pathLooksQuarantined(r.pdfPath)
-        ? "⚠ `_pdf_quarantine`"
-        : "";
-      lines.push(`| \`${r.itemKey}\` | ${r.itemTitle} | ${r.pdfFile} | ${r.score} | ${warn} |`);
+      const warn = pathLooksQuarantined(r.pdfPath) ? "⚠ `_pdf_quarantine`" : "";
+      lines.push(
+        `| \`${r.itemKey}\` | ${r.itemTitle} | ${r.pdfFile} | ${r.score} | ${warn} |`,
+      );
     }
     lines.push("## Zayıf öneriler (ilk ~10)");
     for (const r of weak.slice(0, 10)) {

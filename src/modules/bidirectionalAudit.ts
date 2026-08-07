@@ -212,7 +212,8 @@ export function formatBidirectionalMarkdown(payload: any): string {
   const weak = rows.filter((r) => r && !r.clear);
   const clearCount = Number(matchMeta.clear ?? clear.length) || 0;
   const weakCount =
-    Number(matchMeta.weak ?? weak.length) || Math.max(0, rows.length - clear.length);
+    Number(matchMeta.weak ?? weak.length) ||
+    Math.max(0, rows.length - clear.length);
   const brokenSamples: any[] = Array.isArray(payload?.itemRows)
     ? payload.itemRows.filter((r: any) => r?.status === "broken").slice(0, 8)
     : [];
@@ -245,7 +246,9 @@ export function formatBidirectionalMarkdown(payload: any): string {
   lines.push(`| Çoklu ek (multi) | ${Number(items.multi) || 0} |`);
   lines.push(`| Tür çatışması | ${Number(items.typeConflict) || 0} |`);
   lines.push(`| PDF orphan | ${Number(pdfs.orphan) || 0} |`);
-  lines.push(`| Çapraz klasör grubu | ${Number(pdfs.crossFolderGroups) || 0} |`);
+  lines.push(
+    `| Çapraz klasör grubu | ${Number(pdfs.crossFolderGroups) || 0} |`,
+  );
   lines.push(
     `| Çapraz kopya (unlinked) | ${Number(pdfs.crossFolderUnlinkedLosers) || 0} |`,
   );
@@ -311,7 +314,8 @@ export function formatBidirectionalMarkdown(payload: any): string {
     if (brokenSamples.length) {
       lines.push("**Kırık ekler:**");
       for (const r of brokenSamples) {
-        const p0 = Array.isArray(r.paths) && r.paths[0] ? safeFilename(r.paths[0]) : "—";
+        const p0 =
+          Array.isArray(r.paths) && r.paths[0] ? safeFilename(r.paths[0]) : "—";
         lines.push(
           `- \`${mdEsc(r.key)}\` · ${mdEsc(r.title).slice(0, 70)} · \`${mdEsc(p0)}\``,
         );
@@ -321,9 +325,7 @@ export function formatBidirectionalMarkdown(payload: any): string {
     if (missingSamples.length) {
       lines.push("**PDF’siz öğeler:**");
       for (const r of missingSamples) {
-        lines.push(
-          `- \`${mdEsc(r.key)}\` · ${mdEsc(r.title).slice(0, 70)}`,
-        );
+        lines.push(`- \`${mdEsc(r.key)}\` · ${mdEsc(r.title).slice(0, 70)}`);
       }
       lines.push("");
     }
@@ -369,7 +371,11 @@ export function formatBidirectionalMarkdown(payload: any): string {
   return lines.join("\n");
 }
 
-async function writeBidirMarkdown(dir: string, payload: unknown, stampedJsonPath: string): Promise<string> {
+async function writeBidirMarkdown(
+  dir: string,
+  payload: unknown,
+  stampedJsonPath: string,
+): Promise<string> {
   const md = formatBidirectionalMarkdown(payload);
   const lastMd = PathUtils.join(dir, "last-bidirectional.md");
   const stampedMd = String(stampedJsonPath || "").replace(/\.json$/i, ".md");

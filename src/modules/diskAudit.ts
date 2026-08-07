@@ -479,10 +479,7 @@ function mdEscLine(s: string): string {
 }
 
 /** Pure: short Turkish Markdown for orphan / nameContent / copy JSON payloads. */
-export function formatDiskAuditMarkdown(
-  kind: string,
-  payload: any,
-): string {
+export function formatDiskAuditMarkdown(kind: string, payload: any): string {
   const generatedAt = String(payload?.generatedAt || new Date().toISOString());
   const lines: string[] = [];
   const title =
@@ -507,7 +504,9 @@ export function formatDiskAuditMarkdown(
       : [];
     lines.push("## Özet sayılar");
     lines.push("");
-    lines.push(`- Kayıtsız PDF: **${Number(payload?.orphanCount ?? orphans.length) || 0}**`);
+    lines.push(
+      `- Kayıtsız PDF: **${Number(payload?.orphanCount ?? orphans.length) || 0}**`,
+    );
     lines.push(`- Boş klasör: **${Number(payload?.emptyDirs) || 0}**`);
     lines.push("");
     lines.push("## Örnekler (ilk ~12)");
@@ -525,7 +524,9 @@ export function formatDiskAuditMarkdown(
     lines.push("");
     lines.push("## Ne yapmalı");
     lines.push("");
-    lines.push("- Raporu gözden geçir → **Çöz** ile kimlik oluştur / karantinaya al.");
+    lines.push(
+      "- Raporu gözden geçir → **Çöz** ile kimlik oluştur / karantinaya al.",
+    );
     lines.push("- Dry-run açıksa önce plan dosyası yazılır.");
   } else if (
     payload?.kind === "nameContent" ||
@@ -539,11 +540,15 @@ export function formatDiskAuditMarkdown(
     lines.push("## Özet sayılar");
     lines.push("");
     lines.push(`- Taranan: **${Number(c.scanned) || 0}**`);
-    lines.push(`- OK: **${Number(c.ok) || 0}** · zayıf: **${Number(c.weak) || 0}**`);
+    lines.push(
+      `- OK: **${Number(c.ok) || 0}** · zayıf: **${Number(c.weak) || 0}**`,
+    );
     lines.push(
       `- Uyumsuz: **${Number(c.mismatch) || 0}** · net uyumsuz: **${Number(c.clearMismatch) || 0}**`,
     );
-    lines.push(`- Yeniden adlandırma önerisi: **${Number(c.renameProposals) || 0}**`);
+    lines.push(
+      `- Yeniden adlandırma önerisi: **${Number(c.renameProposals) || 0}**`,
+    );
     if (c.bridgeUnavailable != null) {
       lines.push(`- Köprü yok: **${Number(c.bridgeUnavailable) || 0}**`);
     }
@@ -596,7 +601,9 @@ export function formatDiskAuditMarkdown(
     lines.push("");
     lines.push("## Ne yapmalı");
     lines.push("");
-    lines.push("- **Çöz**: doğrulanmış kopyaları `_pdf_quarantine/copies` altına taşı.");
+    lines.push(
+      "- **Çöz**: doğrulanmış kopyaları `_pdf_quarantine/copies` altına taşı.",
+    );
   }
   lines.push("");
   return lines.join("\n");
