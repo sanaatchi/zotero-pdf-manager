@@ -24,9 +24,9 @@ import {
 
 /** Swap Çöz ↔ Plan yaz labels when dry-run checkbox toggles. */
 function syncDiskAuditApplyButtonLabels(doc: Document) {
-  const dryEl = doc.querySelector("#pdf-disk-audit-dry-run") as
-    | HTMLInputElement
-    | null;
+  const dryEl = doc.querySelector(
+    "#pdf-disk-audit-dry-run",
+  ) as HTMLInputElement | null;
   const dry =
     typeof dryEl?.checked === "boolean" ? dryEl.checked : isDiskAuditDryRun();
   const pairs: Array<{ id: string; applyL10n: string; planL10n: string }> = [

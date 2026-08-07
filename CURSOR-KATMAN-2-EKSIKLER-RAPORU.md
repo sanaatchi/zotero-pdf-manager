@@ -1,4 +1,4 @@
-<!-- @ajan: cursor · @etiket: katman-2, eksik-raporu, periodical, console-group-polyfill, author-line-gate, no-validate-subtitle-enrich, title-length-aware, isbn-prefer-any, tr-pdf-encoding, medium-cov-soft, mismatch-note-clear, validated-pdf-lock, field-weights-score, medium-author-noyear, openusing-finally, pdfkitap, dirzon, disk-audit, unit-interval-pref, tr-TR, disk-audit-apply, watch-root-kaynaklar, path-fold, bidirectional-audit, cross-folder-dupe, match-suggest, bidir-apply, hash-verify, broken-repair, pathutils-safe, human-md-report, quarantine-only, clear-score-tighten, prefs-layout, soft-edition-gate -->
+<!-- @ajan: cursor · @etiket: katman-2, eksik-raporu, periodical, console-group-polyfill, author-line-gate, no-validate-subtitle-enrich, title-length-aware, isbn-prefer-any, tr-pdf-encoding, medium-cov-soft, mismatch-note-clear, validated-pdf-lock, field-weights-score, medium-author-noyear, openusing-finally, pdfkitap, dirzon, disk-audit, unit-interval-pref, tr-TR, disk-audit-apply, watch-root-kaynaklar, path-fold, bidirectional-audit, cross-folder-dupe, match-suggest, bidir-apply, hash-verify, broken-repair, pathutils-safe, human-md-report, quarantine-only, clear-score-tighten, prefs-layout, soft-edition-gate, dry-run-ux -->
 
 # Cursor — Katman 2 Eksikler Raporu
 
@@ -10,19 +10,20 @@ ZotAssets, File Utility, Attachment Scanner, ozefe/yoktez).
 
 | Soru                      | Cevap                                                              |
 | ------------------------- | ------------------------------------------------------------------ |
-| Açık **P1** ürün boşluğu? | **Yok** — prefs düzeni + soft-edition clear kapısı                 |
+| Açık **P1** ürün boşluğu? | **Yok** — P0 hata analizi (Çöz ayrımı + dry-run UX) kapandı        |
 | Gerçek açık iş?           | Checklist Bölüm B (kullanıcı) + isteğe bağlı P3                    |
 | Yeni zorunlu XPI portu?   | **Yok** — GitHub taraması yeni P1 üretmedi                         |
-| İki uçlu denetim?         | **v1.0.157** düzenli prefs + Yalnız kopyalar / Çöz eşleşmeler      |
+| İki uçlu denetim?         | **v1.0.157** Plan yaz düğmeleri + Yalnız kopyalar / Çöz eşleşmeler |
 
 ### Son eklenen (v1.0.157)
 
-| Madde                   | Not                                                                                   |
-| ----------------------- | ------------------------------------------------------------------------------------- |
-| Prefs hiyerarşi         | Kapsam → İki uçlu (Tara/Rapor/Çöz eşleşmeler/Yalnız kopyalar) → kompakt 1–3 satırlar |
-| Kısa yardım             | Tek intro + detail-help; satır başına tekrarlayan açıklama yok                        |
-| Soft-edition clear gate | Solutions Manual / instructor / çözüm vs ana kitap → asla clear                       |
-| Clear skor              | Varsayılan ≥3 shared + ≥0.85 (kısa ≥0.95); karantina walk’tan hariç                   |
+| Madde                    | Not                                                                                  |
+| ------------------------ | ------------------------------------------------------------------------------------ |
+| Dry-run düğme etiketleri | Deneme açık → «Plan yaz»; kapalı → «Çöz eşleşmeler» / «Yalnız kopyalar» / «Çöz»      |
+| Toast netliği            | Dry-run: «Uygulanmadı — deneme açık: Plan N»                                         |
+| Prefs hiyerarşi          | Kapsam → İki uçlu (Tara/Rapor/Çöz eşleşmeler/Yalnız kopyalar) → kompakt 1–3 satırlar |
+| Soft-edition clear gate  | Solutions Manual / instructor / çözüm vs ana kitap → asla clear                      |
+| Clear skor               | Varsayılan ≥3 shared + ≥0.85 (kısa ≥0.95); `_pdf_quarantine` walk/match dışı         |
 
 ### Son eklenen (v1.0.156)
 
