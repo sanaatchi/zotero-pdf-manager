@@ -34,7 +34,7 @@ test("bidirectionalAudit module surface", () => {
   assert.match(src, /suggestAlternatePaths/);
   assert.match(src, /safeFilename/);
   assert.match(src, /safePathKey/);
-  assert.match(src, /NS_ERROR_FILE_UNRECOGNIZED_PATH|attachments:/);
+  assert.match(src, /from ["']\.\.\/utils\/safePath["']/);
   assert.match(src, /suggestOrphanToMissingMatches/);
   assert.match(src, /basenameSoftVariants/);
   assert.match(src, /orphan_to_broken/);

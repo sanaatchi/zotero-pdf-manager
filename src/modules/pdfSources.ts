@@ -1,6 +1,7 @@
-// @ajan: cursor · @etiket: katman-2, pdf-sources, bridge-guard, ocr-haystack, content-validate, nosource-sync, pdf-candidate-split, mismatch-reason, encoding-gate, re-ocr-validate, tr-i-fold, sentence-tr-override, author-line-gate, no-validate-subtitle-enrich, title-length-aware, isbn-conflict-soft, tr-pdf-encoding, medium-cov-soft, medium-author-noyear, field-weights-score, validated-pdf-lock, pdfkitap, dirzon, review-reason-coverage, zero-threshold-default
+// @ajan: cursor · @etiket: katman-2, pdf-sources, bridge-guard, ocr-haystack, content-validate, nosource-sync, pdf-candidate-split, mismatch-reason, encoding-gate, re-ocr-validate, tr-i-fold, sentence-tr-override, author-line-gate, no-validate-subtitle-enrich, title-length-aware, isbn-conflict-soft, tr-pdf-encoding, medium-cov-soft, medium-author-noyear, field-weights-score, validated-pdf-lock, pdfkitap, dirzon, review-reason-coverage, zero-threshold-default, pathutils-safe
 import { getString } from "../utils/locale";
 import { getPref } from "../utils/prefs";
+import { safePathKey } from "../utils/safePath";
 import {
   CONTENT_SCORE,
   contentScoreKind,
@@ -1674,9 +1675,8 @@ export async function findParentLinkedPdfByPath(
   item: Zotero.Item,
   filePath: string,
 ): Promise<Zotero.Item | null> {
-  const want = PathUtils.normalize(String(filePath || ""));
-  if (!want) return null;
-  const wantKey = want.replace(/\\/g, "/").toLowerCase();
+  const wantKey = safePathKey(String(filePath || ""));
+  if (!wantKey) return null;
   for (const attachmentID of item.getAttachments()) {
     const att = Zotero.Items.get(attachmentID) as Zotero.Item | undefined;
     if (!att) continue;
@@ -1689,9 +1689,7 @@ export async function findParentLinkedPdfByPath(
         (att as any).getFilePath?.() ||
         "";
       if (!p) continue;
-      const got = PathUtils.normalize(String(p))
-        .replace(/\\/g, "/")
-        .toLowerCase();
+      const got = safePathKey(String(p));
       if (got !== wantKey) continue;
       // Path match alone is not enough — OneDrive placeholders / broken
       // linked_file rows still report a path while fileExists() is false.

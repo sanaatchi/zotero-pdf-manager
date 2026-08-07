@@ -11,6 +11,7 @@
  */
 import { config } from "../../package.json";
 import { writeJsonAtomic, writeUtf8Atomic } from "../utils/atomicJson";
+import { safeFilename, safeParent, safePathKey } from "../utils/safePath";
 import {
   CrossFolderFile,
   crossFolderUnlinkedLosers,
@@ -27,6 +28,8 @@ import {
 } from "./diskAudit";
 import { parseFilenameMetadata } from "./filenameMetadata";
 import { getPref } from "../utils/prefs";
+
+export { safeFilename, safePathKey, safeParent };
 
 declare const IOUtils: any;
 declare const PathUtils: any;
@@ -99,54 +102,6 @@ export interface BidirAuditSummary {
     clear: number;
     weak: number;
   };
-}
-
-/**
- * PathUtils.filename/normalize throw NS_ERROR_FILE_UNRECOGNIZED_PATH on
- * empty, relative, or ``attachments:…`` strings. Never call them raw.
- */
-export function safeFilename(path: string): string {
-  const raw = String(path || "").trim();
-  if (!raw) return "";
-  try {
-    // Strip Zotero linked-attachment prefix before PathUtils.
-    const stripped = raw.replace(/^attachments:/i, "");
-    if (/^[a-zA-Z]:[\\/]/.test(stripped) || stripped.startsWith("\\\\")) {
-      return String(PathUtils.filename(stripped) || "");
-    }
-  } catch {
-    /* fall through */
-  }
-  const parts = raw.replace(/\\/g, "/").split("/");
-  return parts[parts.length - 1] || raw;
-}
-
-export function safePathKey(p: string): string {
-  const raw = String(p || "").trim();
-  if (!raw) return "";
-  try {
-    if (/^[a-zA-Z]:[\\/]/.test(raw) || raw.startsWith("\\\\")) {
-      return PathUtils.normalize(raw).normalize("NFC").toLowerCase();
-    }
-  } catch {
-    /* fall through */
-  }
-  return raw.normalize("NFC").toLowerCase().replace(/\\/g, "/");
-}
-
-export function safeParent(path: string): string | null {
-  const raw = String(path || "").trim();
-  if (!raw) return null;
-  try {
-    if (/^[a-zA-Z]:[\\/]/.test(raw) || raw.startsWith("\\\\")) {
-      return PathUtils.parent?.(raw) || null;
-    }
-  } catch {
-    /* fall through */
-  }
-  const norm = raw.replace(/\\/g, "/");
-  const i = norm.lastIndexOf("/");
-  return i > 0 ? norm.slice(0, i) : null;
 }
 
 function pathKey(p: string): string {

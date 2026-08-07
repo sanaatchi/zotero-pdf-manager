@@ -1,8 +1,8 @@
-<!-- @ajan: cursor · @etiket: katman-2, eksik-raporu, periodical, console-group-polyfill, author-line-gate, no-validate-subtitle-enrich, title-length-aware, isbn-prefer-any, tr-pdf-encoding, medium-cov-soft, mismatch-note-clear, validated-pdf-lock, field-weights-score, medium-author-noyear, openusing-finally, pdfkitap, dirzon, disk-audit, unit-interval-pref, tr-TR, disk-audit-apply, watch-root-kaynaklar, path-fold, bidirectional-audit, cross-folder-dupe, match-suggest, bidir-apply, hash-verify, broken-repair, pathutils-safe, human-md-report, quarantine-only, clear-score-tighten, prefs-layout, soft-edition-gate, dry-run-ux, bug-hunt-1-0-158 -->
+<!-- @ajan: cursor · @etiket: katman-2, eksik-raporu, periodical, console-group-polyfill, author-line-gate, no-validate-subtitle-enrich, title-length-aware, isbn-prefer-any, tr-pdf-encoding, medium-cov-soft, mismatch-note-clear, validated-pdf-lock, field-weights-score, medium-author-noyear, openusing-finally, pdfkitap, dirzon, disk-audit, unit-interval-pref, tr-TR, disk-audit-apply, watch-root-kaynaklar, path-fold, bidirectional-audit, cross-folder-dupe, match-suggest, bidir-apply, hash-verify, broken-repair, pathutils-safe, human-md-report, quarantine-only, clear-score-tighten, prefs-layout, soft-edition-gate, dry-run-ux, bug-hunt-1-0-159 -->
 
 # Cursor — Katman 2 Eksikler Raporu
 
-**Tarih:** 2026-08-07 · **Sürüm:** PDF Manager **v1.0.158** (bug hunt B1–B7 kapandı; B8 açık)  
+**Tarih:** 2026-08-07 · **Sürüm:** PDF Manager **v1.0.159** (bug hunt B1–B8 kapandı)  
 **Analiz:** ürün ↔ `referanslar/katman-2/` ↔ GitHub (Attanger, Zotadata, Zoplicate,
 ZotAssets, File Utility, Attachment Scanner, ozefe/yoktez).
 
@@ -11,10 +11,16 @@ ZotAssets, File Utility, Attachment Scanner, ozefe/yoktez).
 | Soru                      | Cevap                                                                                |
 | ------------------------- | ------------------------------------------------------------------------------------ |
 | Açık **P0** ürün boşluğu? | **Yok** — B1/B2 **v1.0.158** ile kapandı (apply rapor ayrımı + startup eşik onarımı) |
-| Açık **P1** ürün boşluğu? | **Var** — **B8** (`menu.ts` ham PathUtils); B3–B7 **v1.0.158** ile kapandı           |
-| Gerçek açık iş?           | B8 + Checklist Bölüm B (kullanıcı) + isteğe bağlı P3 (B9–B15 canvas backlog)         |
+| Açık **P1** ürün boşluğu? | **Yok** (bug hunt B1–B8) — kalan P1 = B10/B15 backlog (canvas); B8 **v1.0.159**      |
+| Gerçek açık iş?           | Checklist Bölüm B (kullanıcı) + isteğe bağlı P3 (B9–B15 canvas backlog)              |
 | Yeni zorunlu XPI portu?   | **Yok** — GitHub taraması yeni P1 üretmedi                                           |
 | İki uçlu denetim?         | **v1.0.157+** Plan yaz + Yalnız kopyalar / Çöz eşleşmeler; **158** apply last-* ayrı |
+
+### Son eklenen (v1.0.159 — B8 PathUtils-safe menu)
+
+| ID     | Öncelik | Madde                                            | Durum                                    |
+| ------ | ------- | ------------------------------------------------ | ---------------------------------------- |
+| **B8** | **P1**  | `menu.ts` ham `PathUtils` (safe helper atlanmış) | ✅ **1.0.159** (`src/utils/safePath.ts`) |
 
 ### Son eklenen (v1.0.158 — bug hunt hotfix)
 
@@ -32,7 +38,7 @@ Kaynak: `pdf-manager-bug-hunt-157.canvas.tsx` (B1–B15); SSOT bu tablo.
 | **B5** | P1      | Hash fail-open: copy Çöz keeper yoksa `hashOk=true`         | ✅ **1.0.158** (re-fingerprint) |
 | **B6** | P1      | Confirm diyalog fail-open (`window` yok → `true`)           | ✅ **1.0.158** (fail-closed)    |
 | **B7** | P1      | `typeOk` +0.05 boost zayıf skoru clear eşiğinin üstüne iter | ✅ **1.0.158** (ranking-only)   |
-| **B8** | P1      | `menu.ts` ham `PathUtils` (safe helper atlanmış)            | **açık**                        |
+| **B8** | P1      | `menu.ts` ham `PathUtils` (safe helper atlanmış)            | ✅ **1.0.159** (`safePath.ts`)  |
 
 ### Son eklenen (v1.0.157)
 
@@ -249,7 +255,7 @@ selective/behavior mevcut.
 | **B5**  | ✅ **1.0.158**  | Hash fail-open (copy apply keeper yok)                               | peer re-fingerprint; fail → skip                                                                       | —                                           |
 | **B6**  | ✅ **1.0.158**  | Confirm fail-open                                                    | `confirmApply` window yok → `false`                                                                    | —                                           |
 | **B7**  | ✅ **1.0.158**  | `typeOk` +0.05 clear eşiğini aşırır                                  | boost yalnız ranking (clear kararından sonra)                                                          | —                                           |
-| **B8**  | P1              | `menu.ts` ham `PathUtils` (safe helper atlanmış)                     | bug hunt; Match Attachment `PathUtils.filename` / `normalize`                                          | sonraki patch                               |
+| **B8**  | ✅ **1.0.159**  | `menu.ts` ham PathUtils → `safePath.ts`                              | Match/rename/move + `pdfSources.findParentLinkedPdfByPath`; tests `safePath.test.cjs`                  | —                                           |
 | **G0**  | ✅              | OA bridge SSRF loopback                                              | `oaBridgeUrl.ts` v1.0.50 — K1/K3 parity                                                                |
 | **G0b** | ✅              | Delete confirm: empty parent folder                                  | `formatDeleteConfirmLines` + locale footer · **v1.0.51**                                               |
 | **G0c** | ✅              | KP helper DRY mirror                                                 | `src/utils/kpToken.ts` = K1 `normalizeKp` · **v1.0.51**                                                |
@@ -299,11 +305,11 @@ Yeni **zorunlu** mirror veya port önerilmez.
 
 ## Sonraki 3 adım (öneri)
 
-1. **B8** — `menu.ts` PathUtils → `safeFilename` / `safePathKey` (+ matchAttachment toast)
-2. **G2 kalan** — `ZOTERO-KABUL-CHECKLIST.md` Bölüm B (Zotero UI smoke) kullanıcı imzası
-3. İsteğe bağlı P3 — G6–G10 / canvas B9–B15
+1. **G2 kalan** — `ZOTERO-KABUL-CHECKLIST.md` Bölüm B (Zotero UI smoke) kullanıcı imzası
+2. İsteğe bağlı P3 — G6–G10 / canvas B9–B15 (B10 clear içerik, B15 stale apply)
+3. _(B1–B8 kapalı — v1.0.158 + v1.0.159)_
 
-_(G2 ajan tarafı: checklist v1.0.49 + otomatik Bölüm A imzalandı. G3–G5 doküman hijyeni uygulandı. Bug hunt B1–B7 → v1.0.158.)_
+_(G2 ajan tarafı: checklist v1.0.49 + otomatik Bölüm A imzalandı. G3–G5 doküman hijyeni uygulandı. Bug hunt B1–B7 → v1.0.158; B8 → v1.0.159.)_
 
 ---
 

@@ -1,4 +1,4 @@
-/* @ajan: cursor · @etiket: katman-2, menu, match-rename-move, mismatch-rematch, isbn-phone-filter, validated-pdf-lock, openusing-finally */
+/* @ajan: cursor · @etiket: katman-2, menu, match-rename-move, mismatch-rematch, isbn-phone-filter, validated-pdf-lock, openusing-finally, pathutils-safe */
 /*eslint no-constant-condition: ["error", { "checkLoops": false }]*/
 import { getString } from "../utils/locale";
 import { config } from "../../package.json";
@@ -11,6 +11,12 @@ import {
   getShortcutText,
 } from "../utils/shortcut";
 import { compileUserRegex, safeRegexTest } from "../utils/safeRegex";
+import {
+  safeFilename,
+  safeNormalize,
+  safeParent,
+  safePathKey,
+} from "../utils/safePath";
 import {
   attachPdfFromUrl,
   downloadPdfForSelectedItems,
@@ -1294,7 +1300,7 @@ export default class Menu {
             if ((await fp.show()) != fp.returnOK) {
               return false;
             }
-            const filename = PathUtils.normalize(fp.file);
+            const filename = safeNormalize(fp.file);
             // #42 Multiple extensions may be included, separated by a semicolon and a space.
             // const filename = await new ztoolkit.FilePicker(
             //   "Select Application",
@@ -1403,8 +1409,8 @@ async function matchAttachment() {
   {
     const seen = new Set<string>();
     files = files.filter((f) => {
-      const key = PathUtils.normalize(f.path);
-      if (seen.has(key)) return false;
+      const key = safePathKey(f.path);
+      if (!key || seen.has(key)) return false;
       seen.add(key);
       return true;
     });
@@ -1423,9 +1429,7 @@ async function matchAttachment() {
     return;
   }
   const inboxRoot =
-    typeof sourceDir === "string" && sourceDir
-      ? PathUtils.normalize(sourceDir)
-      : "";
+    typeof sourceDir === "string" && sourceDir ? safeNormalize(sourceDir) : "";
   const readPDFTitle = getPref("readPDFtitle") as string;
   ztoolkit.log("read PDF title: ", readPDFTitle);
   // Paths already linked to another parent must not rematch onto a second item.
@@ -1873,8 +1877,7 @@ async function reuseOrRepairMatchedAttachment(
       attachment.isLinkedFileAttachment() &&
       existingPath &&
       normalizeAttachmentMatchName(String(attachmentName)) === matchedName &&
-      PathUtils.normalize(existingPath) ===
-        PathUtils.normalize(matchedFile.path)
+      safePathKey(existingPath) === safePathKey(matchedFile.path)
     ) {
       ztoolkit.log("Matched file is already attached", attachment.id);
       return attachment;
@@ -1972,19 +1975,16 @@ async function resolveMatchAttachmentSearchRoots(
   const seen = new Set<string>();
   const add = async (dir: string | null | undefined) => {
     if (!dir) return;
-    let normalized: string;
-    try {
-      normalized = PathUtils.normalize(dir);
-    } catch {
-      return;
-    }
-    if (seen.has(normalized)) return;
+    const normalized = safeNormalize(dir);
+    if (!normalized) return;
+    const key = safePathKey(normalized);
+    if (!key || seen.has(key)) return;
     try {
       if (!(await pathExists(normalized, "directory"))) return;
     } catch {
       return;
     }
-    seen.add(normalized);
+    seen.add(key);
     roots.push(normalized);
   };
   await add(sourceDir);
@@ -2002,17 +2002,10 @@ async function resolveMatchAttachmentSearchRoots(
 
 function isPathUnderRoot(filePath: string, rootDir: string): boolean {
   if (!rootDir) return false;
-  try {
-    const file = PathUtils.normalize(filePath);
-    const root = PathUtils.normalize(rootDir);
-    return (
-      file === root ||
-      file.startsWith(`${root}\\`) ||
-      file.startsWith(`${root}/`)
-    );
-  } catch {
-    return false;
-  }
+  const file = safePathKey(filePath);
+  const root = safePathKey(rootDir);
+  if (!file || !root) return false;
+  return file === root || file.startsWith(`${root}/`);
 }
 
 async function collectMatchAttachmentFiles(
@@ -2024,9 +2017,10 @@ async function collectMatchAttachmentFiles(
 
   while (pendingDirs.length) {
     const dir = pendingDirs.pop() as string;
-    const normalizedDir = PathUtils.normalize(dir);
-    if (visitedDirs.has(normalizedDir)) continue;
-    visitedDirs.add(normalizedDir);
+    const normalizedDir = safeNormalize(dir);
+    const visitKey = safePathKey(normalizedDir);
+    if (!visitKey || visitedDirs.has(visitKey)) continue;
+    visitedDirs.add(visitKey);
 
     let children: string[];
     try {
@@ -2052,8 +2046,8 @@ async function collectMatchAttachmentFiles(
       if (stat.type === "directory") {
         pendingDirs.push(childPath);
       } else {
-        const name = PathUtils.filename(childPath);
-        if (/\.pdf$/i.test(name)) {
+        const name = safeFilename(childPath);
+        if (name && /\.pdf$/i.test(name)) {
           files.push({
             isDir: false,
             name,
@@ -2626,8 +2620,8 @@ async function _moveFile(
   shouldCancel: () => boolean,
 ) {
   if (shouldCancel()) return;
-  const filename = PathUtils.filename(sourcePath);
-  if (!checkFileType(attItem, filename)) {
+  const filename = safeFilename(sourcePath);
+  if (!filename || !checkFileType(attItem, filename)) {
     ztoolkit.log("moveFile skipped: unsupported file type", filename);
     return;
   }
@@ -2758,16 +2752,14 @@ async function getLinkedAttachmentAtPath(
   path: string,
   excludeItemID: number,
 ) {
-  const normalizedPath = PathUtils.normalize(path);
+  const normalizedPath = safePathKey(path);
+  if (!normalizedPath) return undefined;
   for (const attachmentID of parentItem.getAttachments()) {
     if (attachmentID === excludeItemID) continue;
     const attachment = Zotero.Items.get(attachmentID);
     if (!attachment?.isLinkedFileAttachment()) continue;
     const attachmentPath = await attachment.getFilePathAsync();
-    if (
-      attachmentPath &&
-      PathUtils.normalize(attachmentPath) === normalizedPath
-    ) {
+    if (attachmentPath && safePathKey(attachmentPath) === normalizedPath) {
       return attachment;
     }
   }
@@ -2824,7 +2816,8 @@ async function replaceWithLinkedAttachment(
       }
     }
     await attItem.eraseTx();
-    await removeEmptyFolder(PathUtils.parent(sourcePath) as string);
+    const parentDir = safeParent(sourcePath);
+    if (parentDir) await removeEmptyFolder(parentDir);
     return newAttItem;
   } finally {
     attachmentMutationInFlight.delete(attItem.id);
@@ -3107,7 +3100,7 @@ function showAttachmentItem(attItem: Zotero.Item) {
  * @param  {String|nsIFile} path Folder as nsIFile.
  * @return {void}
  */
-async function removeEmptyFolder(path: string | nsIFile) {
+async function removeEmptyFolder(path: string | nsIFile): Promise<boolean> {
   if (!getPref("autoRemoveEmptyFolder") as boolean) {
     return false;
   }
@@ -3124,9 +3117,17 @@ async function removeEmptyFolder(path: string | nsIFile) {
   if (dest_dir != "") {
     rootFolders.push(dest_dir);
   }
-  rootFolders = rootFolders.map((path) => PathUtils.normalize(path));
+  rootFolders = rootFolders
+    .map((p) => safePathKey(p))
+    .filter((p): p is string => Boolean(p));
+  const folderKey = safePathKey(folder.path);
   // 不属于插件相关根目录，不处理
-  if (!rootFolders.find((dir) => folder.path.startsWith(dir))) {
+  if (
+    !folderKey ||
+    !rootFolders.find(
+      (dir) => folderKey === dir || folderKey.startsWith(`${dir}/`),
+    )
+  ) {
     return false;
   }
   const files = folder.directoryEntries;
@@ -3142,7 +3143,8 @@ async function removeEmptyFolder(path: string | nsIFile) {
   }
   ztoolkit.log("Remove empty folder: ", folder.path);
   removeFile(folder);
-  return await removeEmptyFolder(PathUtils.parent(folder.path) as string);
+  const parentDir = safeParent(folder.path);
+  return parentDir ? await removeEmptyFolder(parentDir) : false;
 }
 
 /**
@@ -3228,7 +3230,7 @@ async function checkDir(prefName: string, prefDisplay: string, silent = false) {
     if ((await fp.show()) != fp.returnOK) {
       return false;
     }
-    dir = PathUtils.normalize(fp.file);
+    dir = safeNormalize(fp.file);
 
     if (typeof dir === "string") {
       setPref(prefName, dir);
@@ -3371,7 +3373,7 @@ async function createDirectoryPath(destDir: string) {
       return false;
     }
     create.push(current);
-    current = PathUtils.parent(current) as string | null;
+    current = safeParent(current);
   }
 
   await Promise.all(
