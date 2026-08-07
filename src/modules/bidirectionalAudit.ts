@@ -221,8 +221,8 @@ export function extractRomanVolumeToken(text: string): string | null {
     .trim();
   if (!s) return null;
   const patterns = [
-    /(?:^|[\s\[(\-–—])(?:cilt|vol\.?|volume|kitap)\s*([ivxlcdm]{1,6})\s*$/i,
-    /(?:^|[\s\[(\-–—])([ivxlcdm]{1,6})\s*$/i,
+    /(?:^|[\s(\-–—])(?:cilt|vol\.?|volume|kitap)\s*([ivxlcdm]{1,6})\s*$/i,
+    /(?:^|[\s(\-–—])([ivxlcdm]{1,6})\s*$/i,
   ];
   for (const re of patterns) {
     const m = s.match(re);
