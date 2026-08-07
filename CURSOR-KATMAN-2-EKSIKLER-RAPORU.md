@@ -16,9 +16,9 @@ ZotAssets, File Utility, Attachment Scanner, ozefe/yoktez).
 
 ### Son eklenen (v1.0.144)
 
-| Madde                         | Not                                                                                          |
-| ----------------------------- | -------------------------------------------------------------------------------------------- |
-| `openUsing` finally restore   | `fileHandler.pdf` hung `viewAttachment` sonrası dış handler’da kalmasın → çift tık sekme fix |
+| Madde                       | Not                                                                                          |
+| --------------------------- | -------------------------------------------------------------------------------------------- |
+| `openUsing` finally restore | `fileHandler.pdf` hung `viewAttachment` sonrası dış handler’da kalmasın → çift tık sekme fix |
 
 ### Son eklenen (v1.0.143)
 
