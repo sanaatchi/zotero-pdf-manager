@@ -39,7 +39,7 @@ Do **not** merge the three addons. Data flows 1 → 2 → 3.
 - Startup / periodic / on-add **reconcile** with confidence thresholds and `#pdf-review`
 - **OA download** into `{watchRoot}/downloads/` (DOI, arXiv, PMC, S2, DergiPark automatic list)
 - Manual / federated sources include LibGen, PDFKitap, Dirzon, **Mir.az** (login), Zenodo, archive, OpenAIRE, CORE, Sci-Hub, YÖKTez
-- **Mir.az credentials:** Preferences → PDF Manager → PDF indirici — *Mir.az e-posta / şifre* (`pdf.mirAzEmail` / `pdf.mirAzPassword`, password field). Sent per-request to the local 8756 bridge; empty prefs fall back to server env `MIR_AZ_*`. Never logged.
+- **Mir.az credentials:** Preferences → PDF Manager → PDF indirici — _Mir.az e-posta / şifre_ (`pdf.mirAzEmail` / `pdf.mirAzPassword`, password field). Sent per-request to the local 8756 bridge; empty prefs fall back to server env `MIR_AZ_*`. Never logged.
 - **OA Search popup** (menubar **PDF Manager → OA Search…**, also Attanger “Search all PDF sources…”): federated results table; attach to selected / new item + PDF / attach + Related Items
 - **PDF content audit** (menu): detect wrong attachments via PDF text → `#pdf-mismatch`; auto-download mismatch **keeps** the PDF + tags (no auto-detach; optional manual detach after confirm)
 - Orphan PDF report / optional auto-create (pref-gated, dry-run)

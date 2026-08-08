@@ -1879,9 +1879,9 @@ export async function fetchOaPdfViaBridge(opts: {
   let xhr: any;
   try {
     const mirCreds =
-      src === "mir_az" ? mirAzCredentialsFromPrefs() : ({} as ReturnType<
-        typeof mirAzCredentialsFromPrefs
-      >);
+      src === "mir_az"
+        ? mirAzCredentialsFromPrefs()
+        : ({} as ReturnType<typeof mirAzCredentialsFromPrefs>);
     const extra: Record<string, unknown> = {
       ...(opts.extra || {}),
     };

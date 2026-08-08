@@ -26,23 +26,22 @@ bölümü, maskeli şifre). Köprü `POST /pdf-search` + `/pdf-fetch` alanları
 override → env `MIR_AZ_*` fallback; parola log’a yazılmaz. Kaynak `mir_az`
 federated + ALL_SOURCES (kitap); migrate `sourceOrder`’a ekler.
 
-
 ## Hizalama 2026-08-07 (üç katman — kod doğrulama)
 
 **Yöntem:** `package.json` + `oaPdfBridge` ↔ `zotero_semantic_bridge` / `oa_pdf_search` +
 tag/path/prefs grep; stale «no P1» iddiası yeniden ölçüldü.
 
-| Seam | Durum | Not |
-|------|-------|-----|
-| package ↔ rapor | ✅ | **1.0.160** |
-| OA bridge sözleşme | ✅ | POST `/pdf-search` alanları + soft `body.error`; pdfkitap/dirzon prefs + registry |
-| Loopback SSRF | ✅ | `oaBridgeUrl.ts` |
-| Sci-Hub auto | ✅ yasak korunuyor | `AUTOMATIC_ONLINE_SOURCE_IDS` = doi+dergipark+pmc; scihub prefs’te manuel |
-| Kaynaklar + quarantine | ✅ | watch root + `_pdf_quarantine` match/clear dışı |
-| safePath B8 | ✅ menu | **P3:** `pdfSources.ts` rejected-rescue hâlâ `PathUtils.split` (storage abs path) |
-| K3 tag varsayımı | ⚠️ K3 | LibRart `SYSTEM_TAGS` yalnız `#pdf-review` — mismatch/auto-* system sayılmaz (P2 K3) |
-| Strateji doc sürüm | ✅ düzeltildi | `uc-katman-stratejisi` → 1.0.160 / 1.0.65 |
-| Bağımsız B1–B7 | ✅ | Kod incelemesi kapalı; B8 residual → **1.0.160** |
+| Seam                   | Durum              | Not                                                                                  |
+| ---------------------- | ------------------ | ------------------------------------------------------------------------------------ |
+| package ↔ rapor        | ✅                 | **1.0.160**                                                                          |
+| OA bridge sözleşme     | ✅                 | POST `/pdf-search` alanları + soft `body.error`; pdfkitap/dirzon prefs + registry    |
+| Loopback SSRF          | ✅                 | `oaBridgeUrl.ts`                                                                     |
+| Sci-Hub auto           | ✅ yasak korunuyor | `AUTOMATIC_ONLINE_SOURCE_IDS` = doi+dergipark+pmc; scihub prefs’te manuel            |
+| Kaynaklar + quarantine | ✅                 | watch root + `_pdf_quarantine` match/clear dışı                                      |
+| safePath B8            | ✅ menu            | **P3:** `pdfSources.ts` rejected-rescue hâlâ `PathUtils.split` (storage abs path)    |
+| K3 tag varsayımı       | ⚠️ K3              | LibRart `SYSTEM_TAGS` yalnız `#pdf-review` — mismatch/auto-* system sayılmaz (P2 K3) |
+| Strateji doc sürüm     | ✅ düzeltildi      | `uc-katman-stratejisi` → 1.0.160 / 1.0.65                                            |
+| Bağımsız B1–B7         | ✅                 | Kod incelemesi kapalı; B8 residual → **1.0.160**                                     |
 
 **Çapraz P1:** Yok. Canvas finalize: `uc-katman-hizalama-20260807.canvas.tsx`
 
