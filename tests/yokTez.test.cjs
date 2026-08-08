@@ -1,4 +1,4 @@
-// @ajan: cursor · @etiket: katman-2, yoktez, pdfkitap, dirzon, test
+// @ajan: cursor · @etiket: katman-2, yoktez, pdfkitap, dirzon, mir-az, test
 const assert = require("node:assert/strict");
 const { test } = require("node:test");
 const path = require("node:path");
@@ -259,5 +259,21 @@ test("Dirzon is registered and supports books and articles", () => {
   assert.equal(ALL_SOURCES.dirzon.supportsItem({ itemTypeID: 2 }), true);
   assert.equal(ALL_SOURCES.dirzon.supportsItem({ itemTypeID: 1 }), true);
   assert.equal(ALL_SOURCES.dirzon.supportsItem({ itemTypeID: 5 }), false);
+  delete global.Zotero;
+});
+
+test("Mir.az is registered and supports books only", () => {
+  global.Zotero = {
+    ItemTypes: {
+      getName: (id) =>
+        ({ 1: "journalArticle", 2: "book", 5: "thesis" })[id] || "book",
+    },
+  };
+  const { ALL_SOURCES } = loadPdfSources();
+  assert.ok(ALL_SOURCES.mir_az);
+  assert.equal(ALL_SOURCES.mir_az.id, "mir_az");
+  assert.equal(ALL_SOURCES.mir_az.supportsItem({ itemTypeID: 2 }), true);
+  assert.equal(ALL_SOURCES.mir_az.supportsItem({ itemTypeID: 1 }), false);
+  assert.equal(ALL_SOURCES.mir_az.supportsItem({ itemTypeID: 5 }), false);
   delete global.Zotero;
 });

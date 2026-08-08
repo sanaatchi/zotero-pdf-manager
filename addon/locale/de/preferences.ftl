@@ -1,4 +1,4 @@
-# @ajan: cursor · @etiket: katman-2, locale, de, prefs-layout
+# @ajan: cursor · @etiket: katman-2, locale, de, prefs-layout, mir-az
 directory = Stammverzeichnis:
 choose-dir =
     .label = Auswählen...
@@ -190,6 +190,11 @@ pdf-pdfkitap-enabled =
     .label = PDFKitap (Turkish books & articles)
 pdf-dirzon-enabled =
     .label = Dirzon (books & articles)
+pdf-mir-az-enabled =
+    .label = Mir.az (Turkish books — login required)
+pdf-mir-az-email = Mir.az email
+pdf-mir-az-password = Mir.az password
+pdf-mir-az-help = Password is stored in Zotero prefs (masked field). Sent per-request to the local bridge; never written to logs. If empty, the bridge falls back to MIR_AZ_* env.
 pdf-yoktez-enabled =
     .label = YÖKTEZ (theses)
 pdf-proquest-enabled =

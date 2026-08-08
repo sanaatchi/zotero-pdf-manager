@@ -1,4 +1,4 @@
-// @ajan: cursor · @etiket: katman-2, python-pdf-sources, thrash-url-skip, keep-mismatch, pdfkitap, dirzon
+// @ajan: cursor · @etiket: katman-2, python-pdf-sources, thrash-url-skip, keep-mismatch, pdfkitap, dirzon, mir-az
 /**
  * Online PDF sources backed by Kutuphane `oa_pdf_search` (8756 bridge).
  * Old in-plugin scrape/mirror logic was removed — discovery is Python-only.
@@ -308,6 +308,12 @@ export const DirzonSource = new OaPdfPythonSource(
   "dirzon",
   "pdf.dirzonEnabled",
   (item) => isBook(item) || isArticle(item),
+);
+/** Mir.az — TR books; login via prefs pdf.mirAzEmail / pdf.mirAzPassword. */
+export const MirAzSource = new OaPdfPythonSource(
+  "mir_az",
+  "pdf.mirAzEnabled",
+  isBook,
 );
 /** OpenAIRE: broad EU OA aggregator, like DOI/CORE. */
 export const OpenAireSource = new OaPdfPythonSource(

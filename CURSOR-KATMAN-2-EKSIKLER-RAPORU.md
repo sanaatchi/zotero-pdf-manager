@@ -1,8 +1,8 @@
-<!-- @ajan: cursor · @etiket: katman-2, eksik-raporu, periodical, console-group-polyfill, author-line-gate, no-validate-subtitle-enrich, title-length-aware, isbn-prefer-any, tr-pdf-encoding, medium-cov-soft, mismatch-note-clear, validated-pdf-lock, field-weights-score, medium-author-noyear, openusing-finally, pdfkitap, dirzon, disk-audit, unit-interval-pref, tr-TR, disk-audit-apply, watch-root-kaynaklar, path-fold, bidirectional-audit, cross-folder-dupe, match-suggest, bidir-apply, hash-verify, broken-repair, pathutils-safe, human-md-report, quarantine-only, clear-score-tighten, prefs-layout, soft-edition-gate, dry-run-ux, bug-hunt-1-0-160 -->
+<!-- @ajan: cursor · @etiket: katman-2, eksik-raporu, periodical, console-group-polyfill, author-line-gate, no-validate-subtitle-enrich, title-length-aware, isbn-prefer-any, tr-pdf-encoding, medium-cov-soft, mismatch-note-clear, validated-pdf-lock, field-weights-score, medium-author-noyear, openusing-finally, pdfkitap, dirzon, mir-az, disk-audit, unit-interval-pref, tr-TR, disk-audit-apply, watch-root-kaynaklar, path-fold, bidirectional-audit, cross-folder-dupe, match-suggest, bidir-apply, hash-verify, broken-repair, pathutils-safe, human-md-report, quarantine-only, clear-score-tighten, prefs-layout, soft-edition-gate, dry-run-ux, bug-hunt-1-0-160, hizalama-20260807 -->
 
 # Cursor — Katman 2 Eksikler Raporu
 
-**Tarih:** 2026-08-07 · **Sürüm:** PDF Manager **v1.0.160** (bug hunt B1–B8 kapandı)  
+**Tarih:** 2026-08-08 · **Sürüm:** PDF Manager **v1.0.161** (Mir.az prefs + bridge creds)  
 **Analiz:** ürün ↔ `referanslar/katman-2/` ↔ GitHub (Attanger, Zotadata, Zoplicate,
 ZotAssets, File Utility, Attachment Scanner, ozefe/yoktez).
 
@@ -15,6 +15,36 @@ ZotAssets, File Utility, Attachment Scanner, ozefe/yoktez).
 | Gerçek açık iş?           | Checklist Bölüm B (kullanıcı) + isteğe bağlı P3 (B9–B15 canvas backlog)              |
 | Yeni zorunlu XPI portu?   | **Yok** — GitHub taraması yeni P1 üretmedi                                           |
 | İki uçlu denetim?         | **v1.0.157+** Plan yaz + Yalnız kopyalar / Çöz eşleşmeler; **158** apply last-* ayrı |
+
+---
+
+### Son eklenen (v1.0.161 — Mir.az prefs)
+
+Prefs: `pdf.mirAzEnabled`, `pdf.mirAzEmail`, `pdf.mirAzPassword` (UI: PDF indirici
+bölümü, maskeli şifre). Köprü `POST /pdf-search` + `/pdf-fetch` alanları
+`mirAzEmail` / `mirAzPassword` (extra alias). Python `oa_pdf_search` istek başına
+override → env `MIR_AZ_*` fallback; parola log’a yazılmaz. Kaynak `mir_az`
+federated + ALL_SOURCES (kitap); migrate `sourceOrder`’a ekler.
+
+
+## Hizalama 2026-08-07 (üç katman — kod doğrulama)
+
+**Yöntem:** `package.json` + `oaPdfBridge` ↔ `zotero_semantic_bridge` / `oa_pdf_search` +
+tag/path/prefs grep; stale «no P1» iddiası yeniden ölçüldü.
+
+| Seam | Durum | Not |
+|------|-------|-----|
+| package ↔ rapor | ✅ | **1.0.160** |
+| OA bridge sözleşme | ✅ | POST `/pdf-search` alanları + soft `body.error`; pdfkitap/dirzon prefs + registry |
+| Loopback SSRF | ✅ | `oaBridgeUrl.ts` |
+| Sci-Hub auto | ✅ yasak korunuyor | `AUTOMATIC_ONLINE_SOURCE_IDS` = doi+dergipark+pmc; scihub prefs’te manuel |
+| Kaynaklar + quarantine | ✅ | watch root + `_pdf_quarantine` match/clear dışı |
+| safePath B8 | ✅ menu | **P3:** `pdfSources.ts` rejected-rescue hâlâ `PathUtils.split` (storage abs path) |
+| K3 tag varsayımı | ⚠️ K3 | LibRart `SYSTEM_TAGS` yalnız `#pdf-review` — mismatch/auto-* system sayılmaz (P2 K3) |
+| Strateji doc sürüm | ✅ düzeltildi | `uc-katman-stratejisi` → 1.0.160 / 1.0.65 |
+| Bağımsız B1–B7 | ✅ | Kod incelemesi kapalı; B8 residual → **1.0.160** |
+
+**Çapraz P1:** Yok. Canvas finalize: `uc-katman-hizalama-20260807.canvas.tsx`
 
 ### Son eklenen (v1.0.160 — B8 residual PathUtils.split kapandı)
 

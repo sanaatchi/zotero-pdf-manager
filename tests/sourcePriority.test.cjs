@@ -1,4 +1,4 @@
-// @ajan: cursor · @etiket: katman-2, source-priority, tr-doi-unpaywall, test, pdfkitap, dirzon
+// @ajan: cursor · @etiket: katman-2, source-priority, tr-doi-unpaywall, test, pdfkitap, dirzon, mir-az
 const assert = require("node:assert/strict");
 const { test } = require("node:test");
 const path = require("node:path");
@@ -157,6 +157,27 @@ test("Turkish book → pdfkitap before dirzon after local", () => {
     it,
   );
   assert.deepEqual(order.slice(0, 3), ["local", "pdfkitap", "dirzon"]);
+});
+
+test("Turkish book → pdfkitap → dirzon → mir_az after local", () => {
+  const { prioritizeSourcesForItem, looksTurkish } = loadPriority();
+  const it = item({
+    title: "Sanat eğitiminde estetik",
+    language: "tr",
+    type: "book",
+    typeId: 2,
+  });
+  assert.equal(looksTurkish(it), true);
+  const order = prioritizeSourcesForItem(
+    ["local", "libgen", "mir_az", "dirzon", "pdfkitap", "archive"],
+    it,
+  );
+  assert.deepEqual(order.slice(0, 4), [
+    "local",
+    "pdfkitap",
+    "dirzon",
+    "mir_az",
+  ]);
 });
 
 test("Thesis → yoktez only", () => {

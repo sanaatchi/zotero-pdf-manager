@@ -1,4 +1,4 @@
-# @ajan: cursor · @etiket: katman-2, locale, tr-TR, teach-ui, prefs-layout
+# @ajan: cursor · @etiket: katman-2, locale, tr-TR, teach-ui, prefs-layout, mir-az
 directory = Kök dizin:
 choose-dir =
     .label = Seç…
@@ -191,6 +191,11 @@ pdf-pdfkitap-enabled =
     .label = PDFKitap (Türkçe kitap ve makale)
 pdf-dirzon-enabled =
     .label = Dirzon (kitap ve makale)
+pdf-mir-az-enabled =
+    .label = Mir.az (Türkçe kitap — giriş gerekli)
+pdf-mir-az-email = Mir.az e-posta
+pdf-mir-az-password = Mir.az şifre
+pdf-mir-az-help = Şifre Zotero tercihlerinde saklanır (maskeli alan). Köprüye istek başına gönderilir; log’a yazılmaz. Boş bırakırsanız sunucu MIR_AZ_* ortam değişkenine düşer.
 pdf-yoktez-enabled =
     .label = YÖKTEZ (tezler)
 pdf-proquest-enabled =

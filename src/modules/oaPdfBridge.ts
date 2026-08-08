@@ -1,4 +1,4 @@
-// @ajan: cursor · @etiket: katman-2, oa-pdf-bridge, subtitle-enrich, address-gate, author-line-gate, no-validate-subtitle-enrich, pdfkitap, dirzon
+// @ajan: cursor · @etiket: katman-2, oa-pdf-bridge, subtitle-enrich, address-gate, author-line-gate, no-validate-subtitle-enrich, pdfkitap, dirzon, mir-az
 /**
  * Katman-2 → Kutuphane köprü (8756) `oa_pdf_search` client.
  * Online PDF discovery runs in Python; this module only POSTs queries.
@@ -10,6 +10,7 @@
  * Same-work subtitle cores (Seargeant) pass without hit authors when distinctive.
  * Subtitle-only gaps: enrich item title from PDF/hit, then match.
  * Reject publisher street/postal HQ lines as fake subtitles (TÜBA address).
+ * Mir.az: prefs email/password passed per-request (never logged).
  */
 import { getPref, setPref } from "../utils/prefs";
 import { normalizeDOI } from "../utils/metadataNormalize";
@@ -21,6 +22,29 @@ import {
 import { kindFromZoteroItemType } from "./oaSearchCriteria";
 
 export { DEFAULT_OA_BRIDGE_URL, isAllowedOaBridgeUrl, normalizeOaBridgeUrl };
+
+/**
+ * Mir.az credentials from prefs (empty → omit; bridge uses env).
+ * Never log the password.
+ */
+export function mirAzCredentialsFromPrefs(): {
+  mirAzEmail?: string;
+  mirAzPassword?: string;
+} {
+  let email = "";
+  let password = "";
+  try {
+    email = String(getPref("pdf.mirAzEmail") || "").trim();
+    password = String(getPref("pdf.mirAzPassword") || "");
+  } catch {
+    return {};
+  }
+  if (!email && !password) return {};
+  const out: { mirAzEmail?: string; mirAzPassword?: string } = {};
+  if (email) out.mirAzEmail = email;
+  if (password) out.mirAzPassword = password;
+  return out;
+}
 
 export type OaPdfHit = {
   source: string;
@@ -63,6 +87,9 @@ export type OaPdfSearchRequest = {
   publisher?: string;
   thesisType?: string;
   university?: string;
+  /** Mir.az login (prefs); bridge falls back to MIR_AZ_* env when empty. */
+  mirAzEmail?: string;
+  mirAzPassword?: string;
 };
 
 export type OaPdfSearchResponse = {
@@ -239,6 +266,7 @@ export async function searchOaPdfBridgeDetailed(
 ): Promise<OaPdfSearchResponse> {
   const base = resolveOaBridgeUrl();
   const endpoint = `${base}/pdf-search`;
+  const mirCreds = mirAzCredentialsFromPrefs();
   let xhr: any;
   try {
     xhr = await (Zotero.HTTP as any).request("POST", endpoint, {
@@ -267,6 +295,8 @@ export async function searchOaPdfBridgeDetailed(
         publisher: req.publisher || "",
         thesisType: req.thesisType || "",
         university: req.university || "",
+        mirAzEmail: req.mirAzEmail || mirCreds.mirAzEmail || "",
+        mirAzPassword: req.mirAzPassword || mirCreds.mirAzPassword || "",
       }),
       responseType: "text",
       timeout: 180000,
@@ -335,6 +365,7 @@ export const FEDERATED_SOURCE_PREF: Record<string, string> = {
   libgen: "pdf.libgenEnabled",
   pdfkitap: "pdf.pdfkitapEnabled",
   dirzon: "pdf.dirzonEnabled",
+  mir_az: "pdf.mirAzEnabled",
   zenodo: "pdf.zenodoEnabled",
   archive: "pdf.archiveEnabled",
   openaire: "pdf.openaireEnabled",
@@ -352,6 +383,7 @@ export const FEDERATED_SOURCE_LABEL: Record<string, string> = {
   libgen: "LibGen",
   pdfkitap: "PDFKitap",
   dirzon: "Dirzon",
+  mir_az: "Mir.az",
   zenodo: "Zenodo",
   archive: "Internet Archive",
   openaire: "OpenAIRE",
@@ -1846,13 +1878,24 @@ export async function fetchOaPdfViaBridge(opts: {
 
   let xhr: any;
   try {
+    const mirCreds =
+      src === "mir_az" ? mirAzCredentialsFromPrefs() : ({} as ReturnType<
+        typeof mirAzCredentialsFromPrefs
+      >);
+    const extra: Record<string, unknown> = {
+      ...(opts.extra || {}),
+    };
+    if (mirCreds.mirAzEmail) extra.mirAzEmail = mirCreds.mirAzEmail;
+    if (mirCreds.mirAzPassword) extra.mirAzPassword = mirCreds.mirAzPassword;
     xhr = await (Zotero.HTTP as any).request("POST", endpoint, {
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({
         source: opts.source,
         pdfUrl: opts.pdfUrl || "",
-        extra: opts.extra || {},
+        extra,
         progressJob: jobId,
+        mirAzEmail: mirCreds.mirAzEmail || "",
+        mirAzPassword: mirCreds.mirAzPassword || "",
       }),
       responseType: "arraybuffer",
       timeout,

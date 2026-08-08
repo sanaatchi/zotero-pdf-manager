@@ -1,4 +1,4 @@
-// @ajan: cursor · @etiket: katman-2, pdf-sources, bridge-guard, ocr-haystack, content-validate, nosource-sync, pdf-candidate-split, mismatch-reason, encoding-gate, re-ocr-validate, tr-i-fold, sentence-tr-override, author-line-gate, no-validate-subtitle-enrich, title-length-aware, isbn-conflict-soft, tr-pdf-encoding, medium-cov-soft, medium-author-noyear, field-weights-score, validated-pdf-lock, pdfkitap, dirzon, review-reason-coverage, zero-threshold-default, pathutils-safe
+// @ajan: cursor · @etiket: katman-2, pdf-sources, bridge-guard, ocr-haystack, content-validate, nosource-sync, pdf-candidate-split, mismatch-reason, encoding-gate, re-ocr-validate, tr-i-fold, sentence-tr-override, author-line-gate, no-validate-subtitle-enrich, title-length-aware, isbn-conflict-soft, tr-pdf-encoding, medium-cov-soft, medium-author-noyear, field-weights-score, validated-pdf-lock, pdfkitap, dirzon, mir-az, review-reason-coverage, zero-threshold-default, pathutils-safe
 import { getString } from "../utils/locale";
 import { getPref } from "../utils/prefs";
 import { safePathKey } from "../utils/safePath";
@@ -20,6 +20,7 @@ import {
   DOISource,
   InternetArchiveSource,
   LibGenSource,
+  MirAzSource,
   OpenAireSource,
   PdfKitapSource,
   PMCSource,
@@ -2459,6 +2460,7 @@ export const ALL_SOURCES: Record<string, PDFSource> = {
   libgen: LibGenSource,
   pdfkitap: PdfKitapSource,
   dirzon: DirzonSource,
+  mir_az: MirAzSource,
   yoktez: YokTezSource,
   proxy: new ProxySource(),
   zenodo: ZenodoSource,

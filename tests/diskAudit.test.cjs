@@ -248,10 +248,16 @@ test("prefs + xhtml wire disk audit scan/open/apply + automation split", () => {
   assert.match(prefs, /pdf\.diskAudit\.dryRun/);
   assert.match(prefs, /pdf\.diskAudit\.copyAction", "quarantine"/);
   assert.match(prefs, /pdf\.dirzonEnabled/);
+  assert.match(prefs, /pdf\.mirAzEnabled/);
+  assert.match(prefs, /pdf\.mirAzEmail/);
+  assert.match(prefs, /pdf\.mirAzPassword/);
   const xhtml = fs.readFileSync(
     path.join(root, "addon/chrome/content/preferences.xhtml"),
     "utf8",
   );
+  assert.match(xhtml, /pdf-mir-az-enabled/);
+  assert.match(xhtml, /type="password"/);
+  assert.match(xhtml, /pdf\.mirAzPassword/);
   assert.match(xhtml, /pdf-disk-audit-orphan/);
   assert.match(xhtml, /pdf-disk-audit-orphan-apply/);
   assert.match(xhtml, /pdf-disk-audit-name-apply/);

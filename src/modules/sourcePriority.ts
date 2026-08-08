@@ -1,4 +1,4 @@
-// @ajan: cursor · @etiket: katman-2, source-priority, article-db-core-zenodo, pdfkitap, dirzon
+// @ajan: cursor · @etiket: katman-2, source-priority, article-db-core-zenodo, pdfkitap, dirzon, mir-az
 /**
  * Item-aware PDF source priority.
  *
@@ -144,6 +144,16 @@ export function prioritizeSourcesForItem(
     // Dirzon as TR book secondary after pdfkitap (when both enabled).
     if (turkish && ids.includes("dirzon")) {
       ids = moveToFrontAfterLocal(ids, "dirzon");
+      if (ids.includes("pdfkitap")) {
+        ids = moveToFrontAfterLocal(ids, "pdfkitap");
+      }
+    }
+    // Mir.az after pdfkitap/dirzon for TR books (login-gated).
+    if (turkish && ids.includes("mir_az")) {
+      ids = moveToFrontAfterLocal(ids, "mir_az");
+      if (ids.includes("dirzon")) {
+        ids = moveToFrontAfterLocal(ids, "dirzon");
+      }
       if (ids.includes("pdfkitap")) {
         ids = moveToFrontAfterLocal(ids, "pdfkitap");
       }

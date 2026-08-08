@@ -1,4 +1,4 @@
-// @ajan: cursor · @etiket: katman-2, p1, multi-window, lifecycle, startup-threshold-repair
+// @ajan: cursor · @etiket: katman-2, p1, multi-window, lifecycle, startup-threshold-repair, mir-az
 import { config } from "../package.json";
 import { initLocale } from "./utils/locale";
 import {
@@ -14,6 +14,7 @@ import {
   migrateDoiUnpaywallIntoAutoCascade,
   migrateMetadataOnlyOutOfDownload,
 } from "./modules/metadataSourcesMigrate";
+import { migrateMirAzPdfSource } from "./modules/mirAzSourcesMigrate";
 
 /** Open Zotero main windows that have UI loaded for this add-on. */
 const loadedWindows = new Set<Window>();
@@ -64,6 +65,11 @@ async function onStartup() {
     migrateDoiUnpaywallIntoAutoCascade();
   } catch (e) {
     ztoolkit.log("migrateDoiUnpaywallIntoAutoCascade failed", e);
+  }
+  try {
+    migrateMirAzPdfSource();
+  } catch (e) {
+    ztoolkit.log("migrateMirAzPdfSource failed", e);
   }
   Zotero.PreferencePanes.register({
     pluginID: config.addonID,
